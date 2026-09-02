@@ -319,19 +319,84 @@ function SeletorLocalEstoque({ local, setLocal, style }) {
   );
 }
 
-/* Botão de câmera para leitura de identificação (brinco/QR) pela câmera do celular.
-   No celular, "capture=environment" já abre a câmera traseira direto (sem passar pela galeria).
-   Hoje só captura a foto e devolve o foco para digitação manual — o reconhecimento automático do
-   número (OCR/leitor de código) é um passo futuro que depende de um serviço de backend (ver notas
-   de arquitetura no final do arquivo, seção OFFLINE/SUPABASE/DEPLOY). */
-function BotaoCameraLeitura({ onFoto, disabled }) {
-  const inputRef = React.useRef(null);
+/* Leitor de código de barras / QR pela câmera do celular, usando a biblioteca
+   html5-qrcode (decodifica ao vivo, sem precisar de app nativo nem backend).
+   Ao detectar um código, devolve o texto lido via onLido(texto) e fecha sozinho. */
+function ScannerCodigoBarras({ aberto, onFechar, onDetectado }) {
+  const instanciaRef = React.useRef(null);
+  const [erro, setErro] = useState("");
+  const divId = "leitor-camera-visaorepro";
+
+  React.useEffect(() => {
+    if (!aberto) return;
+    let cancelado = false;
+    setErro("");
+    import("html5-qrcode").then(({ Html5Qrcode, Html5QrcodeSupportedFormats }) => {
+      if (cancelado) return;
+      const instancia = new Html5Qrcode(divId, {
+        // cobre QR e os formatos de barras mais comuns em brincos/etiquetas
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.ITF,
+        ],
+      });
+      instanciaRef.current = instancia;
+      instancia
+        .start(
+          { facingMode: "environment" },
+          { fps: 12, qrbox: { width: 270, height: 150 } },
+          (textoDecodificado) => { onDetectado(textoDecodificado); },
+          () => {} // callback de "não achou nada neste frame" — ignorar, é normal
+        )
+        .catch((e) => {
+          setErro("Não foi possível abrir a câmera. Verifique se o navegador tem permissão de câmera.");
+          console.error(e);
+        });
+    });
+    return () => {
+      cancelado = true;
+      const instancia = instanciaRef.current;
+      if (instancia) {
+        instancia.stop().then(() => instancia.clear()).catch(() => {});
+        instanciaRef.current = null;
+      }
+    };
+  }, [aberto]);
+
+  if (!aberto) return null;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,15,12,0.92)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ width: "100%", maxWidth: 420 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ color: "#F5EFDD", fontSize: 14, fontWeight: 600 }}>Aponte para o código de barras / QR do brinco</span>
+          <button onClick={onFechar} style={{ background: "none", border: "none", color: "#F5EFDD", cursor: "pointer", padding: 4 }} aria-label="Fechar leitor">
+            <X size={22} />
+          </button>
+        </div>
+        <div id={divId} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#000" }} />
+        {erro && <p style={{ color: "#E3A45C", fontSize: 12.5, marginTop: 10 }}>{erro}</p>}
+        <button onClick={onFechar} style={{ marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid #4C6E56", background: "transparent", color: "#F5EFDD", fontSize: 13, cursor: "pointer" }}>
+          Cancelar e digitar manualmente
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* Botão de câmera para leitura de identificação (brinco/QR): abre o leitor acima
+   e, assim que detecta um código, preenche o campo automaticamente. */
+function BotaoCameraLeitura({ onLido, disabled }) {
+  const [aberto, setAberto] = useState(false);
   return (
     <>
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-        onChange={(e) => { const file = e.target.files?.[0]; if (file && onFoto) onFoto(file); e.target.value = ""; }} />
-      <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()}
-        title="Ler identificação pela câmera"
+      <button type="button" disabled={disabled} onClick={() => setAberto(true)}
+        title="Ler identificação pela câmera (código de barras / QR)"
         style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           width: 38, height: 38, borderRadius: 8, border: "1px solid #D8D2C0", background: "#FBF9F3",
@@ -339,6 +404,8 @@ function BotaoCameraLeitura({ onFoto, disabled }) {
         }}>
         <Camera size={16} />
       </button>
+      <ScannerCodigoBarras aberto={aberto} onFechar={() => setAberto(false)}
+        onDetectado={(texto) => { setAberto(false); onLido && onLido(texto); }} />
     </>
   );
 }
@@ -1581,7 +1648,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lerAnimal()} />
                   <BtnPrimary onClick={lerAnimal}><ScanLine size={15} /></BtnPrimary>
-                  <BotaoCameraLeitura onFoto={() => brincoInputRef.current?.focus()} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {animaisLidos.map((b) => {
@@ -2081,7 +2148,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   </Field>
                   <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
                   <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}><ScanLine size={15} /></BtnPrimary>
-                  <BotaoCameraLeitura onFoto={() => brincoInputRef.current?.focus()} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 {animaisLidos.length === 0 ? (
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
@@ -2628,7 +2695,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                   </Field>
                   <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
                   <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}><ScanLine size={15} /></BtnPrimary>
-                  <BotaoCameraLeitura onFoto={() => brincoInputRef.current?.focus()} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 {animaisLidos.length === 0 ? (
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
@@ -3068,7 +3135,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
                     onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
-                  <BotaoCameraLeitura onFoto={() => brincoInputRef.current?.focus()} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
               <Field label="Touro">
@@ -3469,7 +3536,7 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
                     onChange={(e) => { limparMsgSeSucesso(); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) resultadoInputRef.current?.focus(); } }} />
                   <BtnPrimary onClick={() => resultadoInputRef.current?.focus()}><ScanLine size={15} /></BtnPrimary>
-                  <BotaoCameraLeitura onFoto={() => brincoInputRef.current?.focus()} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
               <Field label="Resultado">
@@ -3736,7 +3803,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                     onChange={(e) => { if (msg) setMsg(""); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lerAnimal(); } }} />
                   <BtnPrimary onClick={lerAnimal}><ScanLine size={15} /></BtnPrimary>
-                  <BotaoCameraLeitura onFoto={() => brincoInputRef.current?.focus()} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
               <Field label="DG Final">
