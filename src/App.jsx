@@ -4310,6 +4310,15 @@ const CORES_TIPO = {
 };
 
 function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento }) {
+  // versão compacta do calendário só no celular — no computador, nada muda
+  const [isMobileCalendario, setIsMobileCalendario] = useState(typeof window !== "undefined" ? window.innerWidth < 860 : false);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(max-width: 860px)");
+    const aoMudar = (e) => setIsMobileCalendario(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", aoMudar) : mq.addListener(aoMudar);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", aoMudar) : mq.removeListener(aoMudar));
+  }, []);
+
   const empty = { retiroId: "", loteNome: "", tipo: TIPOS_AGENDAMENTO[0], data: todayISO(), ordem: "", tipoManejo: TIPOS_MANEJO_IMPLANTACAO[0], protocolo: PROTOCOLOS_IMPLANTACAO[0] };
   const [form, setForm] = useState(empty);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -4673,7 +4682,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
               <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
                   {DIAS_SEMANA.map((d) => (
-                    <div key={d} style={{ fontSize: 10.5, fontWeight: 700, color: "#9B9686", textTransform: "uppercase", textAlign: "center", padding: "8px 0", borderBottom: "1px solid #E5DFCC" }}>{d}</div>
+                    <div key={d} style={{ fontSize: isMobileCalendario ? 9.5 : 10.5, fontWeight: 700, color: "#9B9686", textTransform: "uppercase", textAlign: "center", padding: isMobileCalendario ? "6px 0" : "8px 0", borderBottom: "1px solid #E5DFCC" }}>{isMobileCalendario ? d.slice(0, 1) : d}</div>
                   ))}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
@@ -4683,6 +4692,35 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                     const foraDoMes = d.getMonth() !== cursor.getMonth();
                     const hoje = isSameDay(d, new Date());
                     const ativo = iso === selecionado;
+
+                    if (isMobileCalendario) {
+                      // celular: todo dia é um quadrado do mesmo tamanho, com o número e, no
+                      // máximo, uma fileira de bolinhas coloridas — nunca texto, nunca cresce.
+                      const cores = [...new Set(itens.map((a) => CORES_TIPO[a.tipo] || "#6B685E"))].slice(0, 4);
+                      return (
+                        <button key={i} onClick={() => setSelecionado(iso)}
+                          style={{
+                            aspectRatio: "1 / 1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                            gap: 3, padding: 2, border: "none",
+                            borderRight: (i + 1) % 7 !== 0 ? "1px solid #F0EBDD" : "none",
+                            borderBottom: "1px solid #F0EBDD",
+                            background: ativo ? "#F6F1E4" : "#FFF", cursor: "pointer",
+                            opacity: foraDoMes ? 0.4 : 1,
+                          }}>
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", justifyContent: "center",
+                            width: 22, height: 22, borderRadius: "50%", fontSize: 12, fontWeight: 700,
+                            background: hoje ? "#B9541E" : "transparent", color: hoje ? "#FFF6E9" : "#4A473E",
+                          }}>{d.getDate()}</span>
+                          <div style={{ display: "flex", gap: 2, height: 5, alignItems: "center" }}>
+                            {cores.map((cor, ci) => (
+                              <span key={ci} style={{ width: 5, height: 5, borderRadius: "50%", background: cor, flexShrink: 0 }} />
+                            ))}
+                          </div>
+                        </button>
+                      );
+                    }
+
                     return (
                       <button key={i} onClick={() => setSelecionado(iso)}
                         style={{
