@@ -303,6 +303,21 @@ function FazendaAtivaBanner({ fazendaAtiva }) {
 }
 
 /* Bloco reutilizável nos manejos: medicamentos usados junto com o manejo (opcional, além dos insumos já exigidos). */
+/* Avisa o navegador para perguntar "sair sem salvar?" quando há uma leitura em
+   andamento (animais já lidos, mas ainda não registrados/finalizados) — protege
+   contra atualização acidental da página, fechar a aba, etc. */
+function useAvisarSaidaComPendencia(haPendencia) {
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (!haPendencia) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [haPendencia]);
+}
+
 function SeletorLocalEstoque({ local, setLocal, style }) {
   return (
     <div style={{ display: "flex", background: "#EFE8D6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content", ...style }}>
@@ -1527,6 +1542,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
   const [unidadeDose, setUnidadeDose] = useState(UNIDADES_EMBALAGEM[0]);
   const [comLeitura, setComLeitura] = useState(false);
   const [animaisLidos, setAnimaisLidos] = useState([]);
+  useAvisarSaidaComPendencia(animaisLidos.length > 0);
   const [brinco, setBrinco] = useState("");
   const brincoInputRef = React.useRef(null);
   const [medicamentos, setMedicamentos] = useState([]);
@@ -1794,6 +1810,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
   const [comLeitura, setComLeitura] = useState(false);
   const [animaisLidos, setAnimaisLidos] = useState([]);
+  useAvisarSaidaComPendencia(animaisLidos.length > 0);
   const [brinco, setBrinco] = useState("");
   const brincoInputRef = React.useRef(null);
   const [ecc, setEcc] = useState(OPCOES_ECC[1]);
@@ -2516,6 +2533,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
 
   const [comLeitura, setComLeitura] = useState(false);
   const [animaisLidos, setAnimaisLidos] = useState([]);
+  useAvisarSaidaComPendencia(animaisLidos.length > 0);
   const [brinco, setBrinco] = useState("");
   const brincoInputRef = React.useRef(null);
   const [ecc, setEcc] = useState(OPCOES_ECC[1]);
@@ -2837,6 +2855,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const pesoInputRef = React.useRef(null);
   const observacoesInputRef = React.useRef(null);
   const [registros, setRegistros] = useState([]); // {brinco, semenId, peso, ecc, observacoes, gnrhId, doseGnrh}
+  useAvisarSaidaComPendencia(registros.length > 0);
   const [medicamentos, setMedicamentos] = useState([]);
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
@@ -3336,6 +3355,7 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
   const brincoInputRef = React.useRef(null);
   const resultadoInputRef = React.useRef(null);
   const [registros, setRegistros] = useState([]);
+  useAvisarSaidaComPendencia(registros.length > 0);
   const [medicamentos, setMedicamentos] = useState([]);
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
@@ -3695,6 +3715,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
   const [tempoInformadoInput, setTempoInformadoInput] = useState("");
   const [consultaAtual, setConsultaAtual] = useState(null); // dados auto-preenchidos do animal recém-lido
   const [registros, setRegistros] = useState([]);
+  useAvisarSaidaComPendencia(registros.length > 0);
   const [msg, setMsg] = useState("");
   const brincoInputRef = React.useRef(null);
   const dgFinalInputRef = React.useRef(null);

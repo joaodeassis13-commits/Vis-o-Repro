@@ -6,9 +6,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // "autoUpdate": quando uma nova versão é publicada, o app atualiza
-      // sozinho na próxima abertura, sem precisar reinstalar nada.
-      registerType: "autoUpdate",
+      // "prompt": quando uma nova versão é publicada, o app NÃO troca sozinho
+      // no meio do uso (isso já causou perda de dados não salvos). Em vez
+      // disso, o app avisa o usuário e só atualiza quando ele confirmar
+      // (ver o aviso de atualização em src/main.jsx).
+      registerType: "prompt",
       includeAssets: ["icon-192.png", "icon-512.png"],
       manifest: {
         name: "VisãoRepro",

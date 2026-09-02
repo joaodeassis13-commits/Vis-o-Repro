@@ -2,13 +2,29 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
+  height: 100%;
+  overscroll-behavior: none; /* trava o "puxar para atualizar" do navegador (Chrome/Safari no celular) */
+  touch-action: pan-x pan-y; /* trava zoom por pinça, mantendo rolagem normal */
+}
+
+body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   background: #F5EFDD;
-  /* evita "puxar para atualizar" acidental e dá uma sensação mais de app */
-  overscroll-behavior-y: contain;
+  -webkit-user-select: none;
+  user-select: none; /* evita selecionar texto sem querer ao arrastar/tocar, como num app nativo */
+}
+
+/* mas permite selecionar texto normalmente onde faz sentido (campos, tabelas) */
+input, textarea, td, th {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#root {
+  min-height: 100%;
 }
 
 input, select, button {
