@@ -5,7 +5,7 @@ import {
   ClipboardList, Stethoscope, Warehouse, ArrowDownToLine, ArrowUpFromLine,
   LogOut, Plus, Trash2, ScanLine, Wifi, WifiOff, Download, ChevronRight,
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
-  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw
+  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos } from "./lib/db.js";
 import { sincronizar } from "./lib/sync.js";
@@ -416,7 +416,7 @@ function Login({ users, onLogin }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#EFE6D3", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
-      <div style={{ width: 380, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
+      <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: "#3B5D45", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Syringe size={20} color="#EFC257" />
@@ -951,6 +951,19 @@ export default function App() {
     if (!autorizadas.includes(fazendaAtivaId)) setFazendaAtivaId(autorizadas[0] || "");
   }, [currentUser]);
 
+  // ---------- layout responsivo: no celular a barra lateral vira um menu retrátil ----------
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 860 : false);
+  const [menuAberto, setMenuAberto] = useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(max-width: 860px)");
+    const aoMudar = (e) => setIsMobile(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", aoMudar) : mq.addListener(aoMudar);
+    setIsMobile(mq.matches);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", aoMudar) : mq.removeListener(aoMudar));
+  }, []);
+  // fecha o menu automaticamente ao trocar de seção/aba (celular)
+  React.useEffect(() => { setMenuAberto(false); }, [section, sub]);
+
   if (!currentUser) return <Login users={users} onLogin={setCurrentUser} />;
 
   return (
@@ -963,15 +976,39 @@ export default function App() {
         th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #8B8676; padding: 8px 10px; border-bottom: 1px solid #E5DFCC; }
         td { padding: 9px 10px; font-size: 13.5px; color: #2B2A24; border-bottom: 1px solid #F0EBDD; }
         tr:hover td { background: #FBF8EF; }
+        @media (max-width: 860px) {
+          th { font-size: 10.5px; padding: 7px 8px; }
+          td { padding: 8px 8px; font-size: 13px; }
+        }
       `}</style>
 
-      {/* SIDEBAR */}
-      <aside style={{ width: 224, background: "#2F4A38", color: "#EFE6D3", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      {/* fundo escurecido atrás do menu, no celular — toque para fechar */}
+      {isMobile && menuAberto && (
+        <div onClick={() => setMenuAberto(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 40 }} />
+      )}
+
+      {/* SIDEBAR — fixa na lateral em telas largas; menu retrátil (fora da tela até abrir) no celular */}
+      <aside style={{
+        width: isMobile ? "82vw" : 224, maxWidth: isMobile ? 300 : "none",
+        background: "#2F4A38", color: "#EFE6D3", display: "flex", flexDirection: "column", flexShrink: 0,
+        ...(isMobile ? {
+          position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50,
+          transform: menuAberto ? "translateX(0)" : "translateX(-100%)",
+          transition: "transform 0.22s ease", overflowY: "auto",
+        } : {}),
+      }}>
         <div style={{ padding: "20px 18px", display: "flex", alignItems: "center", gap: 9 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "#EFC257", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Syringe size={17} color="#2F4A38" />
           </div>
           <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 18 }}>VisãoRepro</div>
+          {isMobile && (
+            <button onClick={() => setMenuAberto(false)} aria-label="Fechar menu"
+              style={{ marginLeft: "auto", background: "none", border: "none", color: "#EFE6D3", cursor: "pointer", padding: 4 }}>
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         <nav style={{ padding: "6px 10px", flex: 1 }}>
@@ -1064,8 +1101,20 @@ export default function App() {
 
       {/* CONTEÚDO */}
       <main style={{ flex: 1, minWidth: 0 }}>
+        {isMobile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#2F4A38", color: "#EFE6D3", position: "sticky", top: 0, zIndex: 20 }}>
+            <button onClick={() => setMenuAberto(true)} aria-label="Abrir menu"
+              style={{ background: "none", border: "none", color: "#EFE6D3", cursor: "pointer", padding: 4, display: "flex" }}>
+              <Menu size={22} />
+            </button>
+            <div style={{ width: 26, height: 26, borderRadius: 7, background: "#EFC257", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Syringe size={14} color="#2F4A38" />
+            </div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 16 }}>VisãoRepro</div>
+          </div>
+        )}
         {SUBTABS[section] && (
-          <div style={{ display: "flex", gap: 6, padding: "16px 28px 0", borderBottom: "1px solid #E5DFCC", background: "#F6F1E4" }}>
+          <div style={{ display: "flex", gap: 6, padding: isMobile ? "12px 14px 0" : "16px 28px 0", borderBottom: "1px solid #E5DFCC", background: "#F6F1E4", overflowX: isMobile ? "auto" : "visible" }}>
             {SUBTABS[section].map((t) => {
               const Icon = t.icon;
               const active = sub === t.key;
@@ -1089,7 +1138,7 @@ export default function App() {
           </div>
         )}
 
-        <div style={{ padding: "26px 28px 60px", maxWidth: 880 }}>
+        <div style={{ padding: isMobile ? "16px 14px 60px" : "26px 28px 60px", maxWidth: isMobile ? "100%" : 880 }}>
           {/* Cada aba fica sempre montada (só escondida via CSS) para não perder o que foi digitado
               e ainda não registrado ao trocar de aba. */}
           <div style={{ display: section === "cadastros" && sub === "fazenda" ? "block" : "none" }}>
@@ -3013,7 +3062,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 ? "Esta é a leitura da 1º IATF: os animais lidos aqui passam a compor oficialmente este lote."
                 : "Este lote já foi composto na leitura da 1º IATF. Os animais lidos abaixo devem ser os mesmos já atribuídos a ele."}
             </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, alignItems: "end" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, alignItems: "end" }}>
               <Field label="Identificação">
                 <div style={{ display: "flex", gap: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
@@ -3709,7 +3758,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   <EarTag size="sm">{consultaAtual.brinco}</EarTag>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4A473E" }}>Dados encontrados — confira e complete DG Final / Tempo informado, depois Enter para registrar</span>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, fontSize: 12.5, color: "#4A473E" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, fontSize: 12.5, color: "#4A473E" }}>
                   <div><strong>Categoria:</strong> {consultaAtual.categoria}</div>
                   <div><strong>Lote:</strong> {consultaAtual.loteNome}</div>
                   <div><strong>Retiro:</strong> {consultaAtual.retiroNome}</div>
@@ -4299,7 +4348,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
     if (editingId === a.id && editForm) {
       return (
         <div style={{ ...cardStyle, padding: "12px 14px", border: "1.5px solid #3B5D45" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: editForm.tipo === "D0" ? 10 : 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: editForm.tipo === "D0" ? 10 : 0 }}>
             <Field label="Retiro">
               <select style={inputStyle} value={editForm.retiroId} onChange={setEdit("retiroId")}>
                 <option value="">Selecione um retiro</option>
