@@ -3000,8 +3000,14 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
               </Field>
               <Field label="Perdas de implante (opcional)"><input style={inputStyle} type="number" min="0" value={perdasImplante} onChange={(e) => { limparMsgSeSucesso(); setPerdasImplante(e.target.value); }} placeholder="0" /></Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
-              <Field label="Horário inicial"><input style={inputStyle} type="time" value={horarioInicial} onChange={(e) => { limparMsgSeSucesso(); setHorarioInicial(e.target.value); }} /></Field>
-              <Field label="Horário final"><input style={inputStyle} type="time" value={horarioFinal} onChange={(e) => { limparMsgSeSucesso(); setHorarioFinal(e.target.value); }} /></Field>
+              <div style={{ display: "flex", gap: 10, alignItems: "end" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Field label="Horário inicial"><input style={inputStyle} type="time" value={horarioInicial} onChange={(e) => { limparMsgSeSucesso(); setHorarioInicial(e.target.value); }} /></Field>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Field label="Horário final"><input style={inputStyle} type="time" value={horarioFinal} onChange={(e) => { limparMsgSeSucesso(); setHorarioFinal(e.target.value); }} /></Field>
+                </div>
+              </div>
               <CampoProdutoDose
                 labelProduto="Prostaglandina"
                 produto={
