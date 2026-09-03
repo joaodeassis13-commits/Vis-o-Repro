@@ -23,6 +23,18 @@ export const supabase = supabaseConfigurado
   ? createClient(url, anonKey)
   : null;
 
+// Cliente Supabase SEPARADO, usado só para o Administrador criar a conta de
+// um novo usuário (Usuários > Adicionar). É essencial que seja uma instância
+// à parte: chamar signUp() no MESMO cliente que o Administrador está logado
+// trocaria a sessão ativa para a conta recém-criada (derrubando o
+// Administrador sem querer). Com "persistSession: false" e uma chave de
+// armazenamento própria, essa instância nunca toca na sessão principal.
+export const supabaseParaCriarUsuario = supabaseConfigurado
+  ? createClient(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: "visaorepro-criacao-usuario" },
+    })
+  : null;
+
 if (!supabaseConfigurado && typeof window !== "undefined") {
   // eslint-disable-next-line no-console
   console.info(

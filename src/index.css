@@ -5,8 +5,9 @@
 html, body {
   margin: 0;
   height: 100%;
-  overscroll-behavior: none; /* trava o "puxar para atualizar" do navegador (Chrome/Safari no celular) */
-  touch-action: pan-x pan-y; /* trava zoom por pinça, mantendo rolagem normal */
+  overflow-x: hidden; /* a página nunca rola/arrasta na horizontal — só o que precisa (tabelas, abas) rola por dentro */
+  overscroll-behavior: none; /* trava o "puxar para atualizar" e o "arrastar para voltar página" */
+  touch-action: pan-y; /* só permite arrastar/rolar na vertical; trava arrasto lateral e zoom por pinça */
 }
 
 body {
@@ -21,6 +22,13 @@ body {
 input, textarea, td, th {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* elementos que precisam rolar de propósito na horizontal (tabelas largas, abas do
+   celular) recuperam esse gesto só dentro de si mesmos — o resto da página continua travado */
+.rola-horizontal {
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
 }
 
 #root {

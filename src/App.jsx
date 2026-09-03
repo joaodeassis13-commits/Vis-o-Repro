@@ -5,11 +5,13 @@ import {
   ClipboardList, Stethoscope, Warehouse, ArrowDownToLine, ArrowUpFromLine,
   LogOut, Plus, Trash2, ScanLine, Wifi, WifiOff, Download, ChevronRight,
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
-  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu
+  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos } from "./lib/db.js";
-import { sincronizar } from "./lib/sync.js";
+import { sincronizar, buscarPerfilProprio } from "./lib/sync.js";
+import { buscarBenchmarkTaxaPrenhezSistema } from "./lib/benchmarking.js";
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
+import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario } from "./lib/auth.js";
 
 /* ---------------------------------------------------------------
    VISÃOREPRO — controle de inseminação artificial de bovinos
@@ -484,16 +486,28 @@ function EmptyState({ text }) {
    LOGIN
 ========================================================= */
 
-function Login({ users, onLogin }) {
-  const [selected, setSelected] = useState(users[0]?.id || "");
+function Login({ users, onLoginLocal, onEntrarReal }) {
+  const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
 
-  const doLogin = () => {
+  // modo de teste (sem Supabase configurado): seleciona um usuário local, qualquer senha
+  const [selected, setSelected] = useState(users[0]?.id || "");
+
+  const doLoginReal = async () => {
+    if (!email.trim() || !senha) { setErro("Informe e-mail e senha."); return; }
+    setErro(""); setCarregando(true);
+    const r = await onEntrarReal(email, senha);
+    setCarregando(false);
+    if (!r.ok) setErro(r.erro);
+  };
+
+  const doLoginLocal = () => {
     const u = users.find((x) => x.id === selected);
     if (!u) return;
     if (senha.trim() === "") { setErro("Informe a senha."); return; }
-    onLogin(u);
+    onLoginLocal(u);
   };
 
   return (
@@ -509,21 +523,44 @@ function Login({ users, onLogin }) {
           </div>
         </div>
         <div style={{ height: 1, background: "#EEE8D8", margin: "20px 0" }} />
-        <Field label="Usuário">
-          <select style={inputStyle} value={selected} onChange={(e) => setSelected(e.target.value)}>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.nome} — {u.perfil}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Senha">
-          <input type="password" placeholder="Digite sua senha" style={inputStyle} value={senha}
-            onChange={(e) => { setSenha(e.target.value); setErro(""); }}
-            onKeyDown={(e) => e.key === "Enter" && doLogin()} />
-        </Field>
-        {erro && <p style={{ color: "#A32D2D", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
-        <BtnPrimary onClick={doLogin} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>Entrar</BtnPrimary>
-        <p style={{ fontSize: 11.5, color: "#B0AA98", marginTop: 16, textAlign: "center" }}>Qualquer senha é aceita neste protótipo.</p>
+
+        {supabaseConfigurado ? (
+          <>
+            <Field label="E-mail">
+              <input type="email" placeholder="seu.email@fazenda.com" style={inputStyle} value={email}
+                onChange={(e) => { setEmail(e.target.value); setErro(""); }} autoComplete="username" />
+            </Field>
+            <Field label="Senha">
+              <input type="password" placeholder="Digite sua senha" style={inputStyle} value={senha}
+                onChange={(e) => { setSenha(e.target.value); setErro(""); }}
+                onKeyDown={(e) => e.key === "Enter" && doLoginReal()} autoComplete="current-password" />
+            </Field>
+            {erro && <p style={{ color: "#A32D2D", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
+            <BtnPrimary onClick={doLoginReal} disabled={carregando} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>
+              {carregando ? "Entrando…" : "Entrar"}
+            </BtnPrimary>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 12, color: "#B9541E", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
+              ⚠ Modo de teste local — o Supabase ainda não está configurado neste ambiente, então não há verificação real de senha. Configure o Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) para login seguro de verdade.
+            </p>
+            <Field label="Usuário">
+              <select style={inputStyle} value={selected} onChange={(e) => setSelected(e.target.value)}>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.nome} — {u.perfil}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Senha">
+              <input type="password" placeholder="Digite qualquer senha" style={inputStyle} value={senha}
+                onChange={(e) => { setSenha(e.target.value); setErro(""); }}
+                onKeyDown={(e) => e.key === "Enter" && doLoginLocal()} />
+            </Field>
+            {erro && <p style={{ color: "#A32D2D", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
+            <BtnPrimary onClick={doLoginLocal} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>Entrar (modo de teste)</BtnPrimary>
+          </>
+        )}
       </div>
     </div>
   );
@@ -536,6 +573,7 @@ function Login({ users, onLogin }) {
 export default function App() {
   const [users, setUsers] = useState(seedUsers);
   const [currentUser, setCurrentUser] = useState(null);
+  const [sessaoAuthCarregada, setSessaoAuthCarregada] = useState(!supabaseConfigurado);
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [pendencias, setPendencias] = useState(0);
   const [carregadoDoBanco, setCarregadoDoBanco] = useState(false);
@@ -577,6 +615,61 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---------- sessão de login real (Supabase Auth) ----------
+  // Ao abrir o app, verifica se já existe uma sessão válida (login persistido
+  // com segurança pelo próprio Supabase) e, se sim, entra direto sem pedir
+  // e-mail/senha de novo. Também escuta logout/expiração em qualquer aba.
+  React.useEffect(() => {
+    if (!supabaseConfigurado) return;
+    obterSessao().then((sessao) => {
+      if (sessao?.user) setCurrentUser((atual) => atual || { id: sessao.user.id, _aguardandoPerfil: true });
+      setSessaoAuthCarregada(true);
+    });
+    const cancelarEscuta = escutarMudancaAuth((sessao) => {
+      if (!sessao?.user) { setCurrentUser(null); return; }
+      setCurrentUser((atual) => (atual && atual.id === sessao.user.id && !atual._aguardandoPerfil) ? atual : { id: sessao.user.id, _aguardandoPerfil: true });
+    });
+    return cancelarEscuta;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Depois de autenticado (id confirmado pelo Supabase), busca o perfil
+  // completo (nome, perfil de acesso, fazendas autorizadas) na lista local de
+  // usuários — que já foi sincronizada da tabela `usuarios` do Supabase. Se
+  // não encontrar localmente (aparelho novo, ainda sem cache), busca só essa
+  // linha direto no Supabase — a política de RLS já permite a própria linha.
+  React.useEffect(() => {
+    if (!currentUser?._aguardandoPerfil || !carregadoDoBanco) return;
+    const perfil = users.find((u) => u.id === currentUser.id);
+    if (perfil) { setCurrentUser(perfil); return; }
+    if (supabaseConfigurado) {
+      buscarPerfilProprio(currentUser.id).then((p) => {
+        if (p) { setUsers((a) => [...a, p]); setCurrentUser(p); }
+      });
+    }
+  }, [currentUser, users, carregadoDoBanco]);
+
+  // Mantém o currentUser sempre em dia com a lista de usuários — essencial agora que as
+  // próprias fazendas atribuídas ao Administrador podem mudar em tempo real (ex.: logo
+  // após ele criar uma fazenda nova, que já entra automaticamente no seu próprio grupo).
+  React.useEffect(() => {
+    if (!currentUser || currentUser._aguardandoPerfil) return;
+    const atualizado = users.find((u) => u.id === currentUser.id);
+    if (atualizado && JSON.stringify(atualizado) !== JSON.stringify(currentUser)) setCurrentUser(atualizado);
+  }, [users, currentUser]);
+
+  const entrarComEmailSenha = async (email, senha) => {
+    const r = await entrar(email, senha);
+    if (!r.ok) return r;
+    setCurrentUser({ id: r.authUser.id, _aguardandoPerfil: true });
+    return r;
+  };
+
+  const sairDaConta = async () => {
+    await sair();
+    setCurrentUser(null);
+  };
+
   // ---------- grava cada coleção no IndexedDB sempre que ela muda ----------
   // Só começa a gravar DEPOIS do carregamento inicial (senão sobrescreveria os
   // dados salvos com os dados de exemplo antes de eles serem lidos).
@@ -605,9 +698,10 @@ export default function App() {
   const sincronizarAgora = async () => {
     if (!supabaseConfigurado) { setPendencias(0); return; }
     setSincronizando(true);
-    const resultado = await sincronizar({ fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc });
+    const resultado = await sincronizar({ usuarios: users, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc });
     if (resultado.ok && resultado.atualizado) {
       const a = resultado.atualizado;
+      if (a.usuarios) setUsers(a.usuarios);
       if (a.fazendas) setFazendas(a.fazendas);
       if (a.retiros) setRetiros(a.retiros);
       if (a.safras) setSafras(a.safras);
@@ -638,10 +732,9 @@ export default function App() {
   /* Toda alteração feita fora do cadastro de fazendas é atribuída à fazenda selecionada aqui. */
 
   const fazendaAtiva = fazendas.find((f) => f.id === fazendaAtivaId) || null;
-  // Inseminador e Supervisor só enxergam/operam nas fazendas autorizadas pelo Administrador; Administrador vê todas.
-  const fazendasVisiveis = (currentUser?.perfil === "Inseminador" || currentUser?.perfil === "Supervisor")
-    ? fazendas.filter((f) => (currentUser.fazendasAutorizadas || []).includes(f.id))
-    : fazendas;
+  // Todo perfil (inclusive Administrador) só enxerga/opera nas fazendas atribuídas a ele —
+  // cada Administrador cuida do seu próprio grupo, sem ver as fazendas de outros Administradores.
+  const fazendasVisiveis = fazendas.filter((f) => (currentUser?.fazendasAutorizadas || []).includes(f.id));
   const retirosAtivos = useMemo(() => retiros.filter((r) => r.fazendaId === fazendaAtivaId), [retiros, fazendaAtivaId]);
   const safrasAtivas = useMemo(() => safras.filter((s) => s.fazendaId === fazendaAtivaId), [safras, fazendaAtivaId]);
   const safraAtiva = safras.find((s) => s.id === safraAtivaId) || null;
@@ -679,6 +772,9 @@ export default function App() {
     if (safrasAnos.length > 0) {
       setSafras((a) => [...a, ...safrasAnos.map((ano) => ({ id: uid("saf"), fazendaId: fazId, nome: `${ano}/${Number(ano) + 1}` }))]);
     }
+    // quem cria a fazenda já entra automaticamente no próprio grupo dela — senão ela
+    // desapareceria da visão de quem acabou de criar (cada perfil só vê seu grupo agora).
+    if (currentUser) toggleAutorizacaoFazenda(currentUser.id, fazId);
     setFazendaAtivaId(fazId);
     marcaPendencia();
   };
@@ -689,9 +785,22 @@ export default function App() {
 
   /* ---------- usuários (Administrador cadastra e autoriza acesso a fazendas) ---------- */
 
-  const addUsuario = (u) => {
-    setUsers((a) => [...a, { ...u, id: uid("u"), fazendasAutorizadas: u.fazendasAutorizadas || [] }]);
+  // Se o Supabase estiver configurado, cria uma conta de login de verdade
+  // (Supabase Auth) e usa o id dela para a linha em "usuarios" — é assim que
+  // as duas tabelas ficam ligadas (ver supabase/schema.sql). Sem Supabase,
+  // cai no cadastro só local de antes (sem senha real), para seguir
+  // testável offline.
+  const addUsuario = async (u) => {
+    if (supabaseConfigurado && u.email && u.senha) {
+      const r = await criarUsuario(u.email, u.senha);
+      if (!r.ok) return { ok: false, erro: r.erro };
+      setUsers((a) => [...a, { id: r.authUserId, nome: u.nome, login: u.login, email: u.email, perfil: u.perfil, criadoPor: currentUser?.id || null, fazendasAutorizadas: [] }]);
+      marcaPendencia();
+      return { ok: true, precisaConfirmarEmail: r.precisaConfirmarEmail };
+    }
+    setUsers((a) => [...a, { ...u, id: uid("u"), criadoPor: currentUser?.id || null, fazendasAutorizadas: u.fazendasAutorizadas || [] }]);
     marcaPendencia();
+    return { ok: true };
   };
   const toggleAutorizacaoFazenda = (userId, fazendaId) => {
     setUsers((a) => a.map((u) => u.id === userId
@@ -975,6 +1084,7 @@ export default function App() {
   const NAV = currentUser?.perfil === "Supervisor"
     ? [
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
+        { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
         { key: "exportacoes", label: "Exportações", icon: FileDown },
       ]
     : currentUser?.perfil === "Administrador"
@@ -982,6 +1092,7 @@ export default function App() {
         { key: "cadastros", label: "Cadastros", icon: Layers },
         { key: "usuarios", label: "Usuários", icon: Users },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
+        { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
         { key: "exportacoes", label: "Exportações", icon: FileDown },
       ]
     : [
@@ -989,6 +1100,7 @@ export default function App() {
         { key: "agenda", label: "Agenda", icon: Calendar },
         { key: "estoque", label: "Estoque", icon: Warehouse },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
+        { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
         { key: "exportacoes", label: "Exportações", icon: FileDown },
       ];
 
@@ -1026,9 +1138,9 @@ export default function App() {
     if (!safrasAtivas.some((s) => s.id === safraAtivaId)) setSafraAtivaId(safrasAtivas[0]?.id || "");
   }, [fazendaAtivaId, safras]);
 
-  // Inseminador e Supervisor só podem ter como fazenda ativa uma das fazendas autorizadas pelo Administrador
+  // Todo perfil (inclusive Administrador) só pode ter como fazenda ativa uma das fazendas atribuídas a ele
   React.useEffect(() => {
-    if (!currentUser || (currentUser.perfil !== "Inseminador" && currentUser.perfil !== "Supervisor")) return;
+    if (!currentUser) return;
     const autorizadas = currentUser.fazendasAutorizadas || [];
     if (!autorizadas.includes(fazendaAtivaId)) setFazendaAtivaId(autorizadas[0] || "");
   }, [currentUser]);
@@ -1046,7 +1158,15 @@ export default function App() {
   // fecha o menu automaticamente ao trocar de seção/aba (celular)
   React.useEffect(() => { setMenuAberto(false); }, [section, sub]);
 
-  if (!currentUser) return <Login users={users} onLogin={setCurrentUser} />;
+  if (!sessaoAuthCarregada) return null; // evita piscar a tela de login antes de checar sessão salva
+  if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} />;
+  if (currentUser._aguardandoPerfil) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#EFE6D3", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#6B685E", fontSize: 13 }}>
+        Carregando seu perfil…
+      </div>
+    );
+  }
 
   return (
     <div style={{ fontFamily: "'Work Sans', sans-serif", minHeight: "100vh", background: "#EFE6D3", display: "flex" }}>
@@ -1174,7 +1294,7 @@ export default function App() {
               <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser.nome}</div>
               <div style={{ fontSize: 10.5, color: "#9FA890" }}>{currentUser.perfil}</div>
             </div>
-            <button onClick={() => setCurrentUser(null)} title="Sair" style={{ background: "transparent", border: "none", color: "#C9CBB9", cursor: "pointer" }}>
+            <button onClick={() => (supabaseConfigurado ? sairDaConta() : setCurrentUser(null))} title="Sair" style={{ background: "transparent", border: "none", color: "#C9CBB9", cursor: "pointer" }}>
               <LogOut size={15} />
             </button>
           </div>
@@ -1196,7 +1316,7 @@ export default function App() {
           </div>
         )}
         {SUBTABS[section] && (
-          <div style={{ display: "flex", gap: 6, padding: isMobile ? "12px 14px 0" : "16px 28px 0", borderBottom: "1px solid #E5DFCC", background: "#F6F1E4", overflowX: isMobile ? "auto" : "visible" }}>
+          <div className={isMobile ? "rola-horizontal" : ""} style={{ display: "flex", gap: 6, padding: isMobile ? "12px 14px 0" : "16px 28px 0", borderBottom: "1px solid #E5DFCC", background: "#F6F1E4", overflowX: isMobile ? "auto" : "visible" }}>
             {SUBTABS[section].map((t) => {
               const Icon = t.icon;
               const active = sub === t.key;
@@ -1224,7 +1344,7 @@ export default function App() {
           {/* Cada aba fica sempre montada (só escondida via CSS) para não perder o que foi digitado
               e ainda não registrado ao trocar de aba. */}
           <div style={{ display: section === "cadastros" && sub === "fazenda" ? "block" : "none" }}>
-            <AbaFazenda fazendas={fazendas} retiros={retiros} safras={safras} addFazenda={addFazenda} addRetiro={addRetiro} removeRetiro={removeRetiro}
+            <AbaFazenda fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addFazenda={addFazenda} addRetiro={addRetiro} removeRetiro={removeRetiro}
               addSafra={addSafra} removeSafra={removeSafra} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} />
           </div>
 
@@ -1280,10 +1400,13 @@ export default function App() {
           </div>
 
           <div style={{ display: section === "usuarios" ? "block" : "none" }}>
-            <AbaUsuarios users={users} fazendas={fazendas} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} />
+            <AbaUsuarios users={users} fazendas={fazendasVisiveis} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} />
           </div>
           <div style={{ display: section === "relatorios" ? "block" : "none" }}>
             <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil} />
+          </div>
+          <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
+            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} />
           </div>
           <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
             <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} />
@@ -1411,7 +1534,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
       {fazendas.length === 0 ? (
         <EmptyState text="Nenhuma fazenda cadastrada ainda." />
       ) : (
-        <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+        <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
           <table>
             <thead>
               <tr>
@@ -1691,7 +1814,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -2198,7 +2321,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -2414,7 +2537,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               {historicoRessinc.length === 0 ? (
                 <EmptyState text="Nenhum Ressinc registrado ainda." />
               ) : (
-                <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+                <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                   <table>
                     <thead>
                       <tr>
@@ -2757,7 +2880,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -3266,7 +3389,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -3639,7 +3762,7 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
               <table>
                 <thead>
                   <tr>
@@ -3873,7 +3996,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
           {registros.length === 0 ? (
             <EmptyState text="Nenhum animal registrado nesta sessão ainda." />
           ) : (
-            <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -4155,7 +4278,7 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
             {itens.length === 0 ? (
               <EmptyState text={`Nenhuma saída de ${titulo.toLowerCase()} registrada ainda — ela ocorre automaticamente ao registrar um manejo.`} />
             ) : (
-              <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead><tr><th>Insumo</th><th>Qtd.</th><th>Origem (manejo)</th><th>Data</th></tr></thead>
                   <tbody>
@@ -4217,7 +4340,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
             {itens.length === 0 ? (
               <EmptyState text={`Nenhum item de ${titulo.toLowerCase()} cadastrado.`} />
             ) : categoria === "Sêmen" ? (
-              <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead><tr><th>Touro</th><th>Raça</th><th>Partida</th><th>Estoque (doses)</th><th>Valor unitário</th><th>Valor total</th></tr></thead>
                   <tbody>
@@ -4235,7 +4358,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                 </table>
               </div>
             ) : categoria === "Utensílio" ? (
-              <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead><tr><th>Produto</th><th>Unidade</th><th>Estoque</th><th>Valor unitário</th><th>Valor total</th></tr></thead>
                   <tbody>
@@ -4252,7 +4375,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                 </table>
               </div>
             ) : (
-              <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead>
                     <tr>
@@ -4694,28 +4817,38 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                     const ativo = iso === selecionado;
 
                     if (isMobileCalendario) {
-                      // celular: todo dia é um quadrado do mesmo tamanho, com o número e, no
-                      // máximo, uma fileira de bolinhas coloridas — nunca texto, nunca cresce.
-                      const cores = [...new Set(itens.map((a) => CORES_TIPO[a.tipo] || "#6B685E"))].slice(0, 4);
+                      // celular: todo dia é um quadrado do mesmo tamanho (padronizado); o número
+                      // fica pequeno no canto superior direito, e os agendamentos aparecem como
+                      // retângulos coloridos com o nome do lote — sempre no máximo 2 linhas, com
+                      // "+N" se sobrar mais, para o quadrado nunca crescer nem desalinhar a grade.
+                      const visiveis = itens.slice(0, 2);
+                      const restantes = itens.length - visiveis.length;
                       return (
                         <button key={i} onClick={() => setSelecionado(iso)}
                           style={{
-                            aspectRatio: "1 / 1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                            gap: 3, padding: 2, border: "none",
+                            position: "relative", aspectRatio: "1 / 1", overflow: "hidden",
+                            display: "flex", flexDirection: "column", justifyContent: "flex-end",
+                            gap: 2, padding: "3px 3px 3px", border: "none",
                             borderRight: (i + 1) % 7 !== 0 ? "1px solid #F0EBDD" : "none",
                             borderBottom: "1px solid #F0EBDD",
                             background: ativo ? "#F6F1E4" : "#FFF", cursor: "pointer",
                             opacity: foraDoMes ? 0.4 : 1,
                           }}>
                           <span style={{
+                            position: "absolute", top: 2, right: 3,
                             display: "inline-flex", alignItems: "center", justifyContent: "center",
-                            width: 22, height: 22, borderRadius: "50%", fontSize: 12, fontWeight: 700,
-                            background: hoje ? "#B9541E" : "transparent", color: hoje ? "#FFF6E9" : "#4A473E",
+                            minWidth: 15, height: 15, borderRadius: "50%", fontSize: 9.5, fontWeight: 700,
+                            background: hoje ? "#B9541E" : "transparent", color: hoje ? "#FFF6E9" : "#9B9686",
                           }}>{d.getDate()}</span>
-                          <div style={{ display: "flex", gap: 2, height: 5, alignItems: "center" }}>
-                            {cores.map((cor, ci) => (
-                              <span key={ci} style={{ width: 5, height: 5, borderRadius: "50%", background: cor, flexShrink: 0 }} />
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 14 }}>
+                            {visiveis.map((a) => (
+                              <span key={a.id} style={{
+                                fontSize: 8.5, fontWeight: 700, color: "#FFF", background: CORES_TIPO[a.tipo] || "#6B685E",
+                                borderRadius: 3, padding: "2px 3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                opacity: a.status === "pendente" ? 0.6 : 1, lineHeight: 1.2,
+                              }}>{a.loteNome || a.titulo}</span>
                             ))}
+                            {restantes > 0 && <span style={{ fontSize: 8, color: "#9B9686", textAlign: "center" }}>+{restantes}</span>}
                           </div>
                         </button>
                       );
@@ -4811,16 +4944,26 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 const PERFIS_USUARIO = ["Administrador", "Supervisor", "Inseminador"];
 
 function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) {
-  const empty = { nome: "", login: "", perfil: "Inseminador" };
+  const empty = { nome: "", login: "", email: "", senha: "", perfil: "Inseminador" };
   const [form, setForm] = useState(empty);
   const [usuarioAberto, setUsuarioAberto] = useState(null);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [msg, setMsg] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const set = (k) => (e) => { setForm((f) => ({ ...f, [k]: e.target.value })); if (msg) setMsg(""); };
 
-  const canSave = form.nome.trim() !== "" && form.login.trim() !== "";
-  const salvar = () => {
+  const canSave = form.nome.trim() !== "" && form.login.trim() !== ""
+    && (!supabaseConfigurado || (form.email.trim() !== "" && form.senha.length >= 6));
+
+  const salvar = async () => {
     if (!canSave) return;
-    addUsuario(form);
+    setSalvando(true);
+    const r = await addUsuario(form);
+    setSalvando(false);
+    if (!r.ok) { setMsg(r.erro); return; }
     setForm(empty);
+    setMsg(r.precisaConfirmarEmail
+      ? "Usuário criado. Ele precisa confirmar o e-mail antes do primeiro login (verifique a caixa de entrada)."
+      : "Usuário criado com sucesso.");
   };
 
   const corPerfil = (perfil) => ({
@@ -4835,20 +4978,32 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
 
       <div style={{ ...cardStyle, marginBottom: 24 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Adicionar usuário</div>
+        {!supabaseConfigurado && (
+          <p style={{ fontSize: 12, color: "#B9541E", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
+            ⚠ Supabase não configurado — este usuário será só local, sem senha real (modo de teste).
+          </p>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
           <Field label="Nome"><input style={inputStyle} value={form.nome} onChange={set("nome")} placeholder="Nome completo" /></Field>
           <Field label="Login"><input style={inputStyle} value={form.login} onChange={set("login")} placeholder="usuario.login" /></Field>
+          {supabaseConfigurado && (
+            <>
+              <Field label="E-mail (login de acesso)"><input type="email" style={inputStyle} value={form.email} onChange={set("email")} placeholder="pessoa@fazenda.com" /></Field>
+              <Field label="Senha inicial"><input type="password" style={inputStyle} value={form.senha} onChange={set("senha")} placeholder="Mínimo 6 caracteres" /></Field>
+            </>
+          )}
           <Field label="Perfil">
             <select style={inputStyle} value={form.perfil} onChange={set("perfil")}>
               {PERFIS_USUARIO.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </Field>
         </div>
-        <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> Salvar usuário</BtnPrimary>
+        {msg && <p style={{ fontSize: 12.5, color: msg.includes("sucesso") || msg.includes("criado") ? "#3B5D45" : "#A32D2D", margin: "10px 0 0" }}>{msg}</p>}
+        <BtnPrimary disabled={!canSave || salvando} onClick={salvar} style={{ marginTop: 12 }}><Plus size={15} /> {salvando ? "Salvando…" : "Salvar usuário"}</BtnPrimary>
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Usuários cadastrados</div>
-      <div style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+      <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
         <table>
           <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Fazendas autorizadas</th><th></th></tr></thead>
           <tbody>
@@ -4856,7 +5011,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
               const cor = corPerfil(u.perfil);
               const aberto = usuarioAberto === u.id;
               const autorizadas = u.fazendasAutorizadas || [];
-              const temAutorizacao = u.perfil === "Inseminador" || u.perfil === "Supervisor";
+              const temAutorizacao = true; // todo perfil, inclusive Administrador, agora tem seu grupo próprio de fazendas
               return (
                 <React.Fragment key={u.id}>
                   <tr onClick={() => temAutorizacao && setUsuarioAberto(aberto ? null : u.id)} style={{ cursor: temAutorizacao ? "pointer" : "default" }}>
@@ -4912,6 +5067,161 @@ function AbaRelatorios({ fazendaAtiva, lotes, insumos, manejos, movimentos, perf
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
       <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
       <EmptyState text="Os gráficos deste relatório serão adicionados aqui. Para planilhas com a lista completa de animais ou lotes, use a aba Exportações." />
+    </div>
+  );
+}
+
+/* =========================================================
+   BENCHMARKING — compara a fazenda ativa com outras fazendas, em dois
+   escopos possíveis (filtro, não misturado no mesmo gráfico): "Meu Grupo"
+   (as fazendas do próprio Administrador) ou "Geral do Sistema" (todas as
+   fazendas, de todos os grupos). Cada gráfico mostra: Sua Fazenda, Média
+   Geral do escopo, Média das 25% melhores e Média das 25% piores — todas
+   calculadas como "média das médias por fazenda" (cada fazenda pesa igual,
+   não pelo volume de leituras). A parte "Geral do Sistema" vem de uma
+   função no Supabase que só devolve esses 4 números agregados, nunca dado
+   de outra fazenda — ver supabase/schema.sql, seção BENCHMARKING.
+========================================================= */
+
+// calcula, a partir de uma lista de manejos, a taxa de prenhez de CADA
+// fazenda (prenhas/avaliadas daquela fazenda) — usado tanto para achar a
+// taxa "Sua Fazenda" quanto para montar a "média das médias" do grupo.
+function taxasDePrenhezPorFazenda(listaManejos) {
+  const porFazenda = {};
+  listaManejos.filter((m) => m.tipo === "diagnostico").forEach((m) => {
+    if (!porFazenda[m.fazendaId]) porFazenda[m.fazendaId] = { prenhas: 0, avaliadas: 0 };
+    (m.detalhes || []).forEach((d) => {
+      porFazenda[m.fazendaId].avaliadas += 1;
+      if (d.resultado === "Prenha") porFazenda[m.fazendaId].prenhas += 1;
+    });
+  });
+  return Object.entries(porFazenda)
+    .filter(([, v]) => v.avaliadas > 0)
+    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+}
+
+// "média das médias": tira a média simples entre as taxas já calculadas por
+// fazenda (ex.: (42% + 35% + 54%) / 3) — nunca soma os animais de todas as
+// fazendas numa conta só — e separa as 25% melhores / 25% piores fazendas.
+function calcularEstatisticasBenchmark(taxas) {
+  if (taxas.length === 0) return { mediaGeral: null, mediaTop25: null, mediaBottom25: null, numFazendas: 0 };
+  const ordenadas = [...taxas].sort((a, b) => a - b);
+  const n = ordenadas.length;
+  const media = (arr) => Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10;
+  const tamanhoQuartil = Math.max(1, Math.round(n * 0.25));
+  return {
+    mediaGeral: media(ordenadas),
+    mediaBottom25: media(ordenadas.slice(0, tamanhoQuartil)),
+    mediaTop25: media(ordenadas.slice(n - tamanhoQuartil)),
+    numFazendas: n,
+  };
+}
+
+// gráfico de barras reutilizável: Sua Fazenda / Média Geral / 25% Melhores / 25% Piores.
+// Pensado para receber mais indicadores nas próximas etapas — é só chamar de novo
+// com outro título/valores.
+function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, aviso }) {
+  const barras = [
+    { label: "Sua Fazenda", valor: suaFazenda, cor: "#159FDB" },
+    { label: "Média Geral", valor: stats?.mediaGeral ?? null, cor: "#1F5C7A" },
+    { label: "25% Melhores", valor: stats?.mediaTop25 ?? null, cor: "#3B7D2E" },
+    { label: "25% Piores", valor: stats?.mediaBottom25 ?? null, cor: "#C0392B" },
+  ];
+  const maiorValor = Math.max(...barras.map((b) => b.valor || 0), 10);
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 20 }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 4 }}>{titulo}</div>
+      <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>{descricao}</p>
+
+      {carregando ? (
+        <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
+      ) : aviso ? (
+        <p style={{ fontSize: 12, color: "#B9541E", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {aviso}</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 20, height: 220, paddingTop: 10 }}>
+            {barras.map((b) => (
+              <div key={b.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+                {b.valor != null && <div style={{ fontSize: 13, fontWeight: 700, color: "#232520", marginBottom: 6 }}>{b.valor}%</div>}
+                <div style={{
+                  width: "100%", maxWidth: 70,
+                  height: b.valor != null ? `${Math.max((b.valor / maiorValor) * 170, 4)}px` : "4px",
+                  background: b.valor != null ? b.cor : "#E5DFCC",
+                  borderRadius: "4px 4px 0 0",
+                }} />
+                <div style={{ fontSize: 12, color: "#6B685E", marginTop: 8, textAlign: "center" }}>{b.label}</div>
+                {b.label === "Sua Fazenda" && b.valor == null && <div style={{ fontSize: 10.5, color: "#B0AA98" }}>sem diagnósticos</div>}
+              </div>
+            ))}
+          </div>
+          {stats && (
+            <p style={{ fontSize: 11, color: "#B0AA98", marginTop: 14 }}>
+              Calculado a partir de {stats.numFazendas} fazenda(s) com diagnóstico registrado (a fazenda selecionada entra na conta se já tiver diagnóstico).
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo }) {
+  const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
+  const [sistema, setSistema] = useState(null);
+  const [carregandoSistema, setCarregandoSistema] = useState(false);
+  const [erroSistema, setErroSistema] = useState("");
+
+  React.useEffect(() => {
+    if (escopo !== "sistema" || sistema || !supabaseConfigurado) return;
+    setCarregandoSistema(true);
+    buscarBenchmarkTaxaPrenhezSistema().then((r) => {
+      if (r.ok) setSistema(r); else setErroSistema(r.motivo);
+      setCarregandoSistema(false);
+    });
+  }, [escopo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const taxasGrupo = useMemo(() => taxasDePrenhezPorFazenda(manejosDoGrupo), [manejosDoGrupo]);
+  const statsGrupo = useMemo(() => calcularEstatisticasBenchmark(taxasGrupo.map((f) => f.taxa)), [taxasGrupo]);
+  const suaFazenda = taxasGrupo.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
+
+  const statsAtual = escopo === "grupo" ? statsGrupo : sistema;
+  const avisoSistema = escopo === "sistema" && !supabaseConfigurado
+    ? 'A comparação "Geral do Sistema" precisa do Supabase configurado — ela olha fazendas de outros grupos, calculada no servidor sem expor nenhum dado bruto de ninguém, só as médias.'
+    : escopo === "sistema" && erroSistema
+    ? `Não foi possível carregar a comparação geral: ${erroSistema}`
+    : null;
+
+  return (
+    <div>
+      <SectionTitle icon={TrendingUp} title="Benchmarking" subtitle="Compare a fazenda ativa com outras fazendas — escolha o grupo de comparação abaixo." />
+      <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
+      {!fazendaAtiva ? (
+        <EmptyState text="Selecione uma fazenda ativa para comparar." />
+      ) : (
+        <>
+          <div style={{ display: "flex", background: "#EFE8D6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+            {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
+              <button key={key} onClick={() => setEscopo(key)}
+                style={{
+                  padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                  background: escopo === key ? "#3B5D45" : "transparent", color: escopo === key ? "#F5EFDD" : "#6B685E",
+                }}>{label}</button>
+            ))}
+          </div>
+
+          <GraficoBenchmark
+            titulo="Taxa de prenhez geral (%)"
+            descricao={`Percentual de diagnósticos com resultado Prenha, comparado com ${escopo === "grupo" ? "as fazendas do seu grupo" : "todas as fazendas do sistema"}.`}
+            suaFazenda={suaFazenda}
+            stats={statsAtual}
+            carregando={escopo === "sistema" && carregandoSistema}
+            aviso={avisoSistema}
+          />
+
+          <p style={{ fontSize: 11, color: "#9B9686" }}>Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.</p>
+        </>
+      )}
     </div>
   );
 }

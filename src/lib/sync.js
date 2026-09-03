@@ -29,6 +29,7 @@ function linhaDoSupabase(obj) {
 
 // coleção (nome usado no app) -> tabela no Supabase
 const TABELAS = {
+  usuarios: "usuarios",
   fazendas: "fazendas",
   retiros: "retiros",
   safras: "safras",
@@ -62,7 +63,7 @@ async function buscarColecao(colecao) {
 }
 
 // ---------- ponto de entrada usado pelo App: envia tudo, depois busca tudo ----------
-// `estado` = { fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc }
+// `estado` = { usuarios, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc }
 export async function sincronizar(estado) {
   if (!supabaseConfigurado) {
     return { ok: false, motivo: "Supabase não configurado. Veja src/lib/supabaseClient.js." };
@@ -87,11 +88,20 @@ export async function sincronizar(estado) {
   return { ok: erros.length === 0, erros, atualizado, sincronizadoEm: new Date().toISOString() };
 }
 
+// ---------- busca só a própria linha em "usuarios" ----------
+// Usado logo após o login, para resolver o perfil (nome/perfil/fazendas) em
+// um aparelho novo, que ainda não tem nada em cache local — a política de
+// RLS de "usuarios" já permite a própria linha mesmo sem ser Administrador.
+export async function buscarPerfilProprio(userId) {
+  if (!supabaseConfigurado) return null;
+  const { data, error } = await supabase.from("usuarios").select("*").eq("id", userId).maybeSingle();
+  if (error || !data) return null;
+  return linhaDoSupabase(data);
+}
+
 // NOTAS / PRÓXIMOS PASSOS DESTA CAMADA:
-// - Autenticação: hoje o login do app é uma lista local de usuários (sem
-//   senha real). Para múltiplos usuários de verdade, trocar por
-//   `supabase.auth.signInWithPassword(...)` e usar o `auth.uid()` nas
-//   policies de RLS do schema.sql (já preparadas para isso).
+// - Autenticação: já é real (Supabase Auth, e-mail + senha — ver src/lib/auth.js),
+//   com as policies de RLS usando auth.uid().
 // - Tempo real: para ver alterações de outro usuário aparecerem sem precisar
 //   clicar em "Sincronizar agora", trocar `buscarColecao` por uma inscrição
 //   `supabase.channel(...).on('postgres_changes', ...)` por tabela.
