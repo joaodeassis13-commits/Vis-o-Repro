@@ -711,11 +711,15 @@ export default function App() {
     };
   }, []);
 
+  const [erroSincronizacao, setErroSincronizacao] = useState("");
   const sincronizarAgora = async () => {
     if (!supabaseConfigurado) { setPendencias(0); return; }
     setSincronizando(true);
+    setErroSincronizacao("");
     const resultado = await sincronizar({ usuarios: users, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao });
-    if (resultado.ok && resultado.atualizado) {
+    // aplica o que veio certo mesmo que outra tabela tenha falhado — nunca descarta dados
+    // válidos só porque outra parte da sincronização deu erro.
+    if (resultado.atualizado) {
       const a = resultado.atualizado;
       if (a.usuarios) setUsers(a.usuarios);
       if (a.fazendas) setFazendas(a.fazendas);
@@ -729,8 +733,13 @@ export default function App() {
       if (a.sugestoesRessinc) setSugestoesRessinc(a.sugestoesRessinc);
       if (a.sugestoesRepasse) setSugestoesRepasse(a.sugestoesRepasse);
       if (a.protocolosPadrao) setProtocolosPadrao(a.protocolosPadrao);
+    }
+    if (resultado.ok) {
       setPendencias(0);
       setUltimaSincronizacao(resultado.sincronizadoEm);
+    } else {
+      // mostra o motivo real em vez de falhar silenciosamente
+      setErroSincronizacao(resultado.motivo || (resultado.erros || []).join(" · ") || "Falha desconhecida na sincronização.");
     }
     setSincronizando(false);
     return resultado;
@@ -1369,6 +1378,9 @@ export default function App() {
                 <RefreshCw size={12} />
                 {sincronizando ? "Sincronizando…" : ultimaSincronizacao ? "Sincronizar agora" : "Sincronizar pela 1ª vez"}
               </button>
+            )}
+            {erroSincronizacao && (
+              <p style={{ fontSize: 10.5, color: "#E3A45C", margin: "6px 0 0", lineHeight: 1.4 }}>⚠ {erroSincronizacao}</p>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
