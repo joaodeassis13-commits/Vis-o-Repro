@@ -118,7 +118,7 @@ create table if not exists manejos (
   lote_id text references lotes (id),
   lote_nome text,
   retiro_id uuid references retiros (id),
-  tipo text not null check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse')),
+  tipo text not null check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse', 'diagnostico_repasse')),
   categoria text,
   ordem text,
   numero_animais integer,
@@ -140,6 +140,7 @@ create table if not exists manejos (
   ecg_hcg_id text, dose_ecg_hcg numeric,                            -- retirada
   gnrh_id text, dose_gnrh numeric,                                  -- D0 / inseminação
   perdas_implante numeric,                                          -- retirada (opcional)
+  horario_inicial text, horario_final text,                         -- retirada (formato HH:MM, opcional)
   data_inicio date, data_fim date,                                  -- repasse (período em que os animais ficam em repasse)
   destino_vazias text check (destino_vazias is null or destino_vazias in ('Ressinc', 'Repasse', 'Descarte')), -- diagnóstico
   criado_em timestamptz not null default now()
@@ -148,15 +149,17 @@ create table if not exists manejos (
 -- garante as colunas mais novas mesmo em bancos criados antes delas existirem
 alter table manejos add column if not exists inseminador text;
 alter table manejos add column if not exists perdas_implante numeric;
+alter table manejos add column if not exists horario_inicial text;
+alter table manejos add column if not exists horario_final text;
 alter table manejos add column if not exists data_inicio date;
 alter table manejos add column if not exists data_fim date;
 alter table manejos add column if not exists destino_vazias text;
 
--- garante que a restrição de "tipo" já aceite 'repasse' mesmo em bancos criados
--- antes desse manejo existir (o nome da constraint é o padrão gerado pelo Postgres).
+-- garante que a restrição de "tipo" já aceite os manejos mais novos mesmo em
+-- bancos criados antes deles existirem (o nome da constraint é o padrão gerado pelo Postgres).
 alter table manejos drop constraint if exists manejos_tipo_check;
 alter table manejos add constraint manejos_tipo_check
-  check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse'));
+  check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse', 'diagnostico_repasse'));
 
 -- ---------- movimento de estoque (entrada / saída) — depende de manejos ----------
 create table if not exists movimentos (

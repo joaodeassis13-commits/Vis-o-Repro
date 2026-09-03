@@ -1259,6 +1259,10 @@ export default function App() {
         th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #8B8676; padding: 8px 10px; border-bottom: 1px solid #E5DFCC; }
         td { padding: 9px 10px; font-size: 13.5px; color: #2B2A24; border-bottom: 1px solid #F0EBDD; }
         tr:hover td { background: #FBF8EF; }
+        /* campos de dose: remove as setas de aumentar/diminuir do number input, deixando livre para digitar */
+        input.campo-dose::-webkit-outer-spin-button,
+        input.campo-dose::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input.campo-dose { -moz-appearance: textfield; appearance: textfield; }
         @media (max-width: 860px) {
           th { font-size: 10.5px; padding: 7px 8px; }
           td { padding: 8px 8px; font-size: 13px; }
@@ -1884,7 +1888,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lerAnimal()} />
-                  <BtnPrimary onClick={lerAnimal}><ScanLine size={15} /></BtnPrimary>
+                  <BtnPrimary onClick={lerAnimal}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -2333,6 +2337,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               </p>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
+              <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <Field label="Protocolo padrão (opcional)">
                 <input style={inputStyle} list="protocolos-padrao-d0" value={protocoloPadraoNome}
                   onChange={(e) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(e.target.value); }}
@@ -2365,7 +2370,6 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   {NOMES_MES.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </Field>
-              <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <Field label="Número de manejos">
                 <select style={inputStyle} value={tipoManejo} onChange={(e) => {
                   limparMsgSeSucesso();
@@ -2393,8 +2397,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     {benzoatos.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose de benzoato (mL)"
-                dose={<input style={inputStyle} type="number" step="any" value={doseBenzoato} onChange={(e) => { limparMsgSeSucesso(); setDoseBenzoato(e.target.value); }} placeholder="0" />}
+                labelDose="Dose (mL)"
+                dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseBenzoato} onChange={(e) => { limparMsgSeSucesso(); setDoseBenzoato(e.target.value); }} placeholder="0" />}
               />
               <CampoProdutoDose
                 labelProduto="Prostaglandina"
@@ -2403,8 +2407,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     {prostaglandinas.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose de prostaglandina (mL)"
-                dose={<input style={inputStyle} type="number" step="any" value={doseProstaglandina} onChange={(e) => { limparMsgSeSucesso(); setDoseProstaglandina(e.target.value); }} placeholder="0" />}
+                labelDose="Dose (mL)"
+                dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseProstaglandina} onChange={(e) => { limparMsgSeSucesso(); setDoseProstaglandina(e.target.value); }} placeholder="0" />}
               />
               <CampoProdutoDose
                 labelProduto="GnRH (opcional)"
@@ -2414,8 +2418,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     {gnrh.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose de GnRH (mL)"
-                dose={<input style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => { limparMsgSeSucesso(); setDoseGnrh(e.target.value); }} placeholder="0" />}
+                labelDose="Dose (mL)"
+                dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => { limparMsgSeSucesso(); setDoseGnrh(e.target.value); }} placeholder="0" />}
               />
             </div>
 
@@ -2435,7 +2439,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     </select>
                   </Field>
                   <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
-                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}><ScanLine size={15} /></BtnPrimary>
+                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 {animaisLidos.length === 0 ? (
@@ -2659,8 +2663,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                               {benzoatosR.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                             </select>
                           }
-                          labelDose="Dose de benzoato (mL)"
-                          dose={<input style={inputStyle} type="number" step="any" value={doseBenzoatoR} onChange={(e) => { limparMsgRSeSucesso(); setDoseBenzoatoR(e.target.value); }} placeholder="0" />}
+                          labelDose="Dose (mL)"
+                          dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseBenzoatoR} onChange={(e) => { limparMsgRSeSucesso(); setDoseBenzoatoR(e.target.value); }} placeholder="0" />}
                         />
                         <CampoProdutoDose
                           labelProduto="Prostaglandina"
@@ -2669,8 +2673,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                               {prostaglandinasR.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                             </select>
                           }
-                          labelDose="Dose de prostaglandina (mL)"
-                          dose={<input style={inputStyle} type="number" step="any" value={doseProstaglandinaR} onChange={(e) => { limparMsgRSeSucesso(); setDoseProstaglandinaR(e.target.value); }} placeholder="0" />}
+                          labelDose="Dose (mL)"
+                          dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseProstaglandinaR} onChange={(e) => { limparMsgRSeSucesso(); setDoseProstaglandinaR(e.target.value); }} placeholder="0" />}
                         />
                       </div>
 
@@ -2806,6 +2810,8 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
   const [numeroAnimais, setNumeroAnimais] = useState("");
   const [perdasImplante, setPerdasImplante] = useState("");
   const [dataManejo, setDataManejo] = useState(todayISO());
+  const [horarioInicial, setHorarioInicial] = useState("");
+  const [horarioFinal, setHorarioFinal] = useState("");
   const [prostaglandinaId, setProstaglandinaId] = useState(prostaglandinas[0]?.id || "");
   const [doseProstaglandina, setDoseProstaglandina] = useState("");
   const [cipionatoId, setCipionatoId] = useState(cipionatos[0]?.id || "");
@@ -2918,6 +2924,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
       tipo: "retirada", loteId, loteNome, retiroId: retiroIdLote, ordem: loteAtual?.ordem || null, numeroAnimais: numBR(numeroAnimais), medicamentos, localEstoque,
       prostaglandinaId, doseProstaglandina: dPGF, cipionatoId, doseCipionato: dCip, ecgHcgId, doseEcgHcg: dEH, data: dataManejo,
       perdasImplante: String(perdasImplante).trim() !== "" ? numBR(perdasImplante) : null,
+      horarioInicial: horarioInicial || null, horarioFinal: horarioFinal || null,
       animaisLidos: comLeitura ? animaisLidos.map((a) => a.brinco) : [],
       detalhes: comLeitura ? animaisLidos.map((a) => ({ ...a, ...contexto })) : [],
     });
@@ -2933,7 +2940,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
       });
     }
 
-    setNumeroAnimais(""); setPerdasImplante(""); setDataManejo(todayISO()); setProtocoloPadraoNome(""); setDoseProstaglandina(""); setDoseCipionato(""); setDoseEcgHcg(""); setAnimaisLidos([]); setMedicamentos([]); setMsg("Retirada registrada.");
+    setNumeroAnimais(""); setPerdasImplante(""); setDataManejo(todayISO()); setHorarioInicial(""); setHorarioFinal(""); setProtocoloPadraoNome(""); setDoseProstaglandina(""); setDoseCipionato(""); setDoseEcgHcg(""); setAnimaisLidos([]); setMedicamentos([]); setMsg("Retirada registrada.");
   };
 
   const historico = manejos.filter((m) => m.tipo === "retirada").slice(0, 6);
@@ -2974,14 +2981,6 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
               <p style={{ fontSize: 12, color: "#B9541E", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (prostaglandina, cipionato ou ECG/HCG).</p>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
-              <Field label="Protocolo padrão (opcional)">
-                <input style={inputStyle} list="protocolos-padrao-retirada" value={protocoloPadraoNome}
-                  onChange={(e) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(e.target.value); }}
-                  placeholder="Nome do protocolo — novo ou já cadastrado" />
-                <datalist id="protocolos-padrao-retirada">
-                  {protocolosPadraoRetirada.map((p) => <option key={p.id} value={p.nome} />)}
-                </datalist>
-              </Field>
               <Field label="Lote">
                 <select style={inputStyle} value={loteId} onChange={(e) => { limparMsgSeSucesso(); setLoteId(e.target.value); }}>
                   {lotesComD0.map((l) => <option key={l.id} value={l.id}>{l.nome}{l.categoria ? ` — ${l.categoria}` : ""}</option>)}
@@ -2991,8 +2990,18 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                 <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={loteAtual?.ordem || "—"} readOnly />
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
+              <Field label="Protocolo padrão (opcional)">
+                <input style={inputStyle} list="protocolos-padrao-retirada" value={protocoloPadraoNome}
+                  onChange={(e) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(e.target.value); }}
+                  placeholder="Nome do protocolo — novo ou já cadastrado" />
+                <datalist id="protocolos-padrao-retirada">
+                  {protocolosPadraoRetirada.map((p) => <option key={p.id} value={p.nome} />)}
+                </datalist>
+              </Field>
               <Field label="Perdas de implante (opcional)"><input style={inputStyle} type="number" min="0" value={perdasImplante} onChange={(e) => { limparMsgSeSucesso(); setPerdasImplante(e.target.value); }} placeholder="0" /></Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
+              <Field label="Horário inicial"><input style={inputStyle} type="time" value={horarioInicial} onChange={(e) => { limparMsgSeSucesso(); setHorarioInicial(e.target.value); }} /></Field>
+              <Field label="Horário final"><input style={inputStyle} type="time" value={horarioFinal} onChange={(e) => { limparMsgSeSucesso(); setHorarioFinal(e.target.value); }} /></Field>
               <CampoProdutoDose
                 labelProduto="Prostaglandina"
                 produto={
@@ -3000,8 +3009,8 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     {prostaglandinas.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose de prostaglandina (mL)"
-                dose={<input style={inputStyle} type="number" step="any" value={doseProstaglandina} onChange={(e) => { limparMsgSeSucesso(); setDoseProstaglandina(e.target.value); }} placeholder="0" />}
+                labelDose="Dose (mL)"
+                dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseProstaglandina} onChange={(e) => { limparMsgSeSucesso(); setDoseProstaglandina(e.target.value); }} placeholder="0" />}
               />
               <CampoProdutoDose
                 labelProduto="Cipionato"
@@ -3010,8 +3019,8 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     {cipionatos.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose de cipionato (mL)"
-                dose={<input style={inputStyle} type="number" step="any" value={doseCipionato} onChange={(e) => { limparMsgSeSucesso(); setDoseCipionato(e.target.value); }} placeholder="0" />}
+                labelDose="Dose (mL)"
+                dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseCipionato} onChange={(e) => { limparMsgSeSucesso(); setDoseCipionato(e.target.value); }} placeholder="0" />}
               />
               <CampoProdutoDose
                 labelProduto="ECG/HCG"
@@ -3020,8 +3029,8 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     {ecgHcg.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose de ECG/HCG (mL)"
-                dose={<input style={inputStyle} type="number" step="any" value={doseEcgHcg} onChange={(e) => { limparMsgSeSucesso(); setDoseEcgHcg(e.target.value); }} placeholder="0" />}
+                labelDose="Dose (mL)"
+                dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseEcgHcg} onChange={(e) => { limparMsgSeSucesso(); setDoseEcgHcg(e.target.value); }} placeholder="0" />}
               />
             </div>
 
@@ -3047,7 +3056,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     </select>
                   </Field>
                   <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
-                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}><ScanLine size={15} /></BtnPrimary>
+                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 {animaisLidos.length === 0 ? (
@@ -3185,6 +3194,22 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // Inseminação (nada de cadastro à parte: cada nome novo digitado já vira sugestão a partir
   // da próxima leitura, porque fica gravado no manejo).
   const inseminadoresConhecidos = [...new Set(manejos.filter((m) => m.tipo === "inseminacao" && m.inseminador).map((m) => m.inseminador))];
+  // "Raça da matriz": por animal (a fêmea), não por sessão como Touro/Partida. Se o animal já
+  // teve uma raça atribuída antes (em qualquer Inseminação anterior), ela é reaproveitada
+  // automaticamente ao ler o brinco; senão, fica livre para digitar e atribuir pela 1ª vez.
+  // O cadastro de sugestões (datalist) também vem do próprio histórico, sem tela separada.
+  const [racaMatriz, setRacaMatriz] = useState("");
+  const racasConhecidas = [...new Set(
+    manejos.filter((m) => m.tipo === "inseminacao").flatMap((m) => (m.detalhes || []).map((d) => d.racaMatriz).filter(Boolean))
+  )];
+  const buscarRacaConhecida = (b) => {
+    const comRaca = manejos
+      .filter((m) => m.tipo === "inseminacao")
+      .flatMap((m) => (m.detalhes || []).map((d) => ({ ...d, data: m.data })))
+      .filter((d) => d.brinco === b && d.racaMatriz);
+    if (comRaca.length === 0) return null;
+    return comRaca.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)).racaMatriz;
+  };
   const [brinco, setBrinco] = useState("");
   const [ecc, setEcc] = useState("");
   const [peso, setPeso] = useState("");
@@ -3282,9 +3307,11 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       avisos.push(`Este animal já pertence ao lote "${loteDoBicho.nome}", diferente do(s) lote(s) selecionado(s) (${nomesSelecionados}).`);
     }
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
+    // raça da matriz: reaproveita a já atribuída antes; se não houver, deixa livre para digitar
+    setRacaMatriz(buscarRacaConhecida(b) || "");
   };
 
-  const limparCamposLeitura = () => { setBrinco(""); setEcc(""); setPeso(""); setObservacoes(""); setGnrhId(""); setDoseGnrh(""); setMsg(""); setAvisoImediato(null); brincoInputRef.current?.focus(); };
+  const limparCamposLeitura = () => { setBrinco(""); setEcc(""); setPeso(""); setObservacoes(""); setGnrhId(""); setDoseGnrh(""); setRacaMatriz(""); setMsg(""); setAvisoImediato(null); brincoInputRef.current?.focus(); };
 
   const adicionar = () => {
     const b = brinco.trim();
@@ -3323,6 +3350,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     const dados = {
       brinco: b, semenId, ecc: ecc.trim() || null, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
       gnrhId: gnrhId || null, doseGnrh: doseGnrh.trim() !== "" ? numBR(doseGnrh) : null,
+      racaMatriz: racaMatriz.trim() || null,
       horario: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       loteId: loteResolvidoId,
     };
@@ -3499,6 +3527,12 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
+              <Field label="Raça da matriz (opcional)">
+                <input style={inputStyle} list="racas-conhecidas" value={racaMatriz} onChange={(e) => { limparMsgSeSucesso(); setRacaMatriz(e.target.value); }} placeholder="Ex: Nelore" />
+                <datalist id="racas-conhecidas">
+                  {racasConhecidas.map((r) => <option key={r} value={r} />)}
+                </datalist>
+              </Field>
               <Field label="Touro">
                 <select style={inputStyle} value={touro} onChange={(e) => setTouro(e.target.value)}>
                   {touros.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -3534,10 +3568,10 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     {gnrh.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose de GnRH (mL)"
-                dose={<input style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => setDoseGnrh(e.target.value)} placeholder="0" />}
+                labelDose="Dose (mL)"
+                dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => setDoseGnrh(e.target.value)} placeholder="0" />}
               />
-              <BtnPrimary onClick={adicionar} style={{ marginBottom: 14 }}><ScanLine size={15} /></BtnPrimary>
+              <BtnPrimary onClick={adicionar} style={{ marginBottom: 14 }}>Registrar animal</BtnPrimary>
             </div>
 
             {avisoImediato && (
@@ -3683,7 +3717,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
    DIAGNÓSTICO — leitura obrigatória, prenha/vazia
 ========================================================= */
 
-function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo, registrarSaidaEstoque, manejos, atualizarLote, addAnimalAoLote, atribuirManejosRetroativos, garantirLoteDesconhecidos, criarSugestaoRessinc, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho }) {
+function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo, registrarSaidaEstoque, manejos, atualizarLote, addAnimalAoLote, atribuirManejosRetroativos, garantirLoteDesconhecidos, criarSugestaoRessinc, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho }) {
   const [localEstoque, setLocalEstoque] = useState("fazenda");
 
   // só entram lotes que já tiveram Inseminação registrada para a ordem ATUAL do lote e que ainda
@@ -3765,15 +3799,19 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
     if (diags.length === 0) return null;
     return diags.reduce((mais, atual) => (atual.data > mais.data ? atual : mais));
   };
+  // checa TODO o histórico do animal (Diagnóstico de Inseminação e de Repasse) por um
+  // resultado de Prenha já registrado antes — independente de ordem ou do tipo de diagnóstico.
+  const buscarPrenhezAnterior = (b) => {
+    const diags = manejos.filter((m) => (m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse") && (m.detalhes || []).some((d) => d.brinco === b && d.resultado === "Prenha"));
+    if (diags.length === 0) return null;
+    return diags.reduce((mais, atual) => (atual.data > mais.data ? atual : mais));
+  };
 
   const [pendente, setPendente] = useState(null); // { brinco, avisos: [], semInseminacao: bool }
 
-  const adicionar = () => {
-    const b = brinco.trim();
-    if (!b) { setMsg("Leia o brinco do animal."); return; }
-    if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
-    if (!resultado) { setMsg("Digite P (Prenha) ou V (Vazia) no campo Resultado."); resultadoInputRef.current?.focus(); return; }
-
+  // calcula todos os avisos possíveis para um brinco — usada tanto para o aviso imediato
+  // (assim que o brinco é lido) quanto para a confirmação final ao registrar.
+  const calcularAvisos = (b) => {
     const avisos = [];
     let semInseminacao = false;
     let loteConflito = false;
@@ -3799,18 +3837,41 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
     if (diagAnterior) {
       avisos.push(`Este animal já tem um Diagnóstico registrado nesta ${ordemComum || "ordem"} em ${fmtDate(diagAnterior.data)}.`);
     }
+    const prenhezAnterior = buscarPrenhezAnterior(b);
+    if (prenhezAnterior) {
+      avisos.push(`Este animal já tem um registro de Prenha em ${fmtDate(prenhezAnterior.data)}.`);
+    }
+    return { avisos, semInseminacao, loteConflito, loteResolvidoId };
+  };
+
+  // aviso imediato assim que o brinco é lido — antes mesmo do Resultado ser preenchido
+  const [avisoImediato, setAvisoImediato] = useState(null);
+  const conferirAoLer = () => {
+    const b = brinco.trim();
+    if (!b) return;
+    const { avisos } = calcularAvisos(b);
+    setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
+  };
+
+  const adicionar = () => {
+    const b = brinco.trim();
+    if (!b) { setMsg("Leia o brinco do animal."); return; }
+    if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
+    if (!resultado) { setMsg("Digite P (Prenha) ou V (Vazia) no campo Resultado."); resultadoInputRef.current?.focus(); return; }
+
+    const { avisos, semInseminacao, loteConflito, loteResolvidoId } = calcularAvisos(b);
 
     if (avisos.length > 0) { setPendente({ brinco: b, avisos, semInseminacao, loteConflito, loteResolvidoId }); setMsg(""); return; }
 
     setRegistros((a) => [...a, { brinco: b, resultado, loteId: loteResolvidoId }]);
-    setBrinco(""); setResultadoInput(""); setResultado(""); setMsg("");
+    setBrinco(""); setResultadoInput(""); setResultado(""); setAvisoImediato(null); setMsg("");
     brincoInputRef.current?.focus();
   };
 
   const confirmarPendente = () => {
     if (!pendente) return;
     setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: pendente.loteResolvidoId }]);
-    setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setMsg("");
+    setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setAvisoImediato(null); setMsg("");
     brincoInputRef.current?.focus();
   };
   const confirmarComoDesconhecido = () => {
@@ -3881,8 +3942,6 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
 
   return (
     <div>
-      <SectionTitle icon={UltrasoundIcon} title="Diagnóstico de gestação" subtitle="Leitura individual obrigatória. Informe se a fêmea está prenha ou vazia." />
-      <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
       {!fazendaAtiva ? <EmptyState text="Selecione uma fazenda ativa para registrar diagnósticos." /> : !safraAtiva ? <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos. Todo manejo e lote precisa pertencer a uma safra." /> : lotesComInseminacao.length === 0 ? <EmptyState text="Nenhum lote disponível para diagnóstico no momento. Um lote aparece aqui após a Inseminação da sua ordem atual, e some daqui assim que o diagnóstico dessa ordem é registrado." /> : (
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
@@ -3919,9 +3978,9 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
               <Field label="Leitura do animal (obrigatória)">
                 <div style={{ display: "flex", gap: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
-                    onChange={(e) => { limparMsgSeSucesso(); setBrinco(e.target.value); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) resultadoInputRef.current?.focus(); } }} />
-                  <BtnPrimary onClick={() => resultadoInputRef.current?.focus()}><ScanLine size={15} /></BtnPrimary>
+                    onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
+                  <BtnPrimary onClick={() => { if (brinco.trim()) conferirAoLer(); resultadoInputRef.current?.focus(); }}><ScanLine size={15} /></BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
@@ -3931,6 +3990,18 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
               </Field>
             </div>
+            {avisoImediato && (
+              <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                </div>
+                {avisoImediato.avisos.map((a, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                ))}
+                <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Preencha o Resultado normalmente — a confirmação final aparecerá ao registrar.</p>
+              </div>
+            )}
             {jaRegistradoNestaOrdem && (
               <p style={{ fontSize: 12.5, color: "#A32D2D", margin: "10px 0 0" }}>
                 Já existe um Diagnóstico registrado na {ordemComum} para: {lotesJaRegistrados.map((l) => l.nome).join(", ")}. Não é possível registrar de novo para a mesma ordem.
@@ -4065,6 +4136,257 @@ function AbaDiagnostico({ fazendaAtiva, safraAtiva, lotes, insumos, registrarMan
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* =========================================================
+   DIAGNÓSTICO DE REPASSE — mesma ideia do Diagnóstico de Inseminação, mas
+   simplificado: Identificação, Resultado (P/V) e Tempo de gestação informado,
+   para os animais que passaram pelo manejo de Repasse.
+========================================================= */
+
+function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, registrarManejo, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho }) {
+  // só entram lotes que já tiveram Repasse registrado
+  const lotesComRepasse = lotes.filter((l) => manejos.some((m) => m.tipo === "repasse" && m.loteId === l.id));
+
+  const [lotesSelecionados, setLotesSelecionados] = useState(lotesComRepasse[0] ? [lotesComRepasse[0].id] : []);
+  React.useEffect(() => {
+    setLotesSelecionados((a) => a.filter((id) => lotesComRepasse.some((l) => l.id === id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lotesComRepasse.map((l) => l.id).join(",")]);
+  const toggleLote = (id) => setLotesSelecionados((a) => a.includes(id) ? a.filter((x) => x !== id) : [...a, id]);
+
+  const [dataManejo, setDataManejo] = useState(todayISO());
+  const [brinco, setBrinco] = useState("");
+  const brincoInputRef = React.useRef(null);
+  const [resultadoInput, setResultadoInput] = useState("");
+  const [resultado, setResultado] = useState("");
+  const resultadoInputRef = React.useRef(null);
+  const [tempoGestacaoInformado, setTempoGestacaoInformado] = useState("");
+  const tempoInputRef = React.useRef(null);
+  const [registros, setRegistros] = useState([]);
+  useAvisarSaidaComPendencia(registros.length > 0);
+  const [msg, setMsg] = useState("");
+  const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
+
+  const chaveRascunho = lotesSelecionados.length > 0 ? `diagnostico_repasse_${lotesSelecionados.slice().sort().join("-")}` : null;
+  React.useEffect(() => {
+    if (chaveRascunho && registros.length === 0 && rascunhos[chaveRascunho]) {
+      setRegistros(rascunhos[chaveRascunho].registros || []);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveRascunho]);
+  const salvarProgresso = () => {
+    if (!chaveRascunho || registros.length === 0) { setMsg("Leia ao menos um animal antes de salvar."); return; }
+    salvarRascunho(chaveRascunho, { registros });
+    setMsg("Progresso salvo. Você pode continuar depois.");
+  };
+
+  const resolverResultado = (txt) => {
+    const t = txt.trim().toUpperCase();
+    if (t.startsWith("P")) return "Prenha";
+    if (t.startsWith("V")) return "Vazia";
+    return "";
+  };
+
+  // checa TODO o histórico do animal (Diagnóstico de Inseminação e de Repasse) por um
+  // resultado de Prenha já registrado antes.
+  const buscarPrenhezAnterior = (b) => {
+    const diags = manejos.filter((m) => (m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse") && (m.detalhes || []).some((d) => d.brinco === b && d.resultado === "Prenha"));
+    if (diags.length === 0) return null;
+    return diags.reduce((mais, atual) => (atual.data > mais.data ? atual : mais));
+  };
+
+  // aviso imediato assim que o brinco é lido — antes mesmo do Resultado ser preenchido
+  const [avisoImediato, setAvisoImediato] = useState(null);
+  const conferirAoLer = () => {
+    const b = brinco.trim();
+    if (!b) return;
+    const prenhezAnterior = buscarPrenhezAnterior(b);
+    setAvisoImediato(prenhezAnterior ? { brinco: b, mensagem: `Este animal já tem um registro de Prenha em ${fmtDate(prenhezAnterior.data)}.` } : null);
+  };
+
+  const adicionar = () => {
+    const b = brinco.trim();
+    if (!b) { setMsg("Leia o brinco do animal."); return; }
+    if (!resultado) { setMsg("Informe o resultado (P ou V)."); return; }
+    if (lotesSelecionados.length === 0) { setMsg("Selecione ao menos um lote."); return; }
+    if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
+
+    const loteDoBicho = lotes.find((l) => (l.animais || []).includes(b));
+    const pertenceASelecionados = loteDoBicho && lotesSelecionados.includes(loteDoBicho.id);
+    const loteResolvidoId = pertenceASelecionados ? loteDoBicho.id : lotesSelecionados[0];
+
+    setRegistros((a) => [...a, {
+      brinco: b, resultado, tempoGestacaoInformado: tempoGestacaoInformado.trim() !== "" ? numBR(tempoGestacaoInformado) : null,
+      loteId: loteResolvidoId,
+    }]);
+    setBrinco(""); setResultadoInput(""); setResultado(""); setTempoGestacaoInformado(""); setAvisoImediato(null); setMsg("");
+    brincoInputRef.current?.focus();
+  };
+
+  const remover = (b) => setRegistros((a) => a.filter((r) => r.brinco !== b));
+
+  const finalizar = () => {
+    if (registros.length === 0) { setMsg("Leia ao menos um animal antes de finalizar."); return; }
+    const idsComRegistro = [...new Set(registros.map((r) => r.loteId))];
+    idsComRegistro.forEach((idLote) => {
+      const lote = lotes.find((l) => l.id === idLote);
+      const registrosDoLote = registros.filter((r) => r.loteId === idLote);
+      if (!lote || registrosDoLote.length === 0) return;
+      registrarManejo({
+        tipo: "diagnostico_repasse", loteId: lote.id, loteNome: lote.nome, retiroId: lote.retiroId || null,
+        animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo,
+      });
+    });
+    setRegistros([]); setDataManejo(todayISO()); setMsg("Diagnóstico de Repasse registrado.");
+    if (chaveRascunho) limparRascunho(chaveRascunho);
+  };
+
+  const historico = manejos.filter((m) => m.tipo === "diagnostico_repasse").slice(0, 8);
+
+  return (
+    <div>
+      {!fazendaAtiva ? (
+        <EmptyState text="Selecione uma fazenda ativa para registrar diagnósticos." />
+      ) : !safraAtiva ? (
+        <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos." />
+      ) : lotesComRepasse.length === 0 ? (
+        <EmptyState text="Nenhum lote disponível para Diagnóstico de Repasse no momento. Um lote aparece aqui depois de ter um Repasse registrado." />
+      ) : (
+        <>
+          <div style={{ ...cardStyle, marginBottom: 24 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+              {lotesComRepasse.map((l) => {
+                const selecionado = lotesSelecionados.includes(l.id);
+                return (
+                  <button key={l.id} onClick={() => toggleLote(l.id)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
+                      borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
+                      background: selecionado ? "#E4EEE0" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
+                    }}>
+                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
+                    {l.nome}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, alignItems: "end" }}>
+              <Field label="Identificação (obrigatória)">
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
+                    onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
+                </div>
+              </Field>
+              <Field label="Resultado">
+                <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
+                  onChange={(e) => { limparMsgSeSucesso(); const v = e.target.value; setResultadoInput(v); setResultado(resolverResultado(v)); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); tempoInputRef.current?.focus(); } }} />
+              </Field>
+              <Field label="Tempo de gestação informado">
+                <input ref={tempoInputRef} style={inputStyle} type="number" value={tempoGestacaoInformado}
+                  onChange={(e) => { limparMsgSeSucesso(); setTempoGestacaoInformado(e.target.value); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} placeholder="dias (opcional)" />
+              </Field>
+              <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
+            </div>
+            {avisoImediato && (
+              <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                </div>
+                <p style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {avisoImediato.mensagem}</p>
+                <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente.</p>
+              </div>
+            )}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("salvo") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
+              <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
+              <BtnPrimary onClick={finalizar}>Finalizar Diagnóstico de Repasse ({registros.length})</BtnPrimary>
+            </div>
+          </div>
+
+          {registros.length > 0 && (
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
+              <table>
+                <thead><tr><th>Animal</th><th>Lote</th><th>Resultado</th><th>Tempo de gestação informado</th><th></th></tr></thead>
+                <tbody>
+                  {registros.map((r) => (
+                    <tr key={r.brinco}>
+                      <td><EarTag size="sm">{r.brinco}</EarTag></td>
+                      <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
+                      <td style={{ color: r.resultado === "Prenha" ? "#3B5D45" : "#B9541E", fontWeight: 600 }}>{r.resultado}</td>
+                      <td>{r.tempoGestacaoInformado != null ? `${r.tempoGestacaoInformado} dia(s)` : "—"}</td>
+                      <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Diagnósticos de Repasse registrados</div>
+          {historico.length === 0 ? (
+            <EmptyState text="Nenhum Diagnóstico de Repasse registrado ainda." />
+          ) : (
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+              <table>
+                <thead><tr><th>Lote</th><th>Prenhas</th><th>Avaliadas</th><th>Data</th></tr></thead>
+                <tbody>
+                  {historico.map((m) => (
+                    <tr key={m.id}>
+                      <td style={{ fontWeight: 700 }}>{m.loteNome}</td>
+                      <td>{(m.detalhes || []).filter((d) => d.resultado === "Prenha").length}</td>
+                      <td>{(m.detalhes || []).length}</td>
+                      <td>{fmtDate(m.data)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   DIAGNÓSTICO — envoltório com duas abas internas: "Diagnóstico de
+   Inseminação" (o diagnóstico normal, ligado às ordens de IATF) e
+   "Diagnóstico de Repasse" (para os animais que passaram pelo Repasse).
+========================================================= */
+
+function AbaDiagnostico(props) {
+  const [abaInterna, setAbaInterna] = useState("inseminacao"); // "inseminacao" | "repasse"
+  return (
+    <div>
+      <SectionTitle icon={UltrasoundIcon} title="Diagnóstico" subtitle="Escolha se o diagnóstico é da Inseminação ou do Repasse." />
+      <FazendaAtivaBanner fazendaAtiva={props.fazendaAtiva} />
+      <div style={{ display: "flex", background: "#EFE8D6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+        <button onClick={() => setAbaInterna("inseminacao")}
+          style={{
+            padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+            background: abaInterna === "inseminacao" ? "#3B5D45" : "transparent", color: abaInterna === "inseminacao" ? "#F5EFDD" : "#6B685E",
+          }}>Diagnóstico de Inseminação</button>
+        <button onClick={() => setAbaInterna("repasse")}
+          style={{
+            padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+            background: abaInterna === "repasse" ? "#3B5D45" : "transparent", color: abaInterna === "repasse" ? "#F5EFDD" : "#6B685E",
+          }}>Diagnóstico de Repasse</button>
+      </div>
+      <div style={{ display: abaInterna === "inseminacao" ? "block" : "none" }}>
+        <AbaDiagnosticoInseminacao {...props} />
+      </div>
+      <div style={{ display: abaInterna === "repasse" ? "block" : "none" }}>
+        <AbaDiagnosticoRepasse {...props} />
+      </div>
     </div>
   );
 }
@@ -4362,7 +4684,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
                     onChange={(e) => { if (msg) setMsg(""); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lerAnimal(); } }} />
-                  <BtnPrimary onClick={lerAnimal}><ScanLine size={15} /></BtnPrimary>
+                  <BtnPrimary onClick={lerAnimal}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
