@@ -93,10 +93,15 @@ export async function sincronizar(estado) {
 // um aparelho novo, que ainda não tem nada em cache local — a política de
 // RLS de "usuarios" já permite a própria linha mesmo sem ser Administrador.
 export async function buscarPerfilProprio(userId) {
-  if (!supabaseConfigurado) return null;
-  const { data, error } = await supabase.from("usuarios").select("*").eq("id", userId).maybeSingle();
-  if (error || !data) return null;
-  return linhaDoSupabase(data);
+  if (!supabaseConfigurado) return { ok: false, erro: "Supabase não configurado." };
+  try {
+    const { data, error } = await supabase.from("usuarios").select("*").eq("id", userId).maybeSingle();
+    if (error) return { ok: false, erro: error.message };
+    if (!data) return { ok: false, erro: "Nenhum registro encontrado na tabela usuarios para este login." };
+    return { ok: true, perfil: linhaDoSupabase(data) };
+  } catch (e) {
+    return { ok: false, erro: e?.message || "Falha de rede ao buscar o perfil." };
+  }
 }
 
 // NOTAS / PRÓXIMOS PASSOS DESTA CAMADA:

@@ -651,15 +651,16 @@ export default function App() {
   // usuários — que já foi sincronizada da tabela `usuarios` do Supabase. Se
   // não encontrar localmente (aparelho novo, ainda sem cache), busca só essa
   // linha direto no Supabase — a política de RLS já permite a própria linha.
+  const [erroPerfil, setErroPerfil] = useState("");
   React.useEffect(() => {
     if (!currentUser?._aguardandoPerfil || !carregadoDoBanco) return;
     const perfil = users.find((u) => u.id === currentUser.id);
-    if (perfil) { setCurrentUser(perfil); return; }
-    if (supabaseConfigurado) {
-      buscarPerfilProprio(currentUser.id).then((p) => {
-        if (p) { setUsers((a) => [...a, p]); setCurrentUser(p); }
-      });
-    }
+    if (perfil) { setCurrentUser(perfil); setErroPerfil(""); return; }
+    if (!supabaseConfigurado) { setErroPerfil("Supabase não configurado — não há como buscar seu perfil."); return; }
+    buscarPerfilProprio(currentUser.id).then((r) => {
+      if (r.ok) { setUsers((a) => [...a, r.perfil]); setErroPerfil(""); setCurrentUser(r.perfil); }
+      else setErroPerfil(r.erro);
+    });
   }, [currentUser, users, carregadoDoBanco]);
 
   // Mantém o currentUser sempre em dia com a lista de usuários — essencial agora que as
@@ -1175,8 +1176,23 @@ export default function App() {
   if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} />;
   if (currentUser._aguardandoPerfil) {
     return (
-      <div style={{ minHeight: "100vh", background: "#EFE6D3", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#6B685E", fontSize: 13 }}>
-        Carregando seu perfil…
+      <div style={{ minHeight: "100vh", background: "#EFE6D3", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#6B685E", fontSize: 13, padding: 20 }}>
+        <div style={{ textAlign: "center", maxWidth: 380 }}>
+          {!erroPerfil ? (
+            "Carregando seu perfil…"
+          ) : (
+            <>
+              <p style={{ color: "#A32D2D", marginBottom: 14 }}>
+                Não foi possível carregar seu perfil.<br />
+                <span style={{ fontSize: 12, color: "#8A3E15" }}>{erroPerfil}</span>
+              </p>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                <BtnPrimary onClick={() => { setErroPerfil(""); setCurrentUser((u) => ({ ...u })); }}>Tentar de novo</BtnPrimary>
+                <BtnGhost onClick={() => (supabaseConfigurado ? sairDaConta() : setCurrentUser(null))}>Sair</BtnGhost>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     );
   }
