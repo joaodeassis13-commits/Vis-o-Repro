@@ -30,11 +30,22 @@ db.version(1).stores({
   meta: "chave", // guarda coisas avulsas, ex: { chave: "currentUserId", valor: "..." }
 });
 
+// v2: "protocolos padrão" (modelos de D0/Retirada) — Dexie mantém as tabelas
+// já existentes da v1 automaticamente, só é preciso declarar o que é novo.
+db.version(2).stores({
+  protocolosPadrao: "id, fazendaId, manejo",
+});
+
+// v3: "sugestões de Repasse" (nascem do Diagnóstico, aguardam confirmação em Repasse)
+db.version(3).stores({
+  sugestoesRepasse: "id, fazendaId",
+});
+
 // ---------- leitura de tudo, usada uma vez ao abrir o app ----------
 export async function carregarTudo() {
   const [
     usuarios, fazendas, retiros, safras, lotes, insumos, manejos,
-    movimentos, agendamentos, sugestoesRessinc, rascunhosArr,
+    movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, rascunhosArr,
   ] = await Promise.all([
     db.usuarios.toArray(),
     db.fazendas.toArray(),
@@ -46,10 +57,12 @@ export async function carregarTudo() {
     db.movimentos.toArray(),
     db.agendamentos.toArray(),
     db.sugestoesRessinc.toArray(),
+    db.sugestoesRepasse.toArray(),
+    db.protocolosPadrao.toArray(),
     db.rascunhos.toArray(),
   ]);
   const rascunhos = Object.fromEntries(rascunhosArr.map((r) => [r.chave, r.valor]));
-  return { usuarios, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, rascunhos };
+  return { usuarios, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, rascunhos };
 }
 
 // ---------- grava uma coleção inteira (substitui o conteúdo da tabela) ----------

@@ -93,10 +93,21 @@ create table if not exists insumos (
   touro text,             -- quando categoria = 'Sêmen'
   raca text,
   partida date,
+  motilidade_inicial numeric check (motilidade_inicial is null or (motilidade_inicial >= 0 and motilidade_inicial <= 100)),
+  vigor_inicial smallint check (vigor_inicial is null or (vigor_inicial >= 1 and vigor_inicial <= 5)),
+  motilidade_final numeric check (motilidade_final is null or (motilidade_final >= 0 and motilidade_final <= 100)),
+  vigor_final smallint check (vigor_final is null or (vigor_final >= 1 and vigor_final <= 5)),
   tipo_medicamento text,  -- quando categoria = 'Medicamento'
   unidade text,           -- quando categoria = 'Utensílio'
   criado_em timestamptz not null default now()
 );
+
+-- garante as colunas de qualidade do sêmen mesmo em bancos criados antes
+-- delas existirem (create table if not exists não adiciona colunas novas)
+alter table insumos add column if not exists motilidade_inicial numeric;
+alter table insumos add column if not exists vigor_inicial smallint;
+alter table insumos add column if not exists motilidade_final numeric;
+alter table insumos add column if not exists vigor_final smallint;
 
 -- ---------- manejo (indução, D0, ressinc, retirada, inseminação, diagnóstico) ----------
 -- precisa vir ANTES de "movimentos", que referencia manejo_id
@@ -107,7 +118,7 @@ create table if not exists manejos (
   lote_id text references lotes (id),
   lote_nome text,
   retiro_id uuid references retiros (id),
-  tipo text not null check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico')),
+  tipo text not null check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse')),
   categoria text,
   ordem text,
   numero_animais integer,
@@ -116,6 +127,7 @@ create table if not exists manejos (
   protocolo text,
   local_estoque text check (local_estoque in ('fazenda', 'externo')),
   operador text,
+  inseminador text,  -- quem fisicamente aplicou a inseminação (pode ser diferente de quem registrou); inseminação
   data date not null,
   animais_lidos text[] not null default '{}',
   detalhes jsonb not null default '[]',      -- leitura individual por animal (ECC, peso, resultado, ...)
@@ -127,8 +139,24 @@ create table if not exists manejos (
   cipionato_id text, dose_cipionato numeric,
   ecg_hcg_id text, dose_ecg_hcg numeric,                            -- retirada
   gnrh_id text, dose_gnrh numeric,                                  -- D0 / inseminação
+  perdas_implante numeric,                                          -- retirada (opcional)
+  data_inicio date, data_fim date,                                  -- repasse (período em que os animais ficam em repasse)
+  destino_vazias text check (destino_vazias is null or destino_vazias in ('Ressinc', 'Repasse', 'Descarte')), -- diagnóstico
   criado_em timestamptz not null default now()
 );
+
+-- garante as colunas mais novas mesmo em bancos criados antes delas existirem
+alter table manejos add column if not exists inseminador text;
+alter table manejos add column if not exists perdas_implante numeric;
+alter table manejos add column if not exists data_inicio date;
+alter table manejos add column if not exists data_fim date;
+alter table manejos add column if not exists destino_vazias text;
+
+-- garante que a restrição de "tipo" já aceite 'repasse' mesmo em bancos criados
+-- antes desse manejo existir (o nome da constraint é o padrão gerado pelo Postgres).
+alter table manejos drop constraint if exists manejos_tipo_check;
+alter table manejos add constraint manejos_tipo_check
+  check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse'));
 
 -- ---------- movimento de estoque (entrada / saída) — depende de manejos ----------
 create table if not exists movimentos (
@@ -159,6 +187,43 @@ create table if not exists sugestoes_ressinc (
   criado_em timestamptz not null default now()
 );
 
+-- ---------- sugestões de Repasse (nascem do Diagnóstico, "Destino para vazias" = Repasse) ----------
+create table if not exists sugestoes_repasse (
+  id text primary key,
+  fazenda_id uuid not null references fazendas (id) on delete cascade,
+  safra_id uuid references safras (id),
+  lote_id text not null references lotes (id) on delete cascade,
+  brincos text[] not null,
+  origem_manejo_id text references manejos (id),
+  status text not null check (status in ('pendente', 'confirmada', 'descartada')),
+  data date not null,
+  criado_em timestamptz not null default now()
+);
+
+-- ---------- protocolos padrão ("modelos" de D0/Retirada) ----------
+-- Na primeira vez que um nome novo de protocolo padrão é usado num D0/Retirada,
+-- o app cria uma linha aqui com os hormônios/doses daquele registro. Nas
+-- próximas vezes, selecionar o mesmo nome preenche tudo de novo — os campos
+-- guardados variam conforme "manejo" ('d0' ou 'retirada').
+create table if not exists protocolos_padrao (
+  id text primary key,
+  fazenda_id uuid not null references fazendas (id) on delete cascade,
+  manejo text not null check (manejo in ('d0', 'retirada')),
+  nome text not null,
+  -- campos usados quando manejo = 'd0':
+  tipo_manejo text,           -- '3 manejos' | '4 manejos'
+  protocolo text,             -- duração do protocolo ('7 dias', '8 dias', '9 dias')
+  implante_id text,
+  benzoato_id text, dose_benzoato numeric,
+  gnrh_id text, dose_gnrh numeric,
+  -- campos usados quando manejo = 'retirada' (prostaglandina é compartilhada com D0):
+  cipionato_id text, dose_cipionato numeric,
+  ecg_hcg_id text, dose_ecg_hcg numeric,
+  -- comum aos dois:
+  prostaglandina_id text, dose_prostaglandina numeric,
+  criado_em timestamptz not null default now()
+);
+
 -- ---------- agenda ----------
 create table if not exists agendamentos (
   id text primary key,
@@ -166,6 +231,7 @@ create table if not exists agendamentos (
   retiro_id uuid references retiros (id),
   lote_nome text,
   ordem text,
+  numero_animais integer,
   tipo text not null,  -- 'Indução' | 'D0' | 'Retirada' | 'PGF 5' | 'Inseminação' | 'Diagnóstico' | 'Outro'
   tipo_manejo text,
   protocolo text,
@@ -176,6 +242,9 @@ create table if not exists agendamentos (
   status text not null check (status in ('pendente', 'confirmado', 'descartado')),
   criado_em timestamptz not null default now()
 );
+
+-- garante a coluna mesmo em bancos criados antes dela existir
+alter table agendamentos add column if not exists numero_animais integer;
 
 -- =====================================================================
 -- RLS (row-level security) — cada usuário só vê as fazendas autorizadas
@@ -189,6 +258,8 @@ alter table insumos enable row level security;
 alter table manejos enable row level security;
 alter table movimentos enable row level security;
 alter table sugestoes_ressinc enable row level security;
+alter table sugestoes_repasse enable row level security;
+alter table protocolos_padrao enable row level security;
 alter table agendamentos enable row level security;
 alter table usuarios enable row level security;
 alter table usuario_fazendas enable row level security;
@@ -270,6 +341,14 @@ create policy "movimentos: acesso autorizado" on movimentos
 
 drop policy if exists "sugestoes_ressinc: acesso autorizado" on sugestoes_ressinc;
 create policy "sugestoes_ressinc: acesso autorizado" on sugestoes_ressinc
+  for all using (fazenda_autorizada(fazenda_id));
+
+drop policy if exists "sugestoes_repasse: acesso autorizado" on sugestoes_repasse;
+create policy "sugestoes_repasse: acesso autorizado" on sugestoes_repasse
+  for all using (fazenda_autorizada(fazenda_id));
+
+drop policy if exists "protocolos_padrao: acesso autorizado" on protocolos_padrao;
+create policy "protocolos_padrao: acesso autorizado" on protocolos_padrao
   for all using (fazenda_autorizada(fazenda_id));
 
 drop policy if exists "agendamentos: acesso autorizado" on agendamentos;

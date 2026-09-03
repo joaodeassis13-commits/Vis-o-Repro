@@ -39,6 +39,8 @@ const TABELAS = {
   movimentos: "movimentos",
   agendamentos: "agendamentos",
   sugestoesRessinc: "sugestoes_ressinc",
+  sugestoesRepasse: "sugestoes_repasse",
+  protocolosPadrao: "protocolos_padrao",
 };
 
 // ---------- envia (upsert) uma coleção inteira ----------
