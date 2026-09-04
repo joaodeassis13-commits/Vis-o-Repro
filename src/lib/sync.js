@@ -43,12 +43,26 @@ const TABELAS = {
   protocolosPadrao: "protocolos_padrao",
 };
 
+// campos que existem só no app (derivados/locais) e nunca devem ser enviados
+// ao Supabase — enviar um campo que não existe como coluna quebra o upsert
+// inteiro daquela tabela.
+const CAMPOS_SO_LOCAIS = {
+  // a autorização de verdade mora na tabela usuario_fazendas; este campo no
+  // app é só um espelho local para exibição/edição na tela de Usuários.
+  usuarios: ["fazendasAutorizadas"],
+};
+
 // ---------- envia (upsert) uma coleção inteira ----------
 async function enviarColecao(colecao, itens) {
   if (!supabaseConfigurado || !itens || itens.length === 0) return { ok: true, enviados: 0 };
   const tabela = TABELAS[colecao];
   if (!tabela) return { ok: true, enviados: 0 };
-  const linhas = itens.map(linhaParaSupabase);
+  const remover = CAMPOS_SO_LOCAIS[colecao] || [];
+  const linhas = itens.map((item) => {
+    const limpo = { ...item };
+    remover.forEach((campo) => delete limpo[campo]);
+    return linhaParaSupabase(limpo);
+  });
   const { error } = await supabase.from(tabela).upsert(linhas, { onConflict: "id" });
   if (error) return { ok: false, erro: error.message };
   return { ok: true, enviados: linhas.length };
@@ -62,6 +76,44 @@ async function buscarColecao(colecao) {
   const { data, error } = await supabase.from(tabela).select("*");
   if (error) return { ok: false, erro: error.message, itens: [] };
   return { ok: true, itens: (data || []).map(linhaDoSupabase) };
+}
+
+// ---------- autorizações (usuario_fazendas) ----------
+// "fazendasAutorizadas" não é uma coluna de "usuarios" — a fonte de verdade de
+// quem pode acessar qual fazenda é a tabela usuario_fazendas. Por isso ela é
+// sincronizada à parte: para cada usuário, substitui completamente as
+// autorizações dele pelas que estão na cópia local (apaga tudo daquele
+// usuário e insere de novo) — assim uma fazenda removida da lista também é
+// removida no servidor, não só as adicionadas.
+async function enviarAutorizacoes(usuarios) {
+  if (!supabaseConfigurado || !usuarios || usuarios.length === 0) return { ok: true, erros: [] };
+  const erros = [];
+  for (const u of usuarios) {
+    if (!u.id) continue;
+    const fazendas = u.fazendasAutorizadas || [];
+    const { error: erroDelete } = await supabase.from("usuario_fazendas").delete().eq("usuario_id", u.id);
+    if (erroDelete) { erros.push(`${u.nome || u.id}: ${erroDelete.message}`); continue; }
+    if (fazendas.length > 0) {
+      const linhas = fazendas.map((fid) => ({ usuario_id: u.id, fazenda_id: fid }));
+      const { error: erroInsert } = await supabase.from("usuario_fazendas").upsert(linhas, { onConflict: "usuario_id,fazenda_id" });
+      if (erroInsert) erros.push(`${u.nome || u.id}: ${erroInsert.message}`);
+    }
+  }
+  return { ok: erros.length === 0, erros };
+}
+
+// busca todas as autorizações que o usuário logado consegue enxergar (RLS já
+// filtra: cada um vê a própria linha; Administrador também vê as do seu grupo).
+async function buscarAutorizacoes() {
+  if (!supabaseConfigurado) return { ok: true, mapa: {} };
+  const { data, error } = await supabase.from("usuario_fazendas").select("usuario_id, fazenda_id");
+  if (error) return { ok: false, erro: error.message, mapa: {} };
+  const mapa = {};
+  (data || []).forEach((row) => {
+    if (!mapa[row.usuario_id]) mapa[row.usuario_id] = [];
+    mapa[row.usuario_id].push(row.fazenda_id);
+  });
+  return { ok: true, mapa };
 }
 
 // ---------- ponto de entrada usado pelo App: envia tudo, depois busca tudo ----------
@@ -80,11 +132,25 @@ export async function sincronizar(estado) {
     if (!resultado.ok) erros.push(`${colecao}: ${resultado.erro}`);
   }
 
+  const resultadoAutorizEnvio = await enviarAutorizacoes(estado.usuarios);
+  if (!resultadoAutorizEnvio.ok) (resultadoAutorizEnvio.erros || []).forEach((e) => erros.push(`autorizações: ${e}`));
+
   const atualizado = {};
   for (const colecao of Object.keys(TABELAS)) {
     const resultado = await buscarColecao(colecao);
     if (resultado.ok) atualizado[colecao] = resultado.itens;
     else erros.push(`${colecao}: ${resultado.erro}`);
+  }
+
+  // aplica as autorizações atualizadas em cima dos usuários já buscados —
+  // é assim que "fazendasAutorizadas" volta a existir nos dados locais.
+  const resultadoAutorizBusca = await buscarAutorizacoes();
+  if (resultadoAutorizBusca.ok) {
+    if (atualizado.usuarios) {
+      atualizado.usuarios = atualizado.usuarios.map((u) => ({ ...u, fazendasAutorizadas: resultadoAutorizBusca.mapa[u.id] || [] }));
+    }
+  } else {
+    erros.push(`autorizações: ${resultadoAutorizBusca.erro}`);
   }
 
   return { ok: erros.length === 0, erros, atualizado, sincronizadoEm: new Date().toISOString() };

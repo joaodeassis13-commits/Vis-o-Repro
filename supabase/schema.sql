@@ -8,12 +8,36 @@
 -- de cima para baixo, no SQL Editor do Supabase.
 -- =====================================================================
 
+-- ---------------------------------------------------------------------
+-- MIGRAÇÃO — corrige um erro de tipo que impedia a sincronização de
+-- quase tudo: fazendas/retiros/safras tinham "id uuid", mas o app gera
+-- esses ids no CLIENTE como texto (ex.: "faz_mtlcl6cf_84jjp"), não como
+-- UUID de verdade. Isso apaga e recria as tabelas afetadas — não apaga
+-- "usuarios" nem as contas de login. É seguro rodar agora porque, com
+-- esse erro, nada nessas tabelas estava sincronizando de verdade antes.
+-- Se você já tinha dados reais nelas, avise antes de rodar este arquivo.
+-- ---------------------------------------------------------------------
+drop table if exists sugestoes_repasse cascade;
+drop table if exists sugestoes_ressinc cascade;
+drop table if exists protocolos_padrao cascade;
+drop table if exists agendamentos cascade;
+drop table if exists movimentos cascade;
+drop table if exists manejos cascade;
+drop table if exists insumos cascade;
+drop table if exists lotes cascade;
+drop table if exists usuario_fazendas cascade;
+drop table if exists safras cascade;
+drop table if exists retiros cascade;
+drop table if exists fazendas cascade;
+
 -- ---------- fazenda (raiz de tudo — nenhuma outra tabela depende dela vir depois) ----------
+-- id text: mesmo id gerado no cliente (uid()), igual às demais tabelas — não é
+-- um uuid de verdade, por isso não usar "uuid" nem gen_random_uuid() aqui.
 create table if not exists fazendas (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key,
   nome text not null,
   municipio text,
-  area text,
+  area_total text,
   proprietario text,
   responsavel text,
   telefone text,
@@ -21,8 +45,8 @@ create table if not exists fazendas (
 );
 
 -- ---------- usuários (perfil + fazendas autorizadas) ----------
--- id = mesmo id do Supabase Auth (auth.users) — a conta de login em si (e-mail
--- e senha) vive lá; aqui só ficam os dados de perfil do app.
+-- id = mesmo id do Supabase Auth (auth.users) — esse SIM é um uuid de verdade,
+-- gerado pelo próprio Supabase, diferente de fazendas/retiros/safras acima.
 -- criado_por: quem cadastrou este usuário — garante que o Administrador que
 -- criou a conta sempre a enxergue, mesmo antes de autorizá-la a uma fazenda.
 create table if not exists usuarios (
@@ -44,29 +68,29 @@ alter table usuarios add column if not exists criado_por uuid references usuario
 
 create table if not exists usuario_fazendas (
   usuario_id uuid references usuarios (id) on delete cascade,
-  fazenda_id uuid references fazendas (id) on delete cascade,
+  fazenda_id text references fazendas (id) on delete cascade,
   primary key (usuario_id, fazenda_id)
 );
 
 -- ---------- retiro / safra (dependem só de fazenda) ----------
 create table if not exists retiros (
-  id uuid primary key default gen_random_uuid(),
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
+  id text primary key,
+  fazenda_id text not null references fazendas (id) on delete cascade,
   nome text not null
 );
 
 create table if not exists safras (
-  id uuid primary key default gen_random_uuid(),
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
+  id text primary key,
+  fazenda_id text not null references fazendas (id) on delete cascade,
   nome text not null  -- formato "2025/2026"
 );
 
 -- ---------- lote (depende de fazenda, safra, retiro) ----------
 create table if not exists lotes (
   id text primary key,  -- mantém o id gerado no cliente (uid()) para sync sem conflito
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
-  safra_id uuid references safras (id),
-  retiro_id uuid references retiros (id),
+  fazenda_id text not null references fazendas (id) on delete cascade,
+  safra_id text references safras (id),
+  retiro_id text references retiros (id),
   nome text not null,
   categoria text,
   ordem text,  -- '1º IATF' | '2º IATF' | '3º IATF'
@@ -80,11 +104,12 @@ create table if not exists lotes (
 -- ---------- insumo (hormônio / sêmen / medicamento / utensílio) ----------
 create table if not exists insumos (
   id text primary key,
-  fazenda_id uuid references fazendas (id) on delete cascade,
+  fazenda_id text references fazendas (id) on delete cascade,
   usuario_id uuid references usuarios (id),  -- não nulo quando local = 'externo'
   local text not null check (local in ('fazenda', 'externo')),
   categoria text not null check (categoria in ('Hormônio', 'Sêmen', 'Medicamento', 'Utensílio')),
   estoque numeric not null default 0,
+  quantidade numeric,      -- quantidade da última entrada registrada (histórico/exibição)
   valor_unitario numeric,
   produto_comercial text,
   hormonio text,          -- quando categoria = 'Hormônio'
@@ -108,16 +133,17 @@ alter table insumos add column if not exists motilidade_inicial numeric;
 alter table insumos add column if not exists vigor_inicial smallint;
 alter table insumos add column if not exists motilidade_final numeric;
 alter table insumos add column if not exists vigor_final smallint;
+alter table insumos add column if not exists quantidade numeric;
 
 -- ---------- manejo (indução, D0, ressinc, retirada, inseminação, diagnóstico) ----------
 -- precisa vir ANTES de "movimentos", que referencia manejo_id
 create table if not exists manejos (
   id text primary key,
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
-  safra_id uuid references safras (id),
+  fazenda_id text not null references fazendas (id) on delete cascade,
+  safra_id text references safras (id),
   lote_id text references lotes (id),
   lote_nome text,
-  retiro_id uuid references retiros (id),
+  retiro_id text references retiros (id),
   tipo text not null check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse', 'diagnostico_repasse')),
   categoria text,
   ordem text,
@@ -164,7 +190,7 @@ alter table manejos add constraint manejos_tipo_check
 -- ---------- movimento de estoque (entrada / saída) — depende de manejos ----------
 create table if not exists movimentos (
   id text primary key,
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
+  fazenda_id text not null references fazendas (id) on delete cascade,
   insumo_id text not null references insumos (id) on delete cascade,
   tipo text not null check (tipo in ('entrada', 'saida')),
   quantidade numeric not null,
@@ -173,15 +199,15 @@ create table if not exists movimentos (
   manejo_id text references manejos (id),
   tipo_manejo text,  -- rótulo do manejo de origem, quando tipo = 'saida'
   data date not null,
-  observacoes text,
+  obs text,
   criado_em timestamptz not null default now()
 );
 
 -- ---------- sugestões de ressinc (fila de confirmação em D0 > Ressinc) ----------
 create table if not exists sugestoes_ressinc (
   id text primary key,
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
-  safra_id uuid references safras (id),
+  fazenda_id text not null references fazendas (id) on delete cascade,
+  safra_id text references safras (id),
   lote_id text not null references lotes (id) on delete cascade,
   brincos text[] not null,
   origem_manejo_id text references manejos (id),
@@ -193,8 +219,8 @@ create table if not exists sugestoes_ressinc (
 -- ---------- sugestões de Repasse (nascem do Diagnóstico, "Destino para vazias" = Repasse) ----------
 create table if not exists sugestoes_repasse (
   id text primary key,
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
-  safra_id uuid references safras (id),
+  fazenda_id text not null references fazendas (id) on delete cascade,
+  safra_id text references safras (id),
   lote_id text not null references lotes (id) on delete cascade,
   brincos text[] not null,
   origem_manejo_id text references manejos (id),
@@ -210,7 +236,7 @@ create table if not exists sugestoes_repasse (
 -- guardados variam conforme "manejo" ('d0' ou 'retirada').
 create table if not exists protocolos_padrao (
   id text primary key,
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
+  fazenda_id text not null references fazendas (id) on delete cascade,
   manejo text not null check (manejo in ('d0', 'retirada')),
   nome text not null,
   -- campos usados quando manejo = 'd0':
@@ -230,8 +256,8 @@ create table if not exists protocolos_padrao (
 -- ---------- agenda ----------
 create table if not exists agendamentos (
   id text primary key,
-  fazenda_id uuid not null references fazendas (id) on delete cascade,
-  retiro_id uuid references retiros (id),
+  fazenda_id text not null references fazendas (id) on delete cascade,
+  retiro_id text references retiros (id),
   lote_nome text,
   ordem text,
   numero_animais integer,
@@ -274,7 +300,11 @@ alter table usuario_fazendas enable row level security;
 -- Cada usuário (INCLUSIVE Administrador) só acessa as fazendas do seu próprio
 -- grupo, atribuídas em usuario_fazendas — um Administrador não vê as fazendas
 -- de outro Administrador a menos que também esteja atribuído a elas.
-create or replace function fazenda_autorizada(fid uuid)
+-- "drop function" é necessário aqui porque o parâmetro mudou de tipo (uuid → text,
+-- corrigindo o mesmo erro de id de fazenda) — "create or replace" não troca o
+-- tipo de parâmetro de uma função já existente, só recriar do zero resolve.
+drop function if exists fazenda_autorizada(uuid);
+create or replace function fazenda_autorizada(fid text)
 returns boolean as $$
   select exists (
     select 1 from usuario_fazendas uf

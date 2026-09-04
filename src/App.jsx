@@ -721,6 +721,8 @@ export default function App() {
     // válidos só porque outra parte da sincronização deu erro.
     if (resultado.atualizado) {
       const a = resultado.atualizado;
+      // "fazendasAutorizadas" agora vem sincronizado de verdade (via usuario_fazendas,
+      // resolvido dentro de sincronizar()) — o servidor já é a fonte confiável aqui.
       if (a.usuarios) setUsers(a.usuarios);
       if (a.fazendas) setFazendas(a.fazendas);
       if (a.retiros) setRetiros(a.retiros);
