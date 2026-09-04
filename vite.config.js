@@ -11,10 +11,10 @@ export default defineConfig({
       // disso, o app avisa o usuário e só atualiza quando ele confirmar
       // (ver o aviso de atualização em src/main.jsx).
       registerType: "prompt",
-      includeAssets: ["icon-192.png", "icon-512.png"],
+      includeAssets: ["icon-192.png", "icon-512.png", "apple-touch-icon.png", "favicon.png"],
       manifest: {
-        name: "VisãoRepro",
-        short_name: "VisãoRepro",
+        name: "VArepro",
+        short_name: "VArepro",
         description: "Controle de inseminação artificial de bovinos (IATF)",
         start_url: "/",
         display: "standalone",
@@ -24,6 +24,7 @@ export default defineConfig({
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {

@@ -1,4 +1,4 @@
-# Como abrir o VisãoRepro no celular (offline + sincronização)
+# Como abrir o VArepro no celular (offline + sincronização)
 
 ## O que já funciona hoje, sem nenhuma configuração extra
 

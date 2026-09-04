@@ -1,5 +1,5 @@
 -- =====================================================================
--- VisãoRepro — schema inicial para Supabase (Postgres)
+-- VArepro — schema inicial para Supabase (Postgres)
 -- Espelha as coleções em memória de visaorepro.jsx. Ponto de partida:
 -- ajuste tipos/constraints conforme o app evoluir.
 --

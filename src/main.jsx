@@ -23,13 +23,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 const atualizarApp = registerSW({
   onNeedRefresh() {
     const confirmar = window.confirm(
-      "Uma nova versão do VisãoRepro está disponível. Atualizar agora?\n\n" +
+      "Uma nova versão do VArepro está disponível. Atualizar agora?\n\n" +
       "Se você estiver no meio de uma leitura ou formulário não salvo, " +
       "clique em Cancelar, termine e salve o que estiver fazendo antes de atualizar."
     );
     if (confirmar) atualizarApp(true);
   },
   onOfflineReady() {
-    console.info("[VisãoRepro] Pronto para funcionar offline.");
+    console.info("[VArepro] Pronto para funcionar offline.");
   },
 });

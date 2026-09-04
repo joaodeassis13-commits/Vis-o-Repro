@@ -1,4 +1,4 @@
-# VisãoRepro
+# VArepro
 
 Controle de inseminação artificial de bovinos (IATF) — cadastros, manejos
 (Indução, D0, Retirada, Inseminação, Diagnóstico, Diagnóstico Final, Ressinc),
@@ -104,7 +104,7 @@ worker.
 ```bash
 git init
 git add .
-git commit -m "Migração inicial do protótipo VisãoRepro"
+git commit -m "Migração inicial do protótipo VArepro"
 git remote add origin <url-do-repositorio>
 git push -u origin main
 ```

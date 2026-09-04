@@ -38,7 +38,7 @@ export const supabaseParaCriarUsuario = supabaseConfigurado
 if (!supabaseConfigurado && typeof window !== "undefined") {
   // eslint-disable-next-line no-console
   console.info(
-    "[VisãoRepro] Supabase não configurado — rodando só localmente (offline). " +
+    "[VArepro] Supabase não configurado — rodando só localmente (offline). " +
     "Veja src/lib/supabaseClient.js para ativar a sincronização entre usuários."
   );
 }

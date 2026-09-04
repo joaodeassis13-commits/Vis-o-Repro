@@ -5,13 +5,14 @@ import {
   ClipboardList, Stethoscope, Warehouse, ArrowDownToLine, ArrowUpFromLine,
   LogOut, Plus, Trash2, ScanLine, Wifi, WifiOff, Download, ChevronRight,
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
-  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp
+  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos } from "./lib/db.js";
 import { sincronizar, buscarPerfilProprio } from "./lib/sync.js";
 import { buscarBenchmarkTaxaPrenhezSistema } from "./lib/benchmarking.js";
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
 import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario } from "./lib/auth.js";
+import logoImg from "./assets/logo.png";
 
 /* ---------------------------------------------------------------
    VISÃOREPRO — controle de inseminação artificial de bovinos
@@ -527,11 +528,9 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
     <div style={{ minHeight: "100vh", background: "#EFE6D3", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
       <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: "#3B5D45", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Syringe size={20} color="#EFC257" />
-          </div>
+          <img src={logoImg} alt="VArepro" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover" }} />
           <div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: "#232520" }}>VisãoRepro</div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: "#232520" }}>VArepro</div>
             <div style={{ fontSize: 12, color: "#9B9686" }}>Controle de IATF a campo</div>
           </div>
         </div>
@@ -771,6 +770,12 @@ export default function App() {
     () => lotes.filter((l) => l.fazendaId === fazendaAtivaId && (safraAtivaId ? l.safraId === safraAtivaId : true)),
     [lotes, fazendaAtivaId, safraAtivaId]
   );
+  // todas as safras da fazenda — usado na Importação de histórico, que precisa ver o
+  // panorama completo (lotesAtivos só mostra a safra ativa no momento)
+  const lotesDaFazenda = useMemo(
+    () => lotes.filter((l) => l.fazendaId === fazendaAtivaId),
+    [lotes, fazendaAtivaId]
+  );
   const insumosAtivos = useMemo(
     () => insumos.filter((i) => i.local === "externo" ? i.usuarioId === currentUser?.id : i.fazendaId === fazendaAtivaId),
     [insumos, fazendaAtivaId, currentUser]
@@ -811,6 +816,164 @@ export default function App() {
   const removeRetiro = (id) => { setRetiros((a) => a.filter((r) => r.id !== id)); marcaPendencia(); };
   const addSafra = (fazendaId, ano) => { setSafras((a) => [...a, { id: uid("saf"), fazendaId, nome: `${ano}/${Number(ano) + 1}` }]); marcaPendencia(); };
   const removeSafra = (id) => { setSafras((a) => a.filter((s) => s.id !== id)); marcaPendencia(); };
+
+  // ---------- importação em massa de lotes/animais/manejos históricos (planilha) ----------
+  // Diferente de addLote (que sempre usa a safra ativa e começa sem animais), aqui cada
+  // lote pode ir para uma safra/retiro específicos e já vem com a lista de animais pronta —
+  // pensado para trazer o histórico de safras anteriores de uma vez, via Excel. Além do
+  // cadastro do lote, também recria os manejos de Inseminação e Diagnóstico quando a
+  // planilha tiver essas colunas preenchidas (agrupando os animais por lote+ordem+data).
+  const importarLotesHistoricos = (linhas) => {
+    // linhas: [{ safra, retiro, lote, categoria, brinco, raca, mesParicao, ordem,
+    //            dataInseminacao, touro, dataDiagnostico, resultado, tempoGestacaoInformado }, ...]
+    //
+    // IMPORTANTE: dado histórico é passado (já aconteceu), então os manejos aqui são
+    // adicionados direto via setManejos — de propósito, SEM passar pela função
+    // registrarManejo() normal do app. Isso garante que a importação NUNCA:
+    //   (a) gera sugestão de Ressinc/Repasse (criarSugestaoRessinc/criarSugestaoRepasse
+    //       não são chamadas aqui);
+    //   (b) cria pré-agendamento na Agenda (só registrarManejo() chama
+    //       gerarPreAgendamentos — a importação não passa por ela);
+    //   (c) desconta estoque (registrarSaidaEstoque não é chamada aqui — mesmo quando o
+    //       touro da planilha bate com um sêmen já cadastrado, é só um vínculo
+    //       informativo no manejo, sem mexer na quantidade disponível).
+    let safrasCriadas = 0, retirosCriados = 0, lotesCriados = 0, lotesAtualizados = 0, manejosCriados = 0;
+    let safrasAtuais = [...safras];
+    let retirosAtuais = [...retiros];
+    let lotesAtuais = [...lotes];
+    let manejosNovos = [];
+
+    const acharOuCriarSafra = (nome) => {
+      const nomeLimpo = nome.trim();
+      const existente = safrasAtuais.find((s) => s.fazendaId === fazendaAtivaId && s.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
+      if (existente) return existente.id;
+      const nova = { id: uid("saf"), fazendaId: fazendaAtivaId, nome: nomeLimpo };
+      safrasAtuais = [...safrasAtuais, nova];
+      safrasCriadas++;
+      return nova.id;
+    };
+    const acharOuCriarRetiro = (nome) => {
+      const nomeLimpo = nome.trim();
+      const existente = retirosAtuais.find((r) => r.fazendaId === fazendaAtivaId && r.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
+      if (existente) return existente.id;
+      const novo = { id: uid("ret"), fazendaId: fazendaAtivaId, nome: nomeLimpo };
+      retirosAtuais = [...retirosAtuais, novo];
+      retirosCriados++;
+      return novo.id;
+    };
+    // tenta achar um sêmen já cadastrado com esse touro, para vincular o manejo ao insumo
+    // de verdade; se não achar, guarda o nome digitado mesmo assim (sem vincular estoque).
+    const acharSemenPorTouro = (nomeTouro) => {
+      if (!nomeTouro) return null;
+      const encontrado = insumos.find((i) => i.categoria === "Sêmen" && i.fazendaId === fazendaAtivaId && (i.touro || "").trim().toLowerCase() === nomeTouro.trim().toLowerCase());
+      return encontrado?.id || null;
+    };
+
+    // 1) agrupa as linhas por (safra, retiro, lote) — cada grupo vira um lote com a lista de animais
+    const gruposLote = new Map();
+    linhas.forEach((linha) => {
+      const chave = `${linha.safra.trim().toLowerCase()}|${linha.retiro.trim().toLowerCase()}|${linha.lote.trim().toLowerCase()}`;
+      if (!gruposLote.has(chave)) {
+        gruposLote.set(chave, {
+          safraNome: linha.safra.trim(), retiroNome: linha.retiro.trim(), loteNome: linha.lote.trim(),
+          categoria: linha.categoria?.trim() || null, raca: linha.raca?.trim() || null, mesParicao: linha.mesParicao?.trim() || null,
+          animais: [], ordemMaisAvancada: null,
+        });
+      }
+      const grupo = gruposLote.get(chave);
+      if (linha.brinco && !grupo.animais.includes(linha.brinco.trim())) grupo.animais.push(linha.brinco.trim());
+      const ordemLinha = linha.ordem?.trim();
+      if (ordemLinha && ORDENS_IATF.includes(ordemLinha)) {
+        const indiceAtual = ORDENS_IATF.indexOf(ordemLinha);
+        const indiceGrupo = grupo.ordemMaisAvancada ? ORDENS_IATF.indexOf(grupo.ordemMaisAvancada) : -1;
+        if (indiceAtual > indiceGrupo) grupo.ordemMaisAvancada = ordemLinha;
+      }
+    });
+
+    const chaveLote = new Map(); // "safra|retiro|lote" -> loteId, para o passo 2 achar o lote de cada linha
+    gruposLote.forEach((grupo, chave) => {
+      const safraId = acharOuCriarSafra(grupo.safraNome);
+      const retiroId = acharOuCriarRetiro(grupo.retiroNome);
+      const loteExistente = lotesAtuais.find((l) =>
+        l.fazendaId === fazendaAtivaId && l.safraId === safraId && l.retiroId === retiroId &&
+        l.nome.trim().toLowerCase() === grupo.loteNome.toLowerCase()
+      );
+      let loteId;
+      if (loteExistente) {
+        const animaisMesclados = [...new Set([...(loteExistente.animais || []), ...grupo.animais])];
+        const ordemFinal = grupo.ordemMaisAvancada && (!loteExistente.ordem || ORDENS_IATF.indexOf(grupo.ordemMaisAvancada) > ORDENS_IATF.indexOf(loteExistente.ordem))
+          ? grupo.ordemMaisAvancada : loteExistente.ordem;
+        lotesAtuais = lotesAtuais.map((l) => l.id === loteExistente.id ? { ...l, animais: animaisMesclados, numeroAnimais: animaisMesclados.length, ordem: ordemFinal } : l);
+        lotesAtualizados++;
+        loteId = loteExistente.id;
+      } else {
+        loteId = uid("lot");
+        const novoLote = {
+          id: loteId, fazendaId: fazendaAtivaId, safraId, retiroId, nome: grupo.loteNome,
+          categoria: grupo.categoria, raca: grupo.raca, mesParicao: grupo.mesParicao, ordem: grupo.ordemMaisAvancada || ORDENS_IATF[0],
+          numeroAnimais: grupo.animais.length, animais: grupo.animais,
+        };
+        lotesAtuais = [...lotesAtuais, novoLote];
+        lotesCriados++;
+      }
+      chaveLote.set(chave, { loteId, safraId, retiroId, loteNome: grupo.loteNome, retiroNome: grupo.retiroNome });
+    });
+
+    // 2) agrupa as linhas com dado de Inseminação (por lote + ordem + data) e cria um manejo por grupo
+    const gruposInsem = new Map();
+    linhas.forEach((linha) => {
+      if (!linha.dataInseminacao) return;
+      const chaveL = `${linha.safra.trim().toLowerCase()}|${linha.retiro.trim().toLowerCase()}|${linha.lote.trim().toLowerCase()}`;
+      const infoLote = chaveLote.get(chaveL);
+      if (!infoLote) return;
+      const ordem = (linha.ordem?.trim() && ORDENS_IATF.includes(linha.ordem.trim())) ? linha.ordem.trim() : ORDENS_IATF[0];
+      const chave = `${infoLote.loteId}|${ordem}|${linha.dataInseminacao}`;
+      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, animais: [] });
+      gruposInsem.get(chave).animais.push({ brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro), touroInformado: linha.touro?.trim() || null });
+    });
+    gruposInsem.forEach((grupo) => {
+      manejosNovos.push({
+        id: uid("man"), tipo: "inseminacao", fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
+        loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
+        data: grupo.data, animaisLidos: grupo.animais.map((a) => a.brinco), detalhes: grupo.animais,
+        operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
+      });
+      manejosCriados++;
+    });
+
+    // 3) mesma coisa para Diagnóstico
+    const gruposDiag = new Map();
+    linhas.forEach((linha) => {
+      if (!linha.dataDiagnostico || !linha.resultado) return;
+      const chaveL = `${linha.safra.trim().toLowerCase()}|${linha.retiro.trim().toLowerCase()}|${linha.lote.trim().toLowerCase()}`;
+      const infoLote = chaveLote.get(chaveL);
+      if (!infoLote) return;
+      const ordem = (linha.ordem?.trim() && ORDENS_IATF.includes(linha.ordem.trim())) ? linha.ordem.trim() : ORDENS_IATF[0];
+      const chave = `${infoLote.loteId}|${ordem}|${linha.dataDiagnostico}`;
+      const resultadoNormalizado = linha.resultado.trim().toUpperCase().startsWith("P") ? "Prenha" : "Vazia";
+      if (!gruposDiag.has(chave)) gruposDiag.set(chave, { infoLote, ordem, data: linha.dataDiagnostico, animais: [] });
+      gruposDiag.get(chave).animais.push({
+        brinco: linha.brinco.trim(), resultado: resultadoNormalizado,
+        tempoGestacaoInformado: linha.tempoGestacaoInformado?.trim() ? numBR(linha.tempoGestacaoInformado) : null,
+      });
+    });
+    gruposDiag.forEach((grupo) => {
+      manejosNovos.push({
+        id: uid("man"), tipo: "diagnostico", fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
+        loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
+        data: grupo.data, animaisLidos: grupo.animais.map((a) => a.brinco), detalhes: grupo.animais,
+        operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
+      });
+      manejosCriados++;
+    });
+
+    setSafras(safrasAtuais);
+    setRetiros(retirosAtuais);
+    setLotes(lotesAtuais);
+    if (manejosNovos.length > 0) setManejos((a) => [...manejosNovos, ...a]);
+    marcaPendencia();
+    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, animaisImportados: linhas.length };
+  };
 
   /* ---------- usuários (Administrador cadastra e autoriza acesso a fazendas) ---------- */
 
@@ -1183,6 +1346,7 @@ export default function App() {
   const SUBTABS = {
     cadastros: [
       { key: "fazenda", label: "Fazenda", icon: Home },
+      { key: "importar", label: "Importar histórico", icon: Upload },
     ],
     manejo: [
       { key: "inducao", label: "Indução", icon: Syringe },
@@ -1297,10 +1461,8 @@ export default function App() {
         } : {}),
       }}>
         <div style={{ padding: "20px 18px", display: "flex", alignItems: "center", gap: 9 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: "#EFC257", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Syringe size={17} color="#2F4A38" />
-          </div>
-          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 18 }}>VisãoRepro</div>
+          <img src={logoImg} alt="VArepro" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }} />
+          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 18 }}>VArepro</div>
           {isMobile && (
             <button onClick={() => setMenuAberto(false)} aria-label="Fechar menu"
               style={{ marginLeft: "auto", background: "none", border: "none", color: "#EFE6D3", cursor: "pointer", padding: 4 }}>
@@ -1408,10 +1570,8 @@ export default function App() {
               style={{ background: "none", border: "none", color: "#EFE6D3", cursor: "pointer", padding: 4, display: "flex" }}>
               <Menu size={22} />
             </button>
-            <div style={{ width: 26, height: 26, borderRadius: 7, background: "#EFC257", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Syringe size={14} color="#2F4A38" />
-            </div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 16 }}>VisãoRepro</div>
+            <img src={logoImg} alt="VArepro" style={{ width: 26, height: 26, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} />
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 16 }}>VArepro</div>
           </div>
         )}
         {SUBTABS[section] && (
@@ -1445,6 +1605,9 @@ export default function App() {
           <div style={{ display: section === "cadastros" && sub === "fazenda" ? "block" : "none" }}>
             <AbaFazenda fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addFazenda={addFazenda} addRetiro={addRetiro} removeRetiro={removeRetiro}
               addSafra={addSafra} removeSafra={removeSafra} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} />
+          </div>
+          <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
+            <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} importarLotesHistoricos={importarLotesHistoricos} />
           </div>
 
           <div style={{ display: section === "manejo" && sub === "inducao" ? "block" : "none" }}>
@@ -1746,6 +1909,210 @@ const UNIDADES_EMBALAGEM = ["unid", "mL"];
 const TIPOS_MEDICAMENTO = ["Suplemento", "Vermífugo", "Vacina", "Outro"];
 const CATEGORIAS_ESTOQUE = ["Hormônios", "Sêmen", "Medicamentos", "Utensílios"];
 
+
+/* =========================================================
+   IMPORTAR HISTÓRICO — sobe uma planilha (.xlsx) com lotes, animais e o
+   histórico de Inseminação/Diagnóstico de safras anteriores, e já cadastra
+   tudo de uma vez (criando safra/retiro/lote automaticamente quando ainda
+   não existem, e um manejo de Inseminação/Diagnóstico por lote+ordem+data
+   quando essas colunas estiverem preenchidas).
+========================================================= */
+
+const COLUNAS_IMPORTACAO_OBRIGATORIAS = ["safra", "retiro", "lote", "brinco"];
+const MAPA_COLUNAS_IMPORTACAO = {
+  safra: "safra",
+  retiro: "retiro",
+  lote: "lote",
+  categoria: "categoria",
+  brinco: "brinco", identificacao: "brinco", animal: "brinco",
+  raca: "raca",
+  mesdeparicao: "mesParicao", mesparicao: "mesParicao",
+  ordem: "ordem",
+  datainseminacao: "dataInseminacao", datadeinseminacao: "dataInseminacao",
+  touro: "touro",
+  datadiagnostico: "dataDiagnostico", datadodiagnostico: "dataDiagnostico",
+  resultado: "resultado", resultadodiagnostico: "resultado", diagnostico: "resultado",
+  tempodegestacaoinformado: "tempoGestacaoInformado", tempodegestacao: "tempoGestacaoInformado",
+};
+const normalizarCabecalho = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+// aceita data já como objeto Date (célula formatada como data no Excel), como texto
+// dd/mm/aaaa (comum no Brasil) ou já em aaaa-mm-dd — devolve sempre em aaaa-mm-dd.
+const paraDataISO = (valor) => {
+  if (!valor) return null;
+  if (valor instanceof Date && !isNaN(valor)) {
+    const ano = valor.getFullYear(), mes = String(valor.getMonth() + 1).padStart(2, "0"), dia = String(valor.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+  }
+  const texto = String(valor).trim();
+  const m1 = texto.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m1) return `${m1[3]}-${m1[2].padStart(2, "0")}-${m1[1].padStart(2, "0")}`;
+  const m2 = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m2) return `${m2[1]}-${m2[2].padStart(2, "0")}-${m2[3].padStart(2, "0")}`;
+  return null;
+};
+
+function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) {
+  const [arquivoNome, setArquivoNome] = useState("");
+  const [linhasValidas, setLinhasValidas] = useState([]);
+  const [linhasComErro, setLinhasComErro] = useState([]);
+  const [erro, setErro] = useState("");
+  const [resultado, setResultado] = useState(null);
+  const [importando, setImportando] = useState(false);
+  const inputRef = React.useRef(null);
+
+  const baixarModelo = () => {
+    const dadosModelo = [
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1º IATF", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1º IATF", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
+    ];
+    const ws = XLSX.utils.json_to_sheet(dadosModelo);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Modelo");
+    XLSX.writeFile(wb, "modelo-importacao-historico.xlsx");
+  };
+
+  const processarArquivo = (file) => {
+    setErro(""); setResultado(null); setLinhasValidas([]); setLinhasComErro([]);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: "array", cellDates: true });
+        const linhasBrutas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+        if (linhasBrutas.length === 0) { setErro("A planilha está vazia."); return; }
+
+        const cabecalhos = Object.keys(linhasBrutas[0]);
+        const mapaEncontrado = {};
+        cabecalhos.forEach((c) => {
+          const norm = normalizarCabecalho(c);
+          if (MAPA_COLUNAS_IMPORTACAO[norm]) mapaEncontrado[c] = MAPA_COLUNAS_IMPORTACAO[norm];
+        });
+        const encontradas = Object.values(mapaEncontrado);
+        const faltando = COLUNAS_IMPORTACAO_OBRIGATORIAS.filter((campo) => !encontradas.includes(campo));
+        if (faltando.length > 0) {
+          setErro(`Não encontrei as colunas obrigatórias: ${faltando.join(", ")}. Baixe o modelo abaixo para conferir os nomes esperados.`);
+          return;
+        }
+
+        const validas = [];
+        const comErro = [];
+        linhasBrutas.forEach((linhaBruta, i) => {
+          const linha = {};
+          Object.entries(mapaEncontrado).forEach(([colOriginal, campo]) => {
+            const bruto = linhaBruta[colOriginal];
+            if (campo === "dataInseminacao" || campo === "dataDiagnostico") linha[campo] = paraDataISO(bruto) || "";
+            else linha[campo] = String(bruto ?? "").trim();
+          });
+          if (!linha.safra || !linha.retiro || !linha.lote || !linha.brinco) comErro.push(i + 2);
+          else validas.push(linha);
+        });
+        setLinhasValidas(validas);
+        setLinhasComErro(comErro);
+        setArquivoNome(file.name);
+      } catch (err) {
+        setErro("Não consegui ler esse arquivo. Confirme que é um .xlsx válido.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const lotesDistintos = new Set(linhasValidas.map((l) => `${l.safra}|${l.retiro}|${l.lote}`.toLowerCase())).size;
+  const comInseminacao = linhasValidas.filter((l) => l.dataInseminacao).length;
+  const comDiagnostico = linhasValidas.filter((l) => l.dataDiagnostico && l.resultado).length;
+
+  const confirmarImportacao = () => {
+    if (linhasValidas.length === 0) return;
+    setImportando(true);
+    const r = importarLotesHistoricos(linhasValidas);
+    setResultado(r);
+    setImportando(false);
+    setLinhasValidas([]); setLinhasComErro([]); setArquivoNome("");
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  return (
+    <div>
+      <SectionTitle icon={Upload} title="Importar histórico" subtitle="Traga de uma vez os lotes, animais e o histórico de Inseminação/Diagnóstico de safras anteriores, a partir de uma planilha Excel." />
+      <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
+      {!fazendaAtiva ? (
+        <EmptyState text="Selecione uma fazenda ativa para importar dados." />
+      ) : (
+        <>
+          <div style={{ ...cardStyle, marginBottom: 24 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Como funciona</div>
+            <p style={{ fontSize: 12.5, color: "#4A473E", lineHeight: 1.6, margin: "0 0 10px" }}>
+              Uma linha por animal, com as colunas <strong>Safra</strong>, <strong>Retiro</strong>, <strong>Lote</strong> e <strong>Brinco</strong> (obrigatórias) —
+              <strong> Categoria</strong>, <strong>Raça</strong> e <strong>Mês de parição</strong> são opcionais.
+              Safras, retiros e lotes que ainda não existem são criados automaticamente; se um lote já existir (mesmo nome, safra e retiro), os animais novos são adicionados a ele.
+            </p>
+            <p style={{ fontSize: 12.5, color: "#4A473E", lineHeight: 1.6, margin: "0 0 14px" }}>
+              Para trazer também o <strong>histórico de manejo</strong>, preencha ainda: <strong>Ordem</strong> (1º/2º/3º IATF — se vazio, assume 1º IATF),
+              <strong> Data Inseminação</strong> e <strong>Touro</strong> (cria um manejo de Inseminação), e <strong>Data Diagnóstico</strong>, <strong>Resultado</strong> (P ou V) e
+              <strong> Tempo de gestação informado</strong> (cria um manejo de Diagnóstico). Animais da mesma safra/lote/ordem/data são agrupados num único manejo, igual ao que
+              aconteceria se tivessem sido lidos juntos na hora. Se o Touro informado já existir cadastrado no estoque de sêmen, o manejo já fica vinculado a ele.
+            </p>
+            <BtnGhost onClick={baixarModelo}><Download size={14} /> Baixar modelo de planilha</BtnGhost>
+          </div>
+
+          <div style={{ ...cardStyle, marginBottom: 24 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Selecionar planilha</div>
+            <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f) processarArquivo(f); }} style={inputStyle} />
+            {erro && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 12 }}>⚠ {erro}</p>}
+
+            {linhasValidas.length > 0 && (
+              <div style={{ marginTop: 16, background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
+                <p style={{ fontSize: 12.5, color: "#4A473E", margin: "0 0 6px" }}><strong>{arquivoNome}</strong></p>
+                <p style={{ fontSize: 12.5, color: "#3B5D45", margin: "0 0 4px" }}>✓ {linhasValidas.length} animal(is) lido(s), em {lotesDistintos} lote(s) distinto(s).</p>
+                <p style={{ fontSize: 12.5, color: "#3B5D45", margin: "0 0 4px" }}>
+                  {comInseminacao > 0 ? `✓ ${comInseminacao} linha(s) com Inseminação` : "— nenhuma linha com Inseminação"}
+                  {" · "}
+                  {comDiagnostico > 0 ? `✓ ${comDiagnostico} linha(s) com Diagnóstico` : "nenhuma linha com Diagnóstico"}
+                </p>
+                {linhasComErro.length > 0 && (
+                  <p style={{ fontSize: 12.5, color: "#B9541E", margin: "4px 0 0" }}>
+                    ⚠ {linhasComErro.length} linha(s) ignorada(s) por faltar Safra, Retiro, Lote ou Brinco (linha(s) {linhasComErro.slice(0, 10).join(", ")}{linhasComErro.length > 10 ? "…" : ""} da planilha).
+                  </p>
+                )}
+                <BtnPrimary onClick={confirmarImportacao} disabled={importando} style={{ marginTop: 12 }}>
+                  {importando ? "Importando…" : `Confirmar importação (${linhasValidas.length} animais)`}
+                </BtnPrimary>
+              </div>
+            )}
+
+            {resultado && (
+              <div style={{ marginTop: 16, background: "#E4EEE0", border: "1px solid #B7D4AC", borderRadius: 8, padding: 14 }}>
+                <p style={{ fontSize: 12.5, color: "#2A4531", margin: 0, lineHeight: 1.6 }}>
+                  ✓ Importação concluída: {resultado.safrasCriadas} safra(s) nova(s), {resultado.retirosCriados} retiro(s) novo(s), {resultado.lotesCriados} lote(s) novo(s)
+                  {resultado.lotesAtualizados > 0 ? `, ${resultado.lotesAtualizados} lote(s) já existente(s) atualizado(s)` : ""}
+                  {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""} — {resultado.animaisImportados} animal(is) no total.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Lotes já cadastrados nesta fazenda</div>
+          {lotes.length === 0 ? (
+            <EmptyState text="Nenhum lote cadastrado ainda." />
+          ) : (
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+              <table>
+                <thead><tr><th>Lote</th><th>Categoria</th><th>Nº animais</th></tr></thead>
+                <tbody>
+                  {lotes.slice(0, 20).map((l) => (
+                    <tr key={l.id}>
+                      <td style={{ fontWeight: 700 }}>{l.nome}</td>
+                      <td>{l.categoria || "—"}</td>
+                      <td>{(l.animais || []).length}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 /* =========================================================
    MANEJO — Indução / D0 / Retirada (padrão comum)
