@@ -48,13 +48,13 @@ table {
 th, td {
   text-align: left;
   padding: 8px 10px;
-  border-bottom: 1px solid #DFDFDF;
+  border-bottom: 1px solid #D9E5DC;
   white-space: nowrap;
 }
 
 th {
   font-size: 11px;
   text-transform: uppercase;
-  color: #969696;
+  color: #77B589;
   font-weight: 700;
 }

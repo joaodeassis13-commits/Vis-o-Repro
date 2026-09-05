@@ -213,16 +213,16 @@ function EarTag({ children, size = "md" }) {
         fontFamily: "'IBM Plex Mono', monospace",
         fontSize: fs,
         fontWeight: 600,
-        color: "#333333",
-        background: "#C3C3C3",
-        border: "1px solid #4A4A4A",
+        color: "#24422D",
+        background: "#B1D5BC",
+        border: "1px solid #346041",
         borderRadius: "3px 9px 9px 3px",
         padding: pad,
         letterSpacing: "0.3px",
         boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
       }}
     >
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#333333", opacity: 0.55, flexShrink: 0 }} />
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#24422D", opacity: 0.55, flexShrink: 0 }} />
       {children}
     </span>
   );
@@ -232,12 +232,12 @@ function SectionTitle({ icon: Icon, title, subtitle }) {
   return (
     <div style={{ marginBottom: 22 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 8, background: "#E8E8E8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon size={18} color="#505050" />
+        <div style={{ width: 34, height: 34, borderRadius: 8, background: "#E3EDE6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon size={18} color="#386846" />
         </div>
-        <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: "#242424", margin: 0 }}>{title}</h2>
+        <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: "#1D2B21", margin: 0 }}>{title}</h2>
       </div>
-      {subtitle && <p style={{ fontSize: 13.5, color: "#686868", margin: "6px 0 0 44px", maxWidth: 560 }}>{subtitle}</p>}
+      {subtitle && <p style={{ fontSize: 13.5, color: "#49875B", margin: "6px 0 0 44px", maxWidth: 560 }}>{subtitle}</p>}
     </div>
   );
 }
@@ -246,16 +246,16 @@ const inputStyle = {
   width: "100%",
   padding: "9px 11px",
   borderRadius: 7,
-  border: "1px solid #D2D2D2",
+  border: "1px solid #C4E0CC",
   fontSize: 14,
   fontFamily: "'Work Sans', sans-serif",
-  color: "#242424",
-  background: "#F9F9F9",
+  color: "#1D2B21",
+  background: "#F8FAF9",
   outline: "none",
   boxSizing: "border-box",
 };
-const labelStyle = { fontSize: 12, fontWeight: 600, color: "#686868", marginBottom: 5, display: "block", textTransform: "uppercase", letterSpacing: "0.4px" };
-const cardStyle = { background: "#FFFFFF", border: "1px solid #DFDFDF", borderRadius: 12, padding: "18px 20px" };
+const labelStyle = { fontSize: 12, fontWeight: 600, color: "#49875B", marginBottom: 5, display: "block", textTransform: "uppercase", letterSpacing: "0.4px" };
+const cardStyle = { background: "#FFFFFF", border: "1px solid #D9E5DC", borderRadius: 12, padding: "18px 20px" };
 
 function Field({ label, children }) {
   return (
@@ -287,7 +287,7 @@ function BtnPrimary({ children, onClick, style, type = "button", disabled }) {
       disabled={disabled}
       style={{
         display: "inline-flex", alignItems: "center", gap: 6,
-        background: disabled ? "#BABABA" : "#999999", color: "#F7F7F7",
+        background: disabled ? "#A5CFB1" : "#7AB88C", color: "#F5F9F6",
         border: "none", borderRadius: 8, padding: "9px 16px",
         fontSize: 13.5, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
         fontFamily: "'Work Sans', sans-serif",
@@ -305,8 +305,8 @@ function BtnGhost({ children, onClick, style, danger }) {
       onClick={onClick}
       style={{
         display: "inline-flex", alignItems: "center", gap: 6,
-        background: "transparent", color: danger ? "#787878" : "#505050",
-        border: `1px solid ${danger ? "#C5C5C5" : "#CFCFCF"}`, borderRadius: 8,
+        background: "transparent", color: danger ? "#549C69" : "#386846",
+        border: `1px solid ${danger ? "#B4D6BE" : "#C1DDC9"}`, borderRadius: 8,
         padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
         fontFamily: "'Work Sans', sans-serif",
         ...style,
@@ -319,7 +319,7 @@ function BtnGhost({ children, onClick, style, danger }) {
 
 function FazendaAtivaBanner({ fazendaAtiva }) {
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "#505050", background: "#E9E9E9", border: "1px solid #CFCFCF", borderRadius: 20, padding: "5px 12px", marginBottom: 18 }}>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "#386846", background: "#E5EDE7", border: "1px solid #C1DDC9", borderRadius: 20, padding: "5px 12px", marginBottom: 18 }}>
       <Home size={13} /> {fazendaAtiva ? fazendaAtiva.nome : "Nenhuma fazenda ativa"}
     </div>
   );
@@ -343,14 +343,14 @@ function useAvisarSaidaComPendencia(haPendencia) {
 
 function SeletorLocalEstoque({ local, setLocal, style }) {
   return (
-    <div style={{ display: "flex", background: "#E8E8E8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content", ...style }}>
+    <div style={{ display: "flex", background: "#E3EDE6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content", ...style }}>
       {[["fazenda", "Estoque da fazenda"], ["externo", "Estoque externo"]].map(([key, label]) => (
         <button key={key} onClick={() => setLocal(key)}
           style={{
             padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer",
             fontSize: 12.5, fontWeight: 600,
-            background: local === key ? "#505050" : "transparent",
-            color: local === key ? "#FFFFFF" : "#686868",
+            background: local === key ? "#386846" : "transparent",
+            color: local === key ? "#FFFFFF" : "#49875B",
           }}>{label}</button>
       ))}
     </div>
@@ -418,8 +418,8 @@ function ScannerCodigoBarras({ aberto, onFechar, onDetectado }) {
           </button>
         </div>
         <div id={divId} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#000" }} />
-        {erro && <p style={{ color: "#AFAFAF", fontSize: 12.5, marginTop: 10 }}>{erro}</p>}
-        <button onClick={onFechar} style={{ marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid #616161", background: "transparent", color: "#FFFFFF", fontSize: 13, cursor: "pointer" }}>
+        {erro && <p style={{ color: "#97C7A5", fontSize: 12.5, marginTop: 10 }}>{erro}</p>}
+        <button onClick={onFechar} style={{ marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid #447E55", background: "transparent", color: "#FFFFFF", fontSize: 13, cursor: "pointer" }}>
           Cancelar e digitar manualmente
         </button>
       </div>
@@ -437,8 +437,8 @@ function BotaoCameraLeitura({ onLido, disabled }) {
         title="Ler identificação pela câmera (código de barras / QR)"
         style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          width: 38, height: 38, borderRadius: 8, border: "1px solid #D2D2D2", background: "#F9F9F9",
-          color: "#474747", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, flexShrink: 0,
+          width: 38, height: 38, borderRadius: 8, border: "1px solid #C4E0CC", background: "#F8FAF9",
+          color: "#325C3E", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, flexShrink: 0,
         }}>
         <Camera size={16} />
       </button>
@@ -469,7 +469,7 @@ function CampoMedicamentos({ insumos, local, selecionados, setSelecionados }) {
 
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#686868", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.3px" }}>Medicamentos utilizados (opcional)</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#49875B", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.3px" }}>Medicamentos utilizados (opcional)</div>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <select style={{ ...inputStyle, flex: 2 }} value={medicamentoId} onChange={(e) => setMedicamentoId(e.target.value)}>
           {medicamentos.map((m) => <option key={m.id} value={m.id}>{m.produtoComercial}</option>)}
@@ -483,9 +483,9 @@ function CampoMedicamentos({ insumos, local, selecionados, setSelecionados }) {
           {selecionados.map((s) => {
             const m = insumos.find((i) => i.id === s.medicamentoId);
             return (
-              <span key={s.medicamentoId} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E8E8E8", border: "1px solid #D1D1D1", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+              <span key={s.medicamentoId} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E3EDE6", border: "1px solid #C3DFCB", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                 {m?.produtoComercial} ({s.dose} {m?.unidadeEmbalagem})
-                <button onClick={() => remover(s.medicamentoId)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878", display: "flex" }}><X size={12} /></button>
+                <button onClick={() => remover(s.medicamentoId)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69", display: "flex" }}><X size={12} /></button>
               </span>
             );
           })}
@@ -497,7 +497,7 @@ function CampoMedicamentos({ insumos, local, selecionados, setSelecionados }) {
 
 function EmptyState({ text }) {
   return (
-    <div style={{ padding: "26px 10px", textAlign: "center", color: "#969696", fontSize: 13.5, border: "1px dashed #D6D6D6", borderRadius: 10 }}>
+    <div style={{ padding: "26px 10px", textAlign: "center", color: "#77B589", fontSize: 13.5, border: "1px dashed #CAE2D1", borderRadius: 10 }}>
       {text}
     </div>
   );
@@ -533,15 +533,15 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
-      <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #DFDFDF", borderRadius: 16, padding: "34px 30px" }}>
+      <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #D9E5DC", borderRadius: 16, padding: "34px 30px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <img src={logoImg} alt="VArepro" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover" }} />
           <div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: "#242424" }}>VArepro</div>
-            <div style={{ fontSize: 12, color: "#969696" }}>Controle de IATF a campo</div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: "#1D2B21" }}>VArepro</div>
+            <div style={{ fontSize: 12, color: "#77B589" }}>Controle de IATF a campo</div>
           </div>
         </div>
-        <div style={{ height: 1, background: "#E8E8E8", margin: "20px 0" }} />
+        <div style={{ height: 1, background: "#E3EDE6", margin: "20px 0" }} />
 
         {supabaseConfigurado ? (
           <>
@@ -554,14 +554,14 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
                 onChange={(e) => { setSenha(e.target.value); setErro(""); }}
                 onKeyDown={(e) => e.key === "Enter" && doLoginReal()} autoComplete="current-password" />
             </Field>
-            {erro && <p style={{ color: "#787878", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
+            {erro && <p style={{ color: "#549C69", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
             <BtnPrimary onClick={doLoginReal} disabled={carregando} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>
               {carregando ? "Entrando…" : "Entrar"}
             </BtnPrimary>
           </>
         ) : (
           <>
-            <p style={{ fontSize: 12, color: "#999999", background: "#F4F4F4", border: "1px solid #C2C2C2", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
+            <p style={{ fontSize: 12, color: "#7AB88C", background: "#F2F6F3", border: "1px solid #B0D4BA", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
               ⚠ Modo de teste local — o Supabase ainda não está configurado neste ambiente, então não há verificação real de senha. Configure o Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) para login seguro de verdade.
             </p>
             <Field label="Usuário">
@@ -576,7 +576,7 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
                 onChange={(e) => { setSenha(e.target.value); setErro(""); }}
                 onKeyDown={(e) => e.key === "Enter" && doLoginLocal()} />
             </Field>
-            {erro && <p style={{ color: "#787878", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
+            {erro && <p style={{ color: "#549C69", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
             <BtnPrimary onClick={doLoginLocal} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>Entrar (modo de teste)</BtnPrimary>
           </>
         )}
@@ -1421,15 +1421,15 @@ export default function App() {
   if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} />;
   if (currentUser._aguardandoPerfil) {
     return (
-      <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#686868", fontSize: 13, padding: 20 }}>
+      <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#49875B", fontSize: 13, padding: 20 }}>
         <div style={{ textAlign: "center", maxWidth: 380 }}>
           {!erroPerfil ? (
             "Carregando seu perfil…"
           ) : (
             <>
-              <p style={{ color: "#787878", marginBottom: 14 }}>
+              <p style={{ color: "#549C69", marginBottom: 14 }}>
                 Não foi possível carregar seu perfil.<br />
-                <span style={{ fontSize: 12, color: "#6E6E6E" }}>{erroPerfil}</span>
+                <span style={{ fontSize: 12, color: "#4D8F60" }}>{erroPerfil}</span>
               </p>
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                 <BtnPrimary onClick={() => { setErroPerfil(""); setCurrentUser((u) => ({ ...u })); }}>Tentar de novo</BtnPrimary>
@@ -1449,9 +1449,9 @@ export default function App() {
         * { box-sizing: border-box; }
         select, input { font-family: 'Work Sans', sans-serif; }
         table { border-collapse: collapse; width: 100%; }
-        th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #868686; padding: 8px 10px; border-bottom: 1px solid #DFDFDF; }
-        td { padding: 9px 10px; font-size: 13.5px; color: #2A2A2A; border-bottom: 1px solid #EBEBEB; }
-        tr:hover td { background: #F8F8F8; }
+        th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #62AA77; padding: 8px 10px; border-bottom: 1px solid #D9E5DC; }
+        td { padding: 9px 10px; font-size: 13.5px; color: #1D3725; border-bottom: 1px solid #E7EFE9; }
+        tr:hover td { background: #F7F9F7; }
         /* campos de dose: remove as setas de aumentar/diminuir do number input, deixando livre para digitar */
         input.campo-dose::-webkit-outer-spin-button,
         input.campo-dose::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -1474,7 +1474,7 @@ export default function App() {
       {/* SIDEBAR — fixa na lateral em telas largas; menu retrátil (fora da tela até abrir) no celular */}
       <aside style={{
         width: isMobile ? "82vw" : 224, maxWidth: isMobile ? 300 : "none",
-        background: "#404040", color: "#FFFFFF", display: "flex", flexDirection: "column", flexShrink: 0,
+        background: "#2D5338", color: "#FFFFFF", display: "flex", flexDirection: "column", flexShrink: 0,
         ...(isMobile ? {
           position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50,
           transform: menuAberto ? "translateX(0)" : "translateX(-100%)",
@@ -1502,29 +1502,29 @@ export default function App() {
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 10,
                   padding: "10px 12px", marginBottom: 3, borderRadius: 8, border: "none",
-                  background: active ? "#505050" : "transparent", color: active ? "#FFFFFF" : "#C8C8C8",
+                  background: active ? "#386846" : "transparent", color: active ? "#FFFFFF" : "#B8D8C1",
                   fontSize: 13.5, fontWeight: 500, cursor: "pointer", textAlign: "left",
                 }}>
                 <Icon size={16} />
                 <span style={{ flex: 1 }}>{n.label}</span>
                 {pendentes > 0 && (
-                  <span style={{ background: "#C3C3C3", color: "#333333", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentes}</span>
+                  <span style={{ background: "#B1D5BC", color: "#24422D", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentes}</span>
                 )}
               </button>
             );
           })}
         </nav>
 
-        <div style={{ padding: 12, borderTop: "1px solid #515151" }}>
+        <div style={{ padding: 12, borderTop: "1px solid #396947" }}>
           {currentUser?.perfil !== "Administrador" && (
             <>
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#A3A3A3", textTransform: "uppercase", letterSpacing: "0.4px", padding: "0 10px 5px" }}>Fazenda ativa</div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#87BF98", textTransform: "uppercase", letterSpacing: "0.4px", padding: "0 10px 5px" }}>Fazenda ativa</div>
                 <select
                   value={fazendaAtivaId}
                   onChange={(e) => setFazendaAtivaId(e.target.value)}
                   style={{
-                    width: "100%", background: "#505050", color: "#FFFFFF", border: "1px solid #616161",
+                    width: "100%", background: "#386846", color: "#FFFFFF", border: "1px solid #447E55",
                     borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                   }}>
                   {fazendasVisiveis.length === 0 && <option value="">Nenhuma fazenda</option>}
@@ -1532,12 +1532,12 @@ export default function App() {
                 </select>
               </div>
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#A3A3A3", textTransform: "uppercase", letterSpacing: "0.4px", padding: "0 10px 5px" }}>Safra ativa</div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#87BF98", textTransform: "uppercase", letterSpacing: "0.4px", padding: "0 10px 5px" }}>Safra ativa</div>
                 <select
                   value={safraAtivaId}
                   onChange={(e) => setSafraAtivaId(e.target.value)}
                   style={{
-                    width: "100%", background: "#505050", color: "#FFFFFF", border: "1px solid #616161",
+                    width: "100%", background: "#386846", color: "#FFFFFF", border: "1px solid #447E55",
                     borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                   }}>
                   {safrasAtivas.length === 0 && <option value="">Nenhuma safra</option>}
@@ -1546,9 +1546,9 @@ export default function App() {
               </div>
             </>
           )}
-          <div style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #515151", marginBottom: 8, fontSize: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#C8C8C8", marginBottom: supabaseConfigurado ? 6 : 0 }}>
-              {online ? <Wifi size={14} color="#A9A9A9" /> : <WifiOff size={14} color="#AFAFAF" />}
+          <div style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #396947", marginBottom: 8, fontSize: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#B8D8C1", marginBottom: supabaseConfigurado ? 6 : 0 }}>
+              {online ? <Wifi size={14} color="#8FC39E" /> : <WifiOff size={14} color="#97C7A5" />}
               {online ? "Conectado" : "Sem internet — salvando localmente"}
               {pendencias > 0 && ` · ${pendencias} alteração(ões) não sincronizada(s)`}
             </div>
@@ -1556,8 +1556,8 @@ export default function App() {
               <button onClick={sincronizarAgora} disabled={!online || sincronizando}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  padding: "6px 8px", borderRadius: 6, border: "1px solid #616161",
-                  background: "transparent", color: online ? "#C8C8C8" : "#747474", fontSize: 11.5,
+                  padding: "6px 8px", borderRadius: 6, border: "1px solid #447E55",
+                  background: "transparent", color: online ? "#B8D8C1" : "#519766", fontSize: 11.5,
                   cursor: online && !sincronizando ? "pointer" : "not-allowed",
                 }}>
                 <RefreshCw size={12} />
@@ -1565,18 +1565,18 @@ export default function App() {
               </button>
             )}
             {erroSincronizacao && (
-              <p style={{ fontSize: 10.5, color: "#AFAFAF", margin: "6px 0 0", lineHeight: 1.4 }}>⚠ {erroSincronizacao}</p>
+              <p style={{ fontSize: 10.5, color: "#97C7A5", margin: "6px 0 0", lineHeight: 1.4 }}>⚠ {erroSincronizacao}</p>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
-            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#C3C3C3", color: "#333333", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#B1D5BC", color: "#24422D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
               {currentUser.nome.split(" ").map((s) => s[0]).slice(0, 2).join("")}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser.nome}</div>
-              <div style={{ fontSize: 10.5, color: "#A3A3A3" }}>{currentUser.perfil}</div>
+              <div style={{ fontSize: 10.5, color: "#87BF98" }}>{currentUser.perfil}</div>
             </div>
-            <button onClick={() => (supabaseConfigurado ? sairDaConta() : setCurrentUser(null))} title="Sair" style={{ background: "transparent", border: "none", color: "#C8C8C8", cursor: "pointer" }}>
+            <button onClick={() => (supabaseConfigurado ? sairDaConta() : setCurrentUser(null))} title="Sair" style={{ background: "transparent", border: "none", color: "#B8D8C1", cursor: "pointer" }}>
               <LogOut size={15} />
             </button>
           </div>
@@ -1586,7 +1586,7 @@ export default function App() {
       {/* CONTEÚDO */}
       <main style={{ flex: 1, minWidth: 0 }}>
         {isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#404040", color: "#FFFFFF", position: "sticky", top: 0, zIndex: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#2D5338", color: "#FFFFFF", position: "sticky", top: 0, zIndex: 20 }}>
             <button onClick={() => setMenuAberto(true)} aria-label="Abrir menu"
               style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", padding: 4, display: "flex" }}>
               <Menu size={22} />
@@ -1596,7 +1596,7 @@ export default function App() {
           </div>
         )}
         {SUBTABS[section] && (
-          <div className={isMobile ? "rola-horizontal" : ""} style={{ display: "flex", gap: 6, padding: isMobile ? "12px 14px 0" : "16px 28px 0", borderBottom: "1px solid #DFDFDF", background: "#F1F1F1", overflowX: isMobile ? "auto" : "visible" }}>
+          <div className={isMobile ? "rola-horizontal" : ""} style={{ display: "flex", gap: 6, padding: isMobile ? "12px 14px 0" : "16px 28px 0", borderBottom: "1px solid #D9E5DC", background: "#EEF4F0", overflowX: isMobile ? "auto" : "visible" }}>
             {SUBTABS[section].map((t) => {
               const Icon = t.icon;
               const active = sub === t.key;
@@ -1605,14 +1605,14 @@ export default function App() {
                 <button key={t.key} onClick={() => setSub(t.key)}
                   style={{
                     display: "flex", alignItems: "center", gap: 6, padding: "9px 14px",
-                    border: "none", borderBottom: active ? "2px solid #999999" : "2px solid transparent",
-                    background: "transparent", color: active ? "#999999" : "#686868",
+                    border: "none", borderBottom: active ? "2px solid #7AB88C" : "2px solid transparent",
+                    background: "transparent", color: active ? "#7AB88C" : "#49875B",
                     fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: -1,
                   }}>
                   <Icon size={14} />
                   {t.label}
                   {pendentesSubtab > 0 && (
-                    <span style={{ background: "#999999", color: "#F7F7F7", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentesSubtab}</span>
+                    <span style={{ background: "#7AB88C", color: "#F5F9F6", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentesSubtab}</span>
                   )}
                 </button>
               );
@@ -1781,13 +1781,13 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
             <BtnGhost onClick={adicionarRetiroNovo}><Plus size={14} /> Adicionar</BtnGhost>
           </div>
           {retirosNovos.length === 0 ? (
-            <span style={{ fontSize: 12, color: "#969696" }}>Nenhum retiro adicionado ainda (opcional).</span>
+            <span style={{ fontSize: 12, color: "#77B589" }}>Nenhum retiro adicionado ainda (opcional).</span>
           ) : (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {retirosNovos.map((nome, i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E8E8E8", border: "1px solid #D1D1D1", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E3EDE6", border: "1px solid #C3DFCB", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                   <Building2 size={12} /> {nome}
-                  <button onClick={() => removerRetiroNovo(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878", display: "flex" }}><X size={12} /></button>
+                  <button onClick={() => removerRetiroNovo(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69", display: "flex" }}><X size={12} /></button>
                 </span>
               ))}
             </div>
@@ -1802,13 +1802,13 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
             <BtnGhost onClick={adicionarSafraNova}><Plus size={14} /> Adicionar</BtnGhost>
           </div>
           {safrasNovas.length === 0 ? (
-            <span style={{ fontSize: 12, color: "#969696" }}>Nenhuma safra adicionada ainda (opcional). Formato gerado automaticamente: ano/ano.</span>
+            <span style={{ fontSize: 12, color: "#77B589" }}>Nenhuma safra adicionada ainda (opcional). Formato gerado automaticamente: ano/ano.</span>
           ) : (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {safrasNovas.map((ano, i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E8E8E8", border: "1px solid #D1D1D1", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E3EDE6", border: "1px solid #C3DFCB", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                   <Calendar size={12} /> {ano}/{Number(ano) + 1}
-                  <button onClick={() => removerSafraNova(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878", display: "flex" }}><X size={12} /></button>
+                  <button onClick={() => removerSafraNova(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69", display: "flex" }}><X size={12} /></button>
                 </span>
               ))}
             </div>
@@ -1820,11 +1820,11 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
         </BtnPrimary>
       </div>
 
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Fazendas cadastradas</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Fazendas cadastradas</div>
       {fazendas.length === 0 ? (
         <EmptyState text="Nenhuma fazenda cadastrada ainda." />
       ) : (
-        <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+        <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
           <table>
             <thead>
               <tr>
@@ -1851,7 +1851,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontWeight: 700 }}>{f.nome}</span>
-                          {ativa && <span style={{ fontSize: 10, fontWeight: 700, color: "#3B3B3B", background: "#E9E9E9", borderRadius: 20, padding: "2px 8px" }}>ATIVA</span>}
+                          {ativa && <span style={{ fontSize: 10, fontWeight: 700, color: "#294D34", background: "#E5EDE7", borderRadius: 20, padding: "2px 8px" }}>ATIVA</span>}
                         </div>
                       </td>
                       <td>{f.municipio || "—"}</td>
@@ -1866,14 +1866,14 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                           {!ativa && (
                             <BtnGhost onClick={(e) => { e.stopPropagation(); setFazendaAtivaId(f.id); }}>Usar</BtnGhost>
                           )}
-                          <ChevronRight size={15} color="#969696" style={{ transform: aberta ? "rotate(90deg)" : "none" }} />
+                          <ChevronRight size={15} color="#77B589" style={{ transform: aberta ? "rotate(90deg)" : "none" }} />
                         </div>
                       </td>
                     </tr>
                     {aberta && (
                       <tr>
-                        <td colSpan={9} style={{ background: "#F9F9F9", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Retiros de {f.nome}</div>
+                        <td colSpan={9} style={{ background: "#F8FAF9", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Retiros de {f.nome}</div>
                           <div style={{ display: "flex", gap: 8, marginBottom: 10, maxWidth: 380 }}>
                             <input style={inputStyle} placeholder="Nome do novo retiro" value={nomeRetiroExistente}
                               onChange={(e) => setNomeRetiroExistente(e.target.value)}
@@ -1883,15 +1883,15 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                           {rets.length === 0 ? <EmptyState text="Nenhum retiro cadastrado para esta fazenda." /> : (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
                               {rets.map((r) => (
-                                <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E8E8E8", border: "1px solid #D1D1D1", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                                <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E3EDE6", border: "1px solid #C3DFCB", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                                   <Building2 size={12} /> {r.nome}
-                                  <button onClick={() => removeRetiro(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878", display: "flex" }}><X size={12} /></button>
+                                  <button onClick={() => removeRetiro(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69", display: "flex" }}><X size={12} /></button>
                                 </span>
                               ))}
                             </div>
                           )}
 
-                          <div style={{ fontSize: 11, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8, marginTop: rets.length === 0 ? 0 : 16 }}>Safras de {f.nome}</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8, marginTop: rets.length === 0 ? 0 : 16 }}>Safras de {f.nome}</div>
                           <div style={{ display: "flex", gap: 8, marginBottom: 10, maxWidth: 380 }}>
                             <input style={inputStyle} type="number" placeholder="Ano de início, ex: 2025" value={anoSafraExistente}
                               onChange={(e) => setAnoSafraExistente(e.target.value)}
@@ -1901,9 +1901,9 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                           {safs.length === 0 ? <EmptyState text="Nenhuma safra cadastrada para esta fazenda." /> : (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                               {safs.map((s) => (
-                                <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E8E8E8", border: "1px solid #D1D1D1", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                                <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E3EDE6", border: "1px solid #C3DFCB", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                                   <Calendar size={12} /> {s.nome}
-                                  <button onClick={() => removeSafra(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878", display: "flex" }}><X size={12} /></button>
+                                  <button onClick={() => removeSafra(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69", display: "flex" }}><X size={12} /></button>
                                 </span>
                               ))}
                             </div>
@@ -2059,13 +2059,13 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
       ) : (
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Como funciona</div>
-            <p style={{ fontSize: 12.5, color: "#474747", lineHeight: 1.6, margin: "0 0 10px" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Como funciona</div>
+            <p style={{ fontSize: 12.5, color: "#325C3E", lineHeight: 1.6, margin: "0 0 10px" }}>
               Uma linha por animal, com as colunas <strong>Safra</strong>, <strong>Retiro</strong>, <strong>Lote</strong> e <strong>Brinco</strong> (obrigatórias) —
               <strong> Categoria</strong>, <strong>Raça</strong> e <strong>Mês de parição</strong> são opcionais.
               Safras, retiros e lotes que ainda não existem são criados automaticamente; se um lote já existir (mesmo nome, safra e retiro), os animais novos são adicionados a ele.
             </p>
-            <p style={{ fontSize: 12.5, color: "#474747", lineHeight: 1.6, margin: "0 0 14px" }}>
+            <p style={{ fontSize: 12.5, color: "#325C3E", lineHeight: 1.6, margin: "0 0 14px" }}>
               Para trazer também o <strong>histórico de manejo</strong>, preencha ainda: <strong>Ordem</strong> (1º/2º/3º IATF — se vazio, assume 1º IATF),
               <strong> Data Inseminação</strong> e <strong>Touro</strong> (cria um manejo de Inseminação), e <strong>Data Diagnóstico</strong>, <strong>Resultado</strong> (P ou V) e
               <strong> Tempo de gestação informado</strong> (cria um manejo de Diagnóstico). Animais da mesma safra/lote/ordem/data são agrupados num único manejo, igual ao que
@@ -2075,21 +2075,21 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
           </div>
 
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Selecionar planilha</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Selecionar planilha</div>
             <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f) processarArquivo(f); }} style={inputStyle} />
-            {erro && <p style={{ fontSize: 12.5, color: "#787878", marginTop: 12 }}>⚠ {erro}</p>}
+            {erro && <p style={{ fontSize: 12.5, color: "#549C69", marginTop: 12 }}>⚠ {erro}</p>}
 
             {linhasValidas.length > 0 && (
-              <div style={{ marginTop: 16, background: "#F9F9F9", border: "1px solid #DFDFDF", borderRadius: 8, padding: 14 }}>
-                <p style={{ fontSize: 12.5, color: "#474747", margin: "0 0 6px" }}><strong>{arquivoNome}</strong></p>
-                <p style={{ fontSize: 12.5, color: "#505050", margin: "0 0 4px" }}>✓ {linhasValidas.length} animal(is) lido(s), em {lotesDistintos} lote(s) distinto(s).</p>
-                <p style={{ fontSize: 12.5, color: "#505050", margin: "0 0 4px" }}>
+              <div style={{ marginTop: 16, background: "#F8FAF9", border: "1px solid #D9E5DC", borderRadius: 8, padding: 14 }}>
+                <p style={{ fontSize: 12.5, color: "#325C3E", margin: "0 0 6px" }}><strong>{arquivoNome}</strong></p>
+                <p style={{ fontSize: 12.5, color: "#386846", margin: "0 0 4px" }}>✓ {linhasValidas.length} animal(is) lido(s), em {lotesDistintos} lote(s) distinto(s).</p>
+                <p style={{ fontSize: 12.5, color: "#386846", margin: "0 0 4px" }}>
                   {comInseminacao > 0 ? `✓ ${comInseminacao} linha(s) com Inseminação` : "— nenhuma linha com Inseminação"}
                   {" · "}
                   {comDiagnostico > 0 ? `✓ ${comDiagnostico} linha(s) com Diagnóstico` : "nenhuma linha com Diagnóstico"}
                 </p>
                 {linhasComErro.length > 0 && (
-                  <p style={{ fontSize: 12.5, color: "#999999", margin: "4px 0 0" }}>
+                  <p style={{ fontSize: 12.5, color: "#7AB88C", margin: "4px 0 0" }}>
                     ⚠ {linhasComErro.length} linha(s) ignorada(s) por faltar Safra, Retiro, Lote ou Brinco (linha(s) {linhasComErro.slice(0, 10).join(", ")}{linhasComErro.length > 10 ? "…" : ""} da planilha).
                   </p>
                 )}
@@ -2100,8 +2100,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
             )}
 
             {resultado && (
-              <div style={{ marginTop: 16, background: "#E9E9E9", border: "1px solid #C7C7C7", borderRadius: 8, padding: 14 }}>
-                <p style={{ fontSize: 12.5, color: "#3B3B3B", margin: 0, lineHeight: 1.6 }}>
+              <div style={{ marginTop: 16, background: "#E5EDE7", border: "1px solid #B6D8C0", borderRadius: 8, padding: 14 }}>
+                <p style={{ fontSize: 12.5, color: "#294D34", margin: 0, lineHeight: 1.6 }}>
                   ✓ Importação concluída: {resultado.safrasCriadas} safra(s) nova(s), {resultado.retirosCriados} retiro(s) novo(s), {resultado.lotesCriados} lote(s) novo(s)
                   {resultado.lotesAtualizados > 0 ? `, ${resultado.lotesAtualizados} lote(s) já existente(s) atualizado(s)` : ""}
                   {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""}
@@ -2111,11 +2111,11 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
             )}
           </div>
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Lotes já cadastrados nesta fazenda</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Lotes já cadastrados nesta fazenda</div>
           {lotes.length === 0 ? (
             <EmptyState text="Nenhum lote cadastrado ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead><tr><th>Lote</th><th>Categoria</th><th>Nº animais</th></tr></thead>
                 <tbody>
@@ -2237,13 +2237,13 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
       ) : (
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {produtos.length === 0 && (
-              <p style={{ fontSize: 12, color: "#999999", marginTop: -8, marginBottom: 14 }}>Nenhuma progesterona injetável cadastrada neste local de estoque.</p>
+              <p style={{ fontSize: 12, color: "#7AB88C", marginTop: -8, marginBottom: 14 }}>Nenhuma progesterona injetável cadastrada neste local de estoque.</p>
             )}
             {nomeDuplicado && (
-              <p style={{ fontSize: 12, color: "#999999", marginTop: -8, marginBottom: 14 }}>Já existe um lote com este nome neste retiro. Use um nome diferente.</p>
+              <p style={{ fontSize: 12, color: "#7AB88C", marginTop: -8, marginBottom: 14 }}>Já existe um lote com este nome neste retiro. Use um nome diferente.</p>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
               <Field label="Lote (nome)"><input style={inputStyle} value={novoNome} onChange={(e) => { limparMsgSeSucesso(); setNovoNome(e.target.value); }} placeholder="Ex: Lote 01" /></Field>
@@ -2282,12 +2282,12 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
-              {comLeitura ? <CheckCircle2 size={18} color="#505050" /> : <Circle size={18} color="#AAAAAA" />}
-              <span style={{ fontSize: 13, color: "#474747" }}>Registrar leitura individual dos animais (opcional)</span>
+              {comLeitura ? <CheckCircle2 size={18} color="#386846" /> : <Circle size={18} color="#90C3A0" />}
+              <span style={{ fontSize: 13, color: "#325C3E" }}>Registrar leitura individual dos animais (opcional)</span>
             </div>
 
             {comLeitura && (
-              <div style={{ marginBottom: 14, background: "#F9F9F9", border: "1px solid #DFDFDF", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#F8FAF9", border: "1px solid #D9E5DC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lerAnimal()} />
@@ -2300,26 +2300,26 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                     return (
                       <span key={b} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                         <EarTag size="sm">{b}</EarTag>
-                        {loteExistente && <span style={{ fontSize: 10.5, color: "#505050" }}>({loteExistente.nome})</span>}
+                        {loteExistente && <span style={{ fontSize: 10.5, color: "#386846" }}>({loteExistente.nome})</span>}
                       </span>
                     );
                   })}
-                  {animaisLidos.length === 0 && <span style={{ fontSize: 12, color: "#969696" }}>Nenhum animal lido ainda.</span>}
+                  {animaisLidos.length === 0 && <span style={{ fontSize: 12, color: "#77B589" }}>Nenhum animal lido ainda.</span>}
                 </div>
               </div>
             )}
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#505050" : "#787878", marginBottom: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#386846" : "#549C69", marginBottom: 10 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> Registrar {TITULOS_MANEJO[tipo].toLowerCase()}</BtnPrimary>
           </div>
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>{TITULOS_MANEJO[tipo]}s registradas</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>{TITULOS_MANEJO[tipo]}s registradas</div>
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -2361,19 +2361,19 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                       <td>
                         {confirmandoExclusaoId === m.id ? (
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 11, color: "#787878" }}>Excluir?</span>
-                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Check size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <span style={{ fontSize: 11, color: "#549C69" }}>Excluir?</span>
+                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Check size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#505050" }}><Check size={14} /></button>
-                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#386846" }}><Check size={14} /></button>
+                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#474747" }}><Pencil size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button>
+                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#325C3E" }}><Pencil size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button>
                           </div>
                         )}
                       </td>
@@ -2697,21 +2697,21 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
         <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos. Todo manejo e lote precisa pertencer a uma safra." />
       ) : (
         <>
-          <div style={{ display: "flex", background: "#E8E8E8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+          <div style={{ display: "flex", background: "#E3EDE6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
             <button onClick={() => setAbaInterna("d0")}
               style={{
                 padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                background: abaInterna === "d0" ? "#505050" : "transparent", color: abaInterna === "d0" ? "#FFFFFF" : "#686868",
+                background: abaInterna === "d0" ? "#386846" : "transparent", color: abaInterna === "d0" ? "#FFFFFF" : "#49875B",
               }}>D0</button>
             <button onClick={() => setAbaInterna("ressinc")}
               style={{
                 padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
                 display: "inline-flex", alignItems: "center", gap: 6,
-                background: abaInterna === "ressinc" ? "#505050" : "transparent", color: abaInterna === "ressinc" ? "#FFFFFF" : "#686868",
+                background: abaInterna === "ressinc" ? "#386846" : "transparent", color: abaInterna === "ressinc" ? "#FFFFFF" : "#49875B",
               }}>
               Ressinc
               {sugestoesRessinc.length > 0 && (
-                <span style={{ background: "#999999", color: "#F7F7F7", borderRadius: 20, fontSize: 10.5, fontWeight: 700, padding: "1.5px 6px" }}>{sugestoesRessinc.length}</span>
+                <span style={{ background: "#7AB88C", color: "#F5F9F6", borderRadius: 20, fontSize: 10.5, fontWeight: 700, padding: "1.5px 6px" }}>{sugestoesRessinc.length}</span>
               )}
             </button>
           </div>
@@ -2724,18 +2724,18 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             ) : (
               <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {(implantes.length === 0 || benzoatos.length === 0 || prostaglandinas.length === 0) && (
-              <p style={{ fontSize: 12, color: "#999999", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
+              <p style={{ fontSize: 12, color: "#7AB88C", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
             )}
             {nomeDuplicado && (
-              <p style={{ fontSize: 12, color: "#999999", marginTop: -8, marginBottom: 14 }}>
+              <p style={{ fontSize: 12, color: "#7AB88C", marginTop: -8, marginBottom: 14 }}>
                 Já existe um lote com este nome com D0 já registrado. Use um nome diferente, ou registre um Ressinc a partir do Diagnóstico para dar sequência ao mesmo lote.
               </p>
             )}
             {loteDaInducaoSemD0 && (
-              <p style={{ fontSize: 12, color: "#505050", marginTop: -8, marginBottom: 14 }}>
+              <p style={{ fontSize: 12, color: "#386846", marginTop: -8, marginBottom: 14 }}>
                 Já existe um lote "{loteDaInducaoSemD0.nome}" registrado na Indução, ainda sem D0. Este registro vai completar os dados desse mesmo lote.
               </p>
             )}
@@ -2827,12 +2827,12 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
-              {comLeitura ? <CheckCircle2 size={18} color="#505050" /> : <Circle size={18} color="#AAAAAA" />}
-              <span style={{ fontSize: 13, color: "#474747" }}>Registrar leitura individual dos animais (opcional)</span>
+              {comLeitura ? <CheckCircle2 size={18} color="#386846" /> : <Circle size={18} color="#90C3A0" />}
+              <span style={{ fontSize: 13, color: "#325C3E" }}>Registrar leitura individual dos animais (opcional)</span>
             </div>
 
             {comLeitura && (
-              <div style={{ marginBottom: 14, background: "#F9F9F9", border: "1px solid #DFDFDF", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#F8FAF9", border: "1px solid #D9E5DC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
                   <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR ou digitar" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
@@ -2846,7 +2846,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 {animaisLidos.length === 0 ? (
-                  <span style={{ fontSize: 12, color: "#969696" }}>Nenhum animal lido ainda.</span>
+                  <span style={{ fontSize: 12, color: "#77B589" }}>Nenhum animal lido ainda.</span>
                 ) : (
                   <table>
                     <thead><tr><th>Animal</th><th>ECC</th><th>Peso</th><th>Lote (já atribuído)</th><th></th></tr></thead>
@@ -2857,7 +2857,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           <td>{a.ecc}</td>
                           <td>{a.peso ? `${a.peso} kg` : "—"}</td>
                           <td>{lotes.find((l) => (l.animais || []).includes(a.brinco))?.nome || "—"}</td>
-                          <td><button onClick={() => removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={13} /></button></td>
+                          <td><button onClick={() => removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={13} /></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -2868,15 +2868,15 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#505050" : "#787878", marginBottom: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#386846" : "#549C69", marginBottom: 10 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> Registrar D0</BtnPrimary>
           </div>
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>D0 registrados</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>D0 registrados</div>
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -2937,19 +2937,19 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       <td>
                         {confirmandoExclusaoId === m.id ? (
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 11, color: "#787878" }}>Excluir?</span>
-                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Check size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <span style={{ fontSize: 11, color: "#549C69" }}>Excluir?</span>
+                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Check size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#505050" }}><Check size={14} /></button>
-                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#386846" }}><Check size={14} /></button>
+                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#474747" }}><Pencil size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button>
+                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#325C3E" }}><Pencil size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button>
                           </div>
                         )}
                       </td>
@@ -2967,7 +2967,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <>
               {!sugestaoAberta ? (
                 <>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Sugestões de Ressinc aguardando confirmação</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Sugestões de Ressinc aguardando confirmação</div>
                   {sugestoesRessinc.length === 0 ? (
                     <EmptyState text="Nenhuma sugestão de Ressinc no momento. Elas aparecem aqui automaticamente quando um Diagnóstico é finalizado com animais marcados como Vazia." />
                   ) : (
@@ -2978,7 +2978,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           <div key={s.id} style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                             <div>
                               <strong style={{ fontSize: 13.5 }}>{lote?.nome || "—"}</strong>
-                              <div style={{ fontSize: 12, color: "#686868", marginTop: 3 }}>
+                              <div style={{ fontSize: 12, color: "#49875B", marginTop: 3 }}>
                                 {lote?.nome || "—"} - {proximaOrdem(lote?.ordem)} · {s.brincos.length} animal(is) vazio(s) · Diagnóstico de {fmtDate(s.data)}
                               </div>
                             </div>
@@ -2993,15 +2993,15 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   )}
                 </>
               ) : (
-                <div style={{ ...cardStyle, marginBottom: 24, border: "1.5px solid #C2C2C2" }}>
+                <div style={{ ...cardStyle, marginBottom: 24, border: "1.5px solid #B0D4BA" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <ImplantIcon size={16} color="#999999" />
-                      <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#242424" }}>Ressinc — {loteDaSugestao?.nome}</span>
+                      <ImplantIcon size={16} color="#7AB88C" />
+                      <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#1D2B21" }}>Ressinc — {loteDaSugestao?.nome}</span>
                     </div>
                     <BtnGhost onClick={() => setSugestaoAbertaId(null)}>← Voltar à lista</BtnGhost>
                   </div>
-                  <p style={{ fontSize: 12.5, color: "#686868", margin: "0 0 14px" }}>
+                  <p style={{ fontSize: 12.5, color: "#49875B", margin: "0 0 14px" }}>
                     Registra um novo D0 para os animais diagnosticados como Vazia. Desmarque abaixo quem não deve entrar no Ressinc.
                   </p>
 
@@ -3013,9 +3013,9 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           style={{
                             display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                             borderRadius: 20, padding: "4px 10px", fontSize: 12.5,
-                            background: selecionado ? "#E8E8E8" : "#E8E8E8", opacity: selecionado ? 1 : 0.55,
+                            background: selecionado ? "#E3EDE6" : "#E3EDE6", opacity: selecionado ? 1 : 0.55,
                           }}>
-                          {selecionado ? <CheckCircle2 size={13} color="#999999" /> : <Circle size={13} color="#969696" />}
+                          {selecionado ? <CheckCircle2 size={13} color="#7AB88C" /> : <Circle size={13} color="#77B589" />}
                           <EarTag size="sm">{b}</EarTag>
                         </button>
                       );
@@ -3026,17 +3026,17 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     <EmptyState text="Cadastre ao menos um produto comercial de Progesterona, Benzoato e Prostaglandina (Estoque > Entrada > Hormônios) para registrar o Ressinc." />
                   ) : (
                     <>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
                       <SeletorLocalEstoque local={localEstoqueR} setLocal={setLocalEstoqueR} />
                       {(implantesR.length === 0 || benzoatosR.length === 0 || prostaglandinasR.length === 0) && (
-                        <p style={{ fontSize: 12, color: "#999999", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
+                        <p style={{ fontSize: 12, color: "#7AB88C", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
                         <Field label="Categoria">
-                          <input style={{ ...inputStyle, background: "#EBEBEB", color: "#686868" }} value={categoriaR} readOnly />
+                          <input style={{ ...inputStyle, background: "#E7EFE9", color: "#49875B" }} value={categoriaR} readOnly />
                         </Field>
                         <Field label="Ordem">
-                          <input style={{ ...inputStyle, background: "#EBEBEB", color: "#686868" }} value={ordemR} readOnly />
+                          <input style={{ ...inputStyle, background: "#E7EFE9", color: "#49875B" }} value={ordemR} readOnly />
                         </Field>
                         <Field label="Número de manejos">
                           <select style={inputStyle} value={tipoManejoR} onChange={(e) => {
@@ -3084,11 +3084,11 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       <CampoMedicamentos insumos={insumos} local={localEstoqueR} selecionados={medicamentosR} setSelecionados={setMedicamentosR} />
 
                       {jaRegistradoNestaOrdemR && (
-                        <p style={{ fontSize: 12.5, color: "#787878", marginTop: 12 }}>
+                        <p style={{ fontSize: 12.5, color: "#549C69", marginTop: 12 }}>
                           Já existe um D0/Ressinc registrado para este lote na {ordemR}. Não é possível registrar de novo para a mesma ordem.
                         </p>
                       )}
-                      {msgR && <p style={{ fontSize: 12.5, color: msgR.includes("registrad") ? "#505050" : "#787878", marginTop: 12 }}>{msgR}</p>}
+                      {msgR && <p style={{ fontSize: 12.5, color: msgR.includes("registrad") ? "#386846" : "#549C69", marginTop: 12 }}>{msgR}</p>}
                       <BtnPrimary disabled={!canSaveRessinc} onClick={salvarRessinc} style={{ marginTop: msgR ? 0 : 12 }}>
                         <Plus size={15} /> Registrar Ressinc ({ressincSelecionados.length})
                       </BtnPrimary>
@@ -3097,11 +3097,11 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 </div>
               )}
 
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Ressincs registrados</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Ressincs registrados</div>
               {historicoRessinc.length === 0 ? (
                 <EmptyState text="Nenhum Ressinc registrado ainda." />
               ) : (
-                <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+                <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
                   <table>
                     <thead>
                       <tr>
@@ -3157,19 +3157,19 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           <td>
                             {confirmandoExclusaoId === m.id ? (
                               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <span style={{ fontSize: 11, color: "#787878" }}>Excluir?</span>
-                                <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Check size={14} /></button>
-                                <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                                <span style={{ fontSize: 11, color: "#549C69" }}>Excluir?</span>
+                                <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Check size={14} /></button>
+                                <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                               </div>
                             ) : editandoRessincId === m.id ? (
                               <div style={{ display: "flex", gap: 6 }}>
-                                <button onClick={salvarEdicaoRessinc} style={{ background: "none", border: "none", cursor: "pointer", color: "#505050" }}><Check size={14} /></button>
-                                <button onClick={cancelarEdicaoRessinc} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                                <button onClick={salvarEdicaoRessinc} style={{ background: "none", border: "none", cursor: "pointer", color: "#386846" }}><Check size={14} /></button>
+                                <button onClick={cancelarEdicaoRessinc} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                               </div>
                             ) : (
                               <div style={{ display: "flex", gap: 6 }}>
-                                <button onClick={() => iniciarEdicaoRessinc(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#474747" }}><Pencil size={14} /></button>
-                                <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button>
+                                <button onClick={() => iniciarEdicaoRessinc(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#325C3E" }}><Pencil size={14} /></button>
+                                <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button>
                               </div>
                             )}
                           </td>
@@ -3378,10 +3378,10 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
           ) : bloqueado === "produto" ? (
             <EmptyState text="Cadastre ao menos um produto comercial de Prostaglandina, Cipionato e ECG/HCG (Estoque > Entrada > Hormônios) antes de registrar a retirada." />
           ) : (          <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {(prostaglandinas.length === 0 || cipionatos.length === 0 || ecgHcg.length === 0) && (
-              <p style={{ fontSize: 12, color: "#999999", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (prostaglandina, cipionato ou ECG/HCG).</p>
+              <p style={{ fontSize: 12, color: "#7AB88C", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (prostaglandina, cipionato ou ECG/HCG).</p>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
               <Field label="Lote">
@@ -3390,7 +3390,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                 </select>
               </Field>
               <Field label="Ordem">
-                <input style={{ ...inputStyle, background: "#EBEBEB", color: "#686868" }} value={loteAtual?.ordem || "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#E7EFE9", color: "#49875B" }} value={loteAtual?.ordem || "—"} readOnly />
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Protocolo padrão (opcional)">
@@ -3444,18 +3444,18 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             </div>
 
             {jaRegistradoNestaOrdem && (
-              <p style={{ fontSize: 12.5, color: "#787878", marginBottom: 12 }}>
+              <p style={{ fontSize: 12.5, color: "#549C69", marginBottom: 12 }}>
                 Já existe uma Retirada registrada para este lote na {loteAtual.ordem}. Não é possível registrar de novo para a mesma ordem.
               </p>
             )}
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
-              {comLeitura ? <CheckCircle2 size={18} color="#505050" /> : <Circle size={18} color="#AAAAAA" />}
-              <span style={{ fontSize: 13, color: "#474747" }}>Registrar leitura individual dos animais (opcional)</span>
+              {comLeitura ? <CheckCircle2 size={18} color="#386846" /> : <Circle size={18} color="#90C3A0" />}
+              <span style={{ fontSize: 13, color: "#325C3E" }}>Registrar leitura individual dos animais (opcional)</span>
             </div>
 
             {comLeitura && (
-              <div style={{ marginBottom: 14, background: "#F9F9F9", border: "1px solid #DFDFDF", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#F8FAF9", border: "1px solid #D9E5DC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
                   <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR ou digitar" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
@@ -3469,7 +3469,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
                 {animaisLidos.length === 0 ? (
-                  <span style={{ fontSize: 12, color: "#969696" }}>Nenhum animal lido ainda.</span>
+                  <span style={{ fontSize: 12, color: "#77B589" }}>Nenhum animal lido ainda.</span>
                 ) : (
                   <table>
                     <thead><tr><th>Animal</th><th>ECC</th><th>Peso</th><th>Lote (já atribuído)</th><th></th></tr></thead>
@@ -3480,7 +3480,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                           <td>{a.ecc}</td>
                           <td>{a.peso ? `${a.peso} kg` : "—"}</td>
                           <td>{lotes.find((l) => (l.animais || []).includes(a.brinco))?.nome || "—"}</td>
-                          <td><button onClick={() => removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={13} /></button></td>
+                          <td><button onClick={() => removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={13} /></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -3492,11 +3492,11 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
             {excedeQuantidade && (
-              <p style={{ fontSize: 12.5, color: "#999999", marginTop: 12 }}>
+              <p style={{ fontSize: 12.5, color: "#7AB88C", marginTop: 12 }}>
                 ⚠ O nº de animais informado ({numBR(numeroAnimais)}) é maior que o registrado no D0 mais recente deste lote na {loteAtual.ordem} ({d0MaisRecente.numeroAnimais}).
               </p>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#505050" : "#787878", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#386846" : "#549C69", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg || excedeQuantidade ? 0 : 12 }}>
               <BtnPrimary disabled={!canSaveBase} onClick={() => salvar(false)}><Plus size={15} /> Registrar retirada</BtnPrimary>
               {excedeQuantidade && canSaveBase && (
@@ -3506,11 +3506,11 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
           </div>
           )}
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Retiradas registradas</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Retiradas registradas</div>
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -3547,19 +3547,19 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                       <td>
                         {confirmandoExclusaoId === m.id ? (
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 11, color: "#787878" }}>Excluir?</span>
-                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Check size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <span style={{ fontSize: 11, color: "#549C69" }}>Excluir?</span>
+                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Check size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#505050" }}><Check size={14} /></button>
-                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#386846" }}><Check size={14} /></button>
+                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#474747" }}><Pencil size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button>
+                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#325C3E" }}><Pencil size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button>
                           </div>
                         )}
                       </td>
@@ -3876,7 +3876,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
           ) : (
             <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais, desde que na mesma Ordem</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais, desde que na mesma Ordem</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
               {lotesComRetirada.map((l) => {
                 const selecionado = lotesSelecionados.includes(l.id);
@@ -3885,44 +3885,44 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E9E9E9" : "#E8E8E8", color: selecionado ? "#3B3B3B" : "#686868", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E5EDE7" : "#E3EDE6", color: selecionado ? "#294D34" : "#49875B", fontWeight: selecionado ? 600 : 400,
                     }}>
-                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#969696" />}
+                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#77B589" />}
                     {l.nome} <span style={{ opacity: 0.7 }}>· {l.ordem || "—"}</span>
                   </button>
                 );
               })}
             </div>
-            {msgLote && <p style={{ fontSize: 12.5, color: "#787878", margin: "0 0 10px" }}>⚠ {msgLote}</p>}
+            {msgLote && <p style={{ fontSize: 12.5, color: "#549C69", margin: "0 0 10px" }}>⚠ {msgLote}</p>}
             {lotesSelecionados.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
                 <Field label="Ordem (comum aos lotes selecionados)">
-                  <input style={{ ...inputStyle, background: "#EBEBEB", color: "#686868" }} value={ordemComum || "—"} readOnly />
+                  <input style={{ ...inputStyle, background: "#E7EFE9", color: "#49875B" }} value={ordemComum || "—"} readOnly />
                 </Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => setDataManejo(e.target.value)} /></Field>
                 <Field label="Retiro / Categoria por lote">
-                  <div style={{ fontSize: 12.5, color: "#474747", paddingTop: 8 }}>
+                  <div style={{ fontSize: 12.5, color: "#325C3E", paddingTop: 8 }}>
                     {lotesSelecionadosObjs.map((l) => `${l.nome}: ${nomeRetiro(l.retiroId)} — ${l.categoria || "—"}`).join(" · ")}
                   </div>
                 </Field>
               </div>
             )}
-            <p style={{ fontSize: 11.5, color: "#969696", margin: "6px 0 0" }}>Retiro, categoria e ordem vêm automaticamente dos dados já cadastrados para cada lote no D0.</p>
+            <p style={{ fontSize: 11.5, color: "#77B589", margin: "6px 0 0" }}>Retiro, categoria e ordem vêm automaticamente dos dados já cadastrados para cada lote no D0.</p>
             {jaRegistradoNestaOrdem && (
-              <p style={{ fontSize: 12.5, color: "#787878", margin: "10px 0 0" }}>
+              <p style={{ fontSize: 12.5, color: "#549C69", margin: "10px 0 0" }}>
                 Já existe uma Inseminação registrada na {ordemComum} para: {lotesJaRegistrados.map((l) => l.nome).join(", ")}. Não é possível registrar de novo para a mesma ordem.
               </p>
             )}
           </div>
 
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {semens.length === 0 && (
-              <p style={{ fontSize: 12, color: "#999999", marginTop: -8, marginBottom: 14 }}>Nenhum sêmen cadastrado neste local de estoque.</p>
+              <p style={{ fontSize: 12, color: "#7AB88C", marginTop: -8, marginBottom: 14 }}>Nenhum sêmen cadastrado neste local de estoque.</p>
             )}
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 12 }}>Leitura dos animais (obrigatória)</div>
-            <p style={{ fontSize: 11.5, color: "#969696", margin: "-4px 0 12px" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 12 }}>Leitura dos animais (obrigatória)</div>
+            <p style={{ fontSize: 11.5, color: "#77B589", margin: "-4px 0 12px" }}>
               {eh1aIATF
                 ? "Esta é a leitura da 1º IATF: os animais lidos aqui passam a compor oficialmente este lote."
                 : "Este lote já foi composto na leitura da 1º IATF. Os animais lidos abaixo devem ser os mesmos já atribuídos a ele."}
@@ -3984,26 +3984,26 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             </div>
 
             {avisoImediato && (
-              <div style={{ marginBottom: 14, background: "#F4F4F4", border: "1.5px solid #C2C2C2", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#F2F6F3", border: "1.5px solid #B0D4BA", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#6E6E6E" }}>Atenção a este animal</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4D8F60" }}>Atenção a este animal</span>
                 </div>
                 {avisoImediato.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#6E6E6E", margin: "4px 0" }}>⚠ {a}</p>
+                  <p key={i} style={{ fontSize: 12.5, color: "#4D8F60", margin: "4px 0" }}>⚠ {a}</p>
                 ))}
-                <p style={{ fontSize: 11.5, color: "#969696", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente; a confirmação final aparecerá ao registrar o animal.</p>
+                <p style={{ fontSize: 11.5, color: "#77B589", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente; a confirmação final aparecerá ao registrar o animal.</p>
               </div>
             )}
 
             {pendente && (
-              <div style={{ marginBottom: 14, background: "#F4F4F4", border: "1.5px solid #C2C2C2", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#F2F6F3", border: "1.5px solid #B0D4BA", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <EarTag size="sm">{pendente.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#6E6E6E" }}>Confirme antes de registrar este animal</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4D8F60" }}>Confirme antes de registrar este animal</span>
                 </div>
                 {pendente.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#6E6E6E", margin: "4px 0" }}>⚠ {a}</p>
+                  <p key={i} style={{ fontSize: 12.5, color: "#4D8F60", margin: "4px 0" }}>⚠ {a}</p>
                 ))}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                   {pendente.loteConflito ? (
@@ -4023,7 +4023,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#505050" : "#787878", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#386846" : "#549C69", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary disabled={jaRegistradoNestaOrdem} onClick={finalizar}>Finalizar inseminação ({registros.length})</BtnPrimary>
@@ -4031,7 +4031,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             {registros.length > 0 && (
               <div style={{ marginTop: 20 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão ({registros.length})</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão ({registros.length})</div>
                 <table>
                   <thead><tr><th>Animal</th><th>Lote</th><th>Horário</th><th>Sêmen / touro</th><th>ECC</th><th>Peso</th><th>Observações</th><th>GnRH</th><th>Nota</th><th></th></tr></thead>
                   <tbody>
@@ -4046,7 +4046,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         <td>{r.observacoes || "—"}</td>
                         <td>{r.gnrhId ? `${nomeInsumo(r.gnrhId)} (${r.doseGnrh} mL)` : "—"}</td>
                         <td>{r.notaAtribuicao || "—"}</td>
-                        <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button></td>
+                        <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -4057,11 +4057,11 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
           </>
           )}
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Inseminações registradas</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Inseminações registradas</div>
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -4094,19 +4094,19 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       <td>
                         {confirmandoExclusaoId === m.id ? (
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 11, color: "#787878" }}>Excluir?</span>
-                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Check size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <span style={{ fontSize: 11, color: "#549C69" }}>Excluir?</span>
+                            <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Check size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#505050" }}><Check size={14} /></button>
-                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#386846" }}><Check size={14} /></button>
+                            <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </div>
                         ) : (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#474747" }}><Pencil size={14} /></button>
-                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button>
+                            <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#325C3E" }}><Pencil size={14} /></button>
+                            <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button>
                           </div>
                         )}
                       </td>
@@ -4354,7 +4354,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
       {!fazendaAtiva ? <EmptyState text="Selecione uma fazenda ativa para registrar diagnósticos." /> : !safraAtiva ? <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos. Todo manejo e lote precisa pertencer a uma safra." /> : lotesComInseminacao.length === 0 ? <EmptyState text="Nenhum lote disponível para diagnóstico no momento. Um lote aparece aqui após a Inseminação da sua ordem atual, e some daqui assim que o diagnóstico dessa ordem é registrado." /> : (
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais, desde que na mesma Ordem</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais, desde que na mesma Ordem</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
               {lotesComInseminacao.map((l) => {
                 const selecionado = lotesSelecionados.includes(l.id);
@@ -4363,18 +4363,18 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E9E9E9" : "#E8E8E8", color: selecionado ? "#3B3B3B" : "#686868", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E5EDE7" : "#E3EDE6", color: selecionado ? "#294D34" : "#49875B", fontWeight: selecionado ? 600 : 400,
                     }}>
-                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#969696" />}
+                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#77B589" />}
                     {l.nome} <span style={{ opacity: 0.7 }}>— {l.categoria} · {l.ordem || "—"}</span>
                   </button>
                 );
               })}
             </div>
-            {msgLote && <p style={{ fontSize: 12.5, color: "#787878", margin: "0 0 10px" }}>⚠ {msgLote}</p>}
+            {msgLote && <p style={{ fontSize: 12.5, color: "#549C69", margin: "0 0 10px" }}>⚠ {msgLote}</p>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, alignItems: "end" }}>
               <Field label="Ordem (comum aos lotes selecionados)">
-                <input style={{ ...inputStyle, background: "#EBEBEB", color: "#686868" }} value={ordemComum || "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#E7EFE9", color: "#49875B" }} value={ordemComum || "—"} readOnly />
               </Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <Field label="Destino para vazias">
@@ -4400,31 +4400,31 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               </Field>
             </div>
             {avisoImediato && (
-              <div style={{ marginTop: 14, background: "#F4F4F4", border: "1.5px solid #C2C2C2", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginTop: 14, background: "#F2F6F3", border: "1.5px solid #B0D4BA", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#6E6E6E" }}>Atenção a este animal</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4D8F60" }}>Atenção a este animal</span>
                 </div>
                 {avisoImediato.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#6E6E6E", margin: "4px 0" }}>⚠ {a}</p>
+                  <p key={i} style={{ fontSize: 12.5, color: "#4D8F60", margin: "4px 0" }}>⚠ {a}</p>
                 ))}
-                <p style={{ fontSize: 11.5, color: "#969696", margin: "6px 0 0" }}>Preencha o Resultado normalmente — a confirmação final aparecerá ao registrar.</p>
+                <p style={{ fontSize: 11.5, color: "#77B589", margin: "6px 0 0" }}>Preencha o Resultado normalmente — a confirmação final aparecerá ao registrar.</p>
               </div>
             )}
             {jaRegistradoNestaOrdem && (
-              <p style={{ fontSize: 12.5, color: "#787878", margin: "10px 0 0" }}>
+              <p style={{ fontSize: 12.5, color: "#549C69", margin: "10px 0 0" }}>
                 Já existe um Diagnóstico registrado na {ordemComum} para: {lotesJaRegistrados.map((l) => l.nome).join(", ")}. Não é possível registrar de novo para a mesma ordem.
               </p>
             )}
 
             {pendente && (
-              <div style={{ marginTop: 14, background: "#F4F4F4", border: "1.5px solid #C2C2C2", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginTop: 14, background: "#F2F6F3", border: "1.5px solid #B0D4BA", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <EarTag size="sm">{pendente.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#6E6E6E" }}>Confirme antes de registrar este animal</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4D8F60" }}>Confirme antes de registrar este animal</span>
                 </div>
                 {pendente.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#6E6E6E", margin: "4px 0" }}>⚠ {a}</p>
+                  <p key={i} style={{ fontSize: 12.5, color: "#4D8F60", margin: "4px 0" }}>⚠ {a}</p>
                 ))}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                   {pendente.semInseminacao ? (
@@ -4444,19 +4444,19 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
 
             {registros.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão</div>
                 <table>
                   <thead><tr><th>Animal</th><th>Resultado</th><th>Lote</th><th>Observação</th><th></th></tr></thead>
                   <tbody>
                     {registros.map((r) => (
                       <tr key={r.brinco}>
                         <td><EarTag size="sm">{r.brinco}</EarTag></td>
-                        <td style={{ color: r.resultado === "Prenha" ? "#505050" : "#999999", fontWeight: 600 }}>
-                          {r.resultado}{r.resultado === "Vazia" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#999999" }}>· gera sugestão de Ressinc</span>}
+                        <td style={{ color: r.resultado === "Prenha" ? "#386846" : "#7AB88C", fontWeight: 600 }}>
+                          {r.resultado}{r.resultado === "Vazia" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#7AB88C" }}>· gera sugestão de Ressinc</span>}
                         </td>
                         <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
                         <td>{r.observacao || "—"}</td>
-                        <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button></td>
+                        <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -4464,16 +4464,16 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               </div>
             )}
 
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8, marginTop: 6 }}>Local de estoque (medicamentos)</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8, marginTop: 6 }}>Local de estoque (medicamentos)</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
             {jaRegistradoNestaOrdem && (
-              <p style={{ fontSize: 12.5, color: "#787878", marginTop: 12 }}>
+              <p style={{ fontSize: 12.5, color: "#549C69", marginTop: 12 }}>
                 Já existe um Diagnóstico registrado para este lote na {loteAtual.ordem}. Não é possível registrar de novo para a mesma ordem.
               </p>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#505050" : "#787878", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#386846" : "#549C69", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary disabled={jaRegistradoNestaOrdem} onClick={finalizar}>Finalizar diagnóstico ({registros.length})</BtnPrimary>
@@ -4481,11 +4481,11 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
           </div>
 
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Diagnósticos registrados</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Diagnósticos registrados</div>
           {historico.length === 0 ? (
             <EmptyState text="Nenhum registro ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
               <table>
                 <thead>
                   <tr>
@@ -4520,19 +4520,19 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                         <td>
                           {confirmandoExclusaoId === m.id ? (
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ fontSize: 11, color: "#787878" }}>Excluir?</span>
-                              <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Check size={14} /></button>
-                              <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                              <span style={{ fontSize: 11, color: "#549C69" }}>Excluir?</span>
+                              <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Check size={14} /></button>
+                              <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                             </div>
                           ) : editandoId === m.id ? (
                             <div style={{ display: "flex", gap: 6 }}>
-                              <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#505050" }}><Check size={14} /></button>
-                              <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                              <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#386846" }}><Check size={14} /></button>
+                              <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                             </div>
                           ) : (
                             <div style={{ display: "flex", gap: 6 }}>
-                              <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#474747" }}><Pencil size={14} /></button>
-                              <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button>
+                              <button onClick={() => iniciarEdicaoHistorico(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#325C3E" }}><Pencil size={14} /></button>
+                              <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button>
                             </div>
                           )}
                         </td>
@@ -4666,7 +4666,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
       ) : (
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
               {lotesComRepasse.map((l) => {
                 const selecionado = lotesSelecionados.includes(l.id);
@@ -4675,9 +4675,9 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E9E9E9" : "#E8E8E8", color: selecionado ? "#3B3B3B" : "#686868", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E5EDE7" : "#E3EDE6", color: selecionado ? "#294D34" : "#49875B", fontWeight: selecionado ? 600 : 400,
                     }}>
-                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#969696" />}
+                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#77B589" />}
                     {l.nome}
                   </button>
                 );
@@ -4705,16 +4705,16 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
             </div>
             {avisoImediato && (
-              <div style={{ marginTop: 14, background: "#F4F4F4", border: "1.5px solid #C2C2C2", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginTop: 14, background: "#F2F6F3", border: "1.5px solid #B0D4BA", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#6E6E6E" }}>Atenção a este animal</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4D8F60" }}>Atenção a este animal</span>
                 </div>
-                <p style={{ fontSize: 12.5, color: "#6E6E6E", margin: "4px 0" }}>⚠ {avisoImediato.mensagem}</p>
-                <p style={{ fontSize: 11.5, color: "#969696", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente.</p>
+                <p style={{ fontSize: 12.5, color: "#4D8F60", margin: "4px 0" }}>⚠ {avisoImediato.mensagem}</p>
+                <p style={{ fontSize: 11.5, color: "#77B589", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente.</p>
               </div>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("salvo") ? "#505050" : "#787878", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("salvo") ? "#386846" : "#549C69", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary onClick={finalizar}>Finalizar Diagnóstico de Repasse ({registros.length})</BtnPrimary>
@@ -4722,7 +4722,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
           </div>
 
           {registros.length > 0 && (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
               <table>
                 <thead><tr><th>Animal</th><th>Lote</th><th>Resultado</th><th>Tempo de gestação informado</th><th></th></tr></thead>
                 <tbody>
@@ -4730,9 +4730,9 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                     <tr key={r.brinco}>
                       <td><EarTag size="sm">{r.brinco}</EarTag></td>
                       <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
-                      <td style={{ color: r.resultado === "Prenha" ? "#505050" : "#999999", fontWeight: 600 }}>{r.resultado}</td>
+                      <td style={{ color: r.resultado === "Prenha" ? "#386846" : "#7AB88C", fontWeight: 600 }}>{r.resultado}</td>
                       <td>{r.tempoGestacaoInformado != null ? `${r.tempoGestacaoInformado} dia(s)` : "—"}</td>
-                      <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button></td>
+                      <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -4740,11 +4740,11 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
             </div>
           )}
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Diagnósticos de Repasse registrados</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Diagnósticos de Repasse registrados</div>
           {historico.length === 0 ? (
             <EmptyState text="Nenhum Diagnóstico de Repasse registrado ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead><tr><th>Lote</th><th>Prenhas</th><th>Avaliadas</th><th>Data</th></tr></thead>
                 <tbody>
@@ -4778,16 +4778,16 @@ function AbaDiagnostico(props) {
     <div>
       <SectionTitle icon={UltrasoundIcon} title="Diagnóstico" subtitle="Escolha se o diagnóstico é da Inseminação ou do Repasse." />
       <FazendaAtivaBanner fazendaAtiva={props.fazendaAtiva} />
-      <div style={{ display: "flex", background: "#E8E8E8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+      <div style={{ display: "flex", background: "#E3EDE6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
         <button onClick={() => setAbaInterna("inseminacao")}
           style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "inseminacao" ? "#505050" : "transparent", color: abaInterna === "inseminacao" ? "#FFFFFF" : "#686868",
+            background: abaInterna === "inseminacao" ? "#386846" : "transparent", color: abaInterna === "inseminacao" ? "#FFFFFF" : "#49875B",
           }}>Diagnóstico de Inseminação</button>
         <button onClick={() => setAbaInterna("repasse")}
           style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "repasse" ? "#505050" : "transparent", color: abaInterna === "repasse" ? "#FFFFFF" : "#686868",
+            background: abaInterna === "repasse" ? "#386846" : "transparent", color: abaInterna === "repasse" ? "#FFFFFF" : "#49875B",
           }}>Diagnóstico de Repasse</button>
       </div>
       <div style={{ display: abaInterna === "inseminacao" ? "block" : "none" }}>
@@ -4865,7 +4865,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
         <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos." />
       ) : (
         <>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Sugestões de Repasse aguardando confirmação</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Sugestões de Repasse aguardando confirmação</div>
           {(sugestoesRepasse || []).length === 0 ? (
             <EmptyState text='Nenhuma sugestão de Repasse no momento. Elas aparecem aqui automaticamente quando um Diagnóstico é finalizado com "Destino para vazias" = Repasse.' />
           ) : (
@@ -4876,7 +4876,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
                   <div key={s.id} style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                     <div>
                       <strong style={{ fontSize: 13.5 }}>{lote?.nome || "—"}</strong>
-                      <div style={{ fontSize: 12, color: "#686868", marginTop: 3 }}>
+                      <div style={{ fontSize: 12, color: "#49875B", marginTop: 3 }}>
                         {s.brincos.length} animal(is) vazio(s) · Diagnóstico de {fmtDate(s.data)}
                       </div>
                     </div>
@@ -4893,10 +4893,10 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
           {lotes.length === 0 ? (
             <EmptyState text="Nenhum lote cadastrado ainda." />
           ) : (
-          <div style={{ ...cardStyle, marginBottom: 24, border: sugestaoConfirmandoId ? "1.5px solid #C2C2C2" : cardStyle.border }}>
+          <div style={{ ...cardStyle, marginBottom: 24, border: sugestaoConfirmandoId ? "1.5px solid #B0D4BA" : cardStyle.border }}>
             {sugestaoConfirmandoId && (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <span style={{ fontSize: 12.5, color: "#6E6E6E", fontWeight: 600 }}>Confirmando sugestão de Repasse — ajuste as datas e o nº de animais se necessário</span>
+                <span style={{ fontSize: 12.5, color: "#4D8F60", fontWeight: 600 }}>Confirmando sugestão de Repasse — ajuste as datas e o nº de animais se necessário</span>
                 <BtnGhost onClick={cancelarConfirmacao}>Cancelar</BtnGhost>
               </div>
             )}
@@ -4907,26 +4907,26 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
                 </select>
               </Field>
               <Field label="Categoria">
-                <input style={{ ...inputStyle, background: "#EBEBEB", color: "#686868" }} value={loteAtual?.categoria || "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#E7EFE9", color: "#49875B" }} value={loteAtual?.categoria || "—"} readOnly />
               </Field>
               <Field label="Retiro">
-                <input style={{ ...inputStyle, background: "#EBEBEB", color: "#686868" }} value={loteAtual?.retiroId ? nomeRetiro(loteAtual.retiroId) : "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#E7EFE9", color: "#49875B" }} value={loteAtual?.retiroId ? nomeRetiro(loteAtual.retiroId) : "—"} readOnly />
               </Field>
               <Field label="Nº de animais em repasse"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Início"><input style={inputStyle} type="date" value={dataInicio} onChange={(e) => { limparMsgSeSucesso(); setDataInicio(e.target.value); }} /></Field>
               <Field label="Fim"><input style={inputStyle} type="date" value={dataFim} onChange={(e) => { limparMsgSeSucesso(); setDataFim(e.target.value); }} /></Field>
             </div>
-            <p style={{ fontSize: 11.5, color: "#969696", margin: "6px 0 0" }}>Ao registrar, um pré-agendamento de "Diagnóstico - repasse" é criado automaticamente na Agenda, 30 dias após o Fim do período.</p>
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#505050" : "#787878", marginTop: 12 }}>{msg}</p>}
+            <p style={{ fontSize: 11.5, color: "#77B589", margin: "6px 0 0" }}>Ao registrar, um pré-agendamento de "Diagnóstico - repasse" é criado automaticamente na Agenda, 30 dias após o Fim do período.</p>
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#386846" : "#549C69", marginTop: 12 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: msg ? 0 : 12 }}><Plus size={15} /> Registrar Repasse</BtnPrimary>
           </div>
           )}
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Repasses registrados</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Repasses registrados</div>
           {historico.length === 0 ? (
             <EmptyState text="Nenhum repasse registrado ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead><tr><th>Lote</th><th>Categoria</th><th>Retiro</th><th>Nº animais</th><th>Início</th><th>Fim</th><th></th></tr></thead>
                 <tbody>
@@ -4945,19 +4945,19 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
                       <td style={{ display: "flex", gap: 6 }}>
                         {editandoId === m.id ? (
                           <>
-                            <button onClick={salvarEdicao} style={{ background: "none", border: "none", cursor: "pointer", color: "#505050" }}><Check size={14} /></button>
-                            <button onClick={() => setEditandoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <button onClick={salvarEdicao} style={{ background: "none", border: "none", cursor: "pointer", color: "#386846" }}><Check size={14} /></button>
+                            <button onClick={() => setEditandoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </>
                         ) : confirmarExclusaoId === m.id ? (
                           <>
-                            <span style={{ fontSize: 11, color: "#787878" }}>Excluir?</span>
-                            <button onClick={() => { removerManejo(m.id); setConfirmarExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Check size={14} /></button>
-                            <button onClick={() => setConfirmarExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><X size={14} /></button>
+                            <span style={{ fontSize: 11, color: "#549C69" }}>Excluir?</span>
+                            <button onClick={() => { removerManejo(m.id); setConfirmarExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Check size={14} /></button>
+                            <button onClick={() => setConfirmarExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><X size={14} /></button>
                           </>
                         ) : (
                           <>
-                            <button onClick={() => iniciarEdicao(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#686868" }}><Pencil size={13} /></button>
-                            <button onClick={() => setConfirmarExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={13} /></button>
+                            <button onClick={() => iniciarEdicao(m)} style={{ background: "none", border: "none", cursor: "pointer", color: "#49875B" }}><Pencil size={13} /></button>
+                            <button onClick={() => setConfirmarExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={13} /></button>
                           </>
                         )}
                       </td>
@@ -5111,19 +5111,19 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
             </div>
 
             {consultaAtual && (
-              <div style={{ marginTop: 16, background: "#F9F9F9", border: "1px solid #DFDFDF", borderRadius: 8, padding: 14 }}>
+              <div style={{ marginTop: 16, background: "#F8FAF9", border: "1px solid #D9E5DC", borderRadius: 8, padding: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <EarTag size="sm">{consultaAtual.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#474747" }}>Dados encontrados — confira e complete DG Final / Tempo informado, depois Enter para registrar</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#325C3E" }}>Dados encontrados — confira e complete DG Final / Tempo informado, depois Enter para registrar</span>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, fontSize: 12.5, color: "#474747" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, fontSize: 12.5, color: "#325C3E" }}>
                   <div><strong>Categoria:</strong> {consultaAtual.categoria}</div>
                   <div><strong>Lote:</strong> {consultaAtual.loteNome}</div>
                   <div><strong>Retiro:</strong> {consultaAtual.retiroNome}</div>
                   {consultaAtual.porOrdem.map((o, i) => (
                     <React.Fragment key={i}>
                       <div><strong>Data {ORDENS_IATF[i]}:</strong> {o.data}</div>
-                      <div><strong>DG {ORDENS_IATF[i]}:</strong> <span style={{ color: o.dg === "Prenha" ? "#505050" : o.dg === "Vazia" ? "#999999" : "#686868", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</span></div>
+                      <div><strong>DG {ORDENS_IATF[i]}:</strong> <span style={{ color: o.dg === "Prenha" ? "#386846" : o.dg === "Vazia" ? "#7AB88C" : "#49875B", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</span></div>
                     </React.Fragment>
                   ))}
                   <div><strong>Tempo de gestação calculado:</strong> {consultaAtual.tempoCalculado != null ? `${consultaAtual.tempoCalculado} dia(s)` : "—"}</div>
@@ -5132,7 +5132,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("salvo") ? "#505050" : "#787878", marginTop: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("salvo") ? "#386846" : "#549C69", marginTop: 10 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               {consultaAtual && <BtnPrimary onClick={registrar}>Registrar</BtnPrimary>}
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
@@ -5143,7 +5143,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
           {registros.length === 0 ? (
             <EmptyState text="Nenhum animal registrado nesta sessão ainda." />
           ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
                   <tr>
@@ -5175,15 +5175,15 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                       {r.porOrdem.map((o, i) => (
                         <React.Fragment key={i}>
                           <td>{o.data}</td>
-                          <td style={{ color: o.dg === "Prenha" ? "#505050" : o.dg === "Vazia" ? "#999999" : "#686868", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</td>
+                          <td style={{ color: o.dg === "Prenha" ? "#386846" : o.dg === "Vazia" ? "#7AB88C" : "#49875B", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</td>
                         </React.Fragment>
                       ))}
-                      <td style={{ color: r.dgFinal === "Prenha" ? "#505050" : r.dgFinal === "Vazia" ? "#999999" : "#686868", fontWeight: r.dgFinal !== "—" ? 600 : 400 }}>{r.dgFinal}</td>
+                      <td style={{ color: r.dgFinal === "Prenha" ? "#386846" : r.dgFinal === "Vazia" ? "#7AB88C" : "#49875B", fontWeight: r.dgFinal !== "—" ? 600 : 400 }}>{r.dgFinal}</td>
                       <td>{r.tempoCalculado != null ? `${r.tempoCalculado} dia(s)` : "—"}</td>
                       <td>{r.touroDaPrenhez || "—"}</td>
                       <td>{r.tempoInformado != null ? `${r.tempoInformado} dia(s)` : "—"}</td>
-                      <td style={{ fontWeight: r.origem !== "—" ? 600 : 400, color: r.origem === "Repasse" ? "#999999" : r.origem === "Inseminação" ? "#505050" : "#686868" }}>{r.origem}</td>
-                      <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button></td>
+                      <td style={{ fontWeight: r.origem !== "—" ? 600 : 400, color: r.origem === "Repasse" ? "#7AB88C" : r.origem === "Inseminação" ? "#386846" : "#49875B" }}>{r.origem}</td>
+                      <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -5276,22 +5276,22 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
         <EmptyState text="Selecione uma fazenda ativa para lançar entradas." />
       ) : (
         <>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
           <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
-          <p style={{ fontSize: 11.5, color: "#969696", margin: "-8px 0 18px" }}>
+          <p style={{ fontSize: 11.5, color: "#77B589", margin: "-8px 0 18px" }}>
             {localEstoque === "fazenda"
               ? "Vinculado à fazenda ativa — pode ser usado por qualquer inseminador autorizado nela."
               : `Vinculado a você (${currentUser?.nome || "usuário"}) — pode ser usado em qualquer fazenda que você acessar.`}
           </p>
 
-          <div style={{ display: "flex", background: "#E8E8E8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 18, width: "fit-content" }}>
+          <div style={{ display: "flex", background: "#E3EDE6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 18, width: "fit-content" }}>
             {CATEGORIAS_ESTOQUE.map((c) => (
               <button key={c} onClick={() => setCategoriaTab(c)}
                 style={{
                   padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: 600,
-                  background: categoriaTab === c ? "#505050" : "transparent",
-                  color: categoriaTab === c ? "#FFFFFF" : "#686868",
+                  background: categoriaTab === c ? "#386846" : "transparent",
+                  color: categoriaTab === c ? "#FFFFFF" : "#49875B",
                 }}>{c}</button>
             ))}
           </div>
@@ -5380,13 +5380,13 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#505050" : "#787878", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#386846" : "#549C69", marginTop: 12 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: 12 }}>
               <Plus size={15} /> Registrar entrada
             </BtnPrimary>
           </div>
 
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Últimas entradas — {categoriaTab}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Últimas entradas — {categoriaTab}</div>
           {entradas.length === 0 ? <EmptyState text="Nenhuma entrada registrada ainda nesta categoria." /> : (
             <table>
               <thead><tr><th>Item</th><th>Qtd.</th><th>Valor unitário</th><th>Valor total</th><th>Data</th><th></th></tr></thead>
@@ -5399,7 +5399,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                     <td>{m.valorUnitario != null ? `R$ ${(m.valorUnitario * m.quantidade).toFixed(2)}` : "—"}</td>
                     <td>{fmtDate(m.data)}</td>
                     <td style={{ textAlign: "right" }}>
-                      <button onClick={() => removerEntradaEstoque(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
+                      <button onClick={() => removerEntradaEstoque(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
                         <Trash2 size={13} /> Excluir
                       </button>
                     </td>
@@ -5442,11 +5442,11 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
         const itens = saidas.filter((m) => categoriaDoInsumo(m.insumoId) === categoria);
         return (
           <div key={categoria} style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>{titulo}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>{titulo}</div>
             {itens.length === 0 ? (
               <EmptyState text={`Nenhuma saída de ${titulo.toLowerCase()} registrada ainda — ela ocorre automaticamente ao registrar um manejo.`} />
             ) : (
-              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead><tr><th>Insumo</th><th>Qtd.</th><th>Origem (manejo)</th><th>Data</th></tr></thead>
                   <tbody>
@@ -5492,8 +5492,8 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
       <SeletorLocalEstoque local={localTab} setLocal={setLocalTab} />
 
       <div style={{ ...cardStyle, marginBottom: 24, display: "inline-block" }}>
-        <div style={{ fontSize: 11, color: "#969696", textTransform: "uppercase", fontWeight: 700 }}>Valor total em estoque ({localTab === "externo" ? "Externo" : "Fazenda"})</div>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: "#242424", marginTop: 4 }}>{fmtMoeda(valorTotalGeral)}</div>
+        <div style={{ fontSize: 11, color: "#77B589", textTransform: "uppercase", fontWeight: 700 }}>Valor total em estoque ({localTab === "externo" ? "Externo" : "Fazenda"})</div>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: "#1D2B21", marginTop: 4 }}>{fmtMoeda(valorTotalGeral)}</div>
       </div>
 
       {grupos.map(({ categoria, titulo }) => {
@@ -5502,13 +5502,13 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
         return (
           <div key={categoria} style={{ marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase" }}>{titulo}</div>
-              {itens.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#505050" }}>Total: {fmtMoeda(valorTotalGrupo)}</div>}
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase" }}>{titulo}</div>
+              {itens.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#386846" }}>Total: {fmtMoeda(valorTotalGrupo)}</div>}
             </div>
             {itens.length === 0 ? (
               <EmptyState text={`Nenhum item de ${titulo.toLowerCase()} cadastrado.`} />
             ) : categoria === "Sêmen" ? (
-              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead><tr><th>Touro</th><th>Raça</th><th>Partida</th><th>Estoque (doses)</th><th>Valor unitário</th><th>Valor total</th></tr></thead>
                   <tbody>
@@ -5526,7 +5526,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                 </table>
               </div>
             ) : categoria === "Utensílio" ? (
-              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead><tr><th>Produto</th><th>Unidade</th><th>Estoque</th><th>Valor unitário</th><th>Valor total</th></tr></thead>
                   <tbody>
@@ -5543,7 +5543,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                 </table>
               </div>
             ) : (
-              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
                   <thead>
                     <tr>
@@ -5596,8 +5596,8 @@ const addMonths = (d, n) => { const r = new Date(d); r.setMonth(r.getMonth() + n
 const isSameDay = (a, b) => ymd(a) === ymd(b);
 
 const CORES_TIPO = {
-  "Indução": "#2E2E2E", "D0": "#4A4A4A", "Retirada": "#727272", "PGF 5": "#8C8C8C",
-  "Inseminação": "#A8A8A8", "Diagnóstico": "#C4C4C4", "Diagnóstico - repasse": "#999999", "Outro": "#686868",
+  "Indução": "#203C28", "D0": "#346041", "Retirada": "#509464", "PGF 5": "#6AAF7E",
+  "Inseminação": "#8EC29D", "Diagnóstico": "#B2D6BD", "Diagnóstico - repasse": "#7AB88C", "Outro": "#49875B",
 };
 
 function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento }) {
@@ -5724,9 +5724,9 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
   const StatusBadge = ({ status }) => {
     const cfg = {
-      pendente: { bg: "#E8E8E8", color: "#6E6E6E", label: "Aguardando confirmação" },
-      confirmado: { bg: "#E9E9E9", color: "#3B3B3B", label: "Confirmado" },
-    }[status] || { bg: "#E8E8E8", color: "#686868", label: status };
+      pendente: { bg: "#E3EDE6", color: "#4D8F60", label: "Aguardando confirmação" },
+      confirmado: { bg: "#E5EDE7", color: "#294D34", label: "Confirmado" },
+    }[status] || { bg: "#E3EDE6", color: "#49875B", label: status };
     return <span style={{ fontSize: 10.5, fontWeight: 700, background: cfg.bg, color: cfg.color, borderRadius: 20, padding: "2px 9px", whiteSpace: "nowrap" }}>{cfg.label}</span>;
   };
 
@@ -5735,7 +5735,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
   const ItemAgendamento = ({ a }) => {
     if (editingId === a.id && editForm) {
       return (
-        <div style={{ ...cardStyle, padding: "12px 14px", border: "1.5px solid #505050" }}>
+        <div style={{ ...cardStyle, padding: "12px 14px", border: "1.5px solid #386846" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: editForm.tipo === "D0" ? 10 : 0 }}>
             <Field label="Retiro">
               <select style={inputStyle} value={editForm.retiroId} onChange={setEdit("retiroId")}>
@@ -5780,11 +5780,11 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
       <div style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_TIPO[a.tipo] || "#686868", flexShrink: 0 }} />
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_TIPO[a.tipo] || "#49875B", flexShrink: 0 }} />
             <strong style={{ fontSize: 13.5 }}>{a.titulo}</strong>
             <StatusBadge status={a.status} />
           </div>
-          <div style={{ fontSize: 12, color: "#686868", marginTop: 3 }}>
+          <div style={{ fontSize: 12, color: "#49875B", marginTop: 3 }}>
             {a.tipo}{a.loteNome ? ` · ${a.loteNome}` : ""}{a.retiroId ? ` · ${nomeRetiro(a.retiroId)}` : ""} · {fmtDate(a.data)}
             {fazendasSelecionadas.length > 1 && ` · ${nomeFazenda(a.fazendaId)}`}
           </div>
@@ -5795,7 +5795,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
             const numeroAnimais = a.numeroAnimais ?? lote?.numeroAnimais;
             if (!lote && !ordem && numeroAnimais == null) return null;
             return (
-              <div style={{ fontSize: 11.5, color: "#969696", marginTop: 3 }}>
+              <div style={{ fontSize: 11.5, color: "#77B589", marginTop: 3 }}>
                 {categoria ? `Categoria: ${categoria}` : ""}
                 {numeroAnimais != null ? `${categoria ? " · " : ""}Nº animais: ${numeroAnimais}` : ""}
                 {ordem ? `${categoria || numeroAnimais != null ? " · " : ""}Ordem: ${ordem}` : ""}
@@ -5811,7 +5811,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
               <BtnGhost danger onClick={() => descartarAgendamento(a.id)}><XCircle size={13} /></BtnGhost>
             </>
           ) : (
-            <button onClick={() => removerAgendamento(a.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#787878" }}><Trash2 size={14} /></button>
+            <button onClick={() => removerAgendamento(a.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#549C69" }}><Trash2 size={14} /></button>
           )}
         </div>
       </div>
@@ -5826,7 +5826,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
         <>
           {fazendas.length > 1 && (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Fazendas exibidas na agenda</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Fazendas exibidas na agenda</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {fazendas.map((f) => {
                   const selecionada = fazendasSelecionadas.includes(f.id);
@@ -5835,14 +5835,14 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                       style={{
                         display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                         borderRadius: 20, padding: "5px 12px", fontSize: 12.5,
-                        background: selecionada ? "#E9E9E9" : "#E8E8E8", color: selecionada ? "#3B3B3B" : "#686868",
+                        background: selecionada ? "#E5EDE7" : "#E3EDE6", color: selecionada ? "#294D34" : "#49875B",
                       }}>
                       {selecionada ? <CheckCircle2 size={13} /> : <Circle size={13} />} {f.nome}
                     </button>
                   );
                 })}
               </div>
-              <p style={{ fontSize: 11.5, color: "#969696", margin: "6px 0 0" }}>
+              <p style={{ fontSize: 11.5, color: "#77B589", margin: "6px 0 0" }}>
                 {fazendasSelecionadas.length > 1 ? "Mostrando a programação conjunta das fazendas marcadas." : "Marque mais de uma fazenda para ver a programação conjunta."}
               </p>
             </div>
@@ -5850,19 +5850,19 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
           {gruposDuplicados.length > 0 && (
             <div style={{ marginBottom: 26 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#787878", textTransform: "uppercase", marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#549C69", textTransform: "uppercase", marginBottom: 8 }}>
                 <XCircle size={13} /> Agendamentos duplicados
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {gruposDuplicados.map((grupo, i) => (
-                  <div key={i} style={{ ...cardStyle, border: "1.5px solid #B1B1B1", padding: "12px 14px" }}>
-                    <p style={{ fontSize: 12.5, color: "#6E6E6E", margin: "0 0 10px" }}>
+                  <div key={i} style={{ ...cardStyle, border: "1.5px solid #9AC8A7", padding: "12px 14px" }}>
+                    <p style={{ fontSize: 12.5, color: "#4D8F60", margin: "0 0 10px" }}>
                       Existem {grupo.length} agendamentos de <strong>{grupo[0].tipo}</strong> para o lote <strong>{grupo[0].loteNome}</strong> na <strong>{grupo[0].ordem}</strong>. Escolha qual deve permanecer na agenda:
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {grupo.map((a) => (
-                        <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F9F9F9", border: "1px solid #DFDFDF", borderRadius: 8, padding: "8px 10px" }}>
-                          <span style={{ fontSize: 12.5, color: "#474747" }}>{fmtDate(a.data)} · {a.status === "pendente" ? "Aguardando confirmação" : "Confirmado"}</span>
+                        <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F8FAF9", border: "1px solid #D9E5DC", borderRadius: 8, padding: "8px 10px" }}>
+                          <span style={{ fontSize: 12.5, color: "#325C3E" }}>{fmtDate(a.data)} · {a.status === "pendente" ? "Aguardando confirmação" : "Confirmado"}</span>
                           <BtnPrimary onClick={() => manterEDescartarOutros(grupo, a.id)}>Manter este</BtnPrimary>
                         </div>
                       ))}
@@ -5874,7 +5874,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
           )}
 
           <div style={{ marginBottom: 26 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>
               <Bell size={13} /> Pré-agendamentos aguardando confirmação
             </div>
             {pendentes.length === 0 ? (
@@ -5887,7 +5887,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
           </div>
 
           <div style={{ ...cardStyle, marginBottom: 26 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 12 }}>Adicionar agendamento</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 12 }}>Adicionar agendamento</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, alignItems: "end" }}>
               <Field label="Retiro">
                 <select style={inputStyle} value={form.retiroId} onChange={set("retiroId")}>
@@ -5935,12 +5935,12 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                 <Plus size={15} /> Adicionar
               </BtnPrimary>
             </div>
-            {msg && <p style={{ fontSize: 12.5, color: "#787878", marginTop: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: "#549C69", marginTop: 10 }}>{msg}</p>}
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 16 }}>
             {TIPOS_AGENDAMENTO.map((t) => (
-              <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#686868" }}>
+              <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#49875B" }}>
                 <span style={{ width: 9, height: 9, borderRadius: "50%", background: CORES_TIPO[t] }} /> {t}
               </span>
             ))}
@@ -5950,20 +5950,20 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
             {/* barra de controle: navegação + seletor de período */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button onClick={() => irPara(-1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #D2D2D2", background: "#FFF", cursor: "pointer", color: "#474747" }}>‹</button>
-                <button onClick={() => irPara(1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #D2D2D2", background: "#FFF", cursor: "pointer", color: "#474747" }}>›</button>
-                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16.5, fontWeight: 600, color: "#242424", marginLeft: 4, textTransform: "capitalize" }}>{rotuloPeriodo()}</div>
+                <button onClick={() => irPara(-1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #C4E0CC", background: "#FFF", cursor: "pointer", color: "#325C3E" }}>‹</button>
+                <button onClick={() => irPara(1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #C4E0CC", background: "#FFF", cursor: "pointer", color: "#325C3E" }}>›</button>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16.5, fontWeight: 600, color: "#1D2B21", marginLeft: 4, textTransform: "capitalize" }}>{rotuloPeriodo()}</div>
                 <BtnGhost onClick={irParaHoje} style={{ marginLeft: 6 }}><CalendarClock size={13} /> Hoje</BtnGhost>
               </div>
 
-              <div style={{ display: "flex", background: "#E8E8E8", borderRadius: 8, padding: 3, gap: 2 }}>
+              <div style={{ display: "flex", background: "#E3EDE6", borderRadius: 8, padding: 3, gap: 2 }}>
                 {[["mes", "Mês"], ["semana", "Semana"]].map(([key, label]) => (
                   <button key={key} onClick={() => setViewMode(key)}
                     style={{
                       padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer",
                       fontSize: 12.5, fontWeight: 600,
-                      background: viewMode === key ? "#505050" : "transparent",
-                      color: viewMode === key ? "#FFFFFF" : "#686868",
+                      background: viewMode === key ? "#386846" : "transparent",
+                      color: viewMode === key ? "#FFFFFF" : "#49875B",
                     }}>{label}</button>
                 ))}
               </div>
@@ -5971,10 +5971,10 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
             {/* VISÃO MÊS */}
             {viewMode === "mes" && (
-              <div style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
                   {DIAS_SEMANA.map((d) => (
-                    <div key={d} style={{ fontSize: isMobileCalendario ? 9.5 : 10.5, fontWeight: 700, color: "#969696", textTransform: "uppercase", textAlign: "center", padding: isMobileCalendario ? "6px 0" : "8px 0", borderBottom: "1px solid #DFDFDF" }}>{isMobileCalendario ? d.slice(0, 1) : d}</div>
+                    <div key={d} style={{ fontSize: isMobileCalendario ? 9.5 : 10.5, fontWeight: 700, color: "#77B589", textTransform: "uppercase", textAlign: "center", padding: isMobileCalendario ? "6px 0" : "8px 0", borderBottom: "1px solid #D9E5DC" }}>{isMobileCalendario ? d.slice(0, 1) : d}</div>
                   ))}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
@@ -5998,29 +5998,29 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                             position: "relative", aspectRatio: "1 / 1", overflow: "hidden",
                             display: "flex", flexDirection: "column", justifyContent: "flex-end",
                             gap: 2, padding: "3px 3px 3px", border: "none",
-                            borderRight: (i + 1) % 7 !== 0 ? "1px solid #EBEBEB" : "none",
-                            borderBottom: "1px solid #EBEBEB",
-                            background: ativo ? "#F1F1F1" : "#FFF", cursor: "pointer",
+                            borderRight: (i + 1) % 7 !== 0 ? "1px solid #E7EFE9" : "none",
+                            borderBottom: "1px solid #E7EFE9",
+                            background: ativo ? "#EEF4F0" : "#FFF", cursor: "pointer",
                             opacity: foraDoMes ? 0.4 : 1,
                           }}>
                           <span style={{
                             position: "absolute", top: 2, right: 3,
                             display: "inline-flex", alignItems: "center", justifyContent: "center",
                             minWidth: 15, height: 15, borderRadius: "50%", fontSize: 9.5, fontWeight: 700,
-                            background: hoje ? "#999999" : "transparent", color: hoje ? "#F7F7F7" : "#969696",
+                            background: hoje ? "#7AB88C" : "transparent", color: hoje ? "#F5F9F6" : "#77B589",
                           }}>{d.getDate()}</span>
                           <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 14 }}>
                             {visiveis.map((a) => {
                               const n = a.numeroAnimais ?? loteDoAgendamento(a)?.numeroAnimais;
                               return (
                                 <span key={a.id} style={{
-                                  fontSize: 8.5, fontWeight: 700, color: "#FFF", background: CORES_TIPO[a.tipo] || "#686868",
+                                  fontSize: 8.5, fontWeight: 700, color: "#FFF", background: CORES_TIPO[a.tipo] || "#49875B",
                                   borderRadius: 3, padding: "2px 3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                                   opacity: a.status === "pendente" ? 0.6 : 1, lineHeight: 1.2,
                                 }}>{a.loteNome || a.titulo}{n != null ? ` · ${n}` : ""}</span>
                               );
                             })}
-                            {restantes > 0 && <span style={{ fontSize: 8, color: "#969696", textAlign: "center" }}>+{restantes}</span>}
+                            {restantes > 0 && <span style={{ fontSize: 8, color: "#77B589", textAlign: "center" }}>+{restantes}</span>}
                           </div>
                         </button>
                       );
@@ -6030,28 +6030,28 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                       <button key={i} onClick={() => setSelecionado(iso)}
                         style={{
                           minHeight: 74, textAlign: "left", padding: "6px 6px", border: "none",
-                          borderRight: (i + 1) % 7 !== 0 ? "1px solid #EBEBEB" : "none",
-                          borderBottom: "1px solid #EBEBEB",
-                          background: ativo ? "#F1F1F1" : "#FFF", cursor: "pointer",
+                          borderRight: (i + 1) % 7 !== 0 ? "1px solid #E7EFE9" : "none",
+                          borderBottom: "1px solid #E7EFE9",
+                          background: ativo ? "#EEF4F0" : "#FFF", cursor: "pointer",
                           opacity: foraDoMes ? 0.4 : 1,
                         }}>
                         <span style={{
                           display: "inline-flex", alignItems: "center", justifyContent: "center",
                           width: 20, height: 20, borderRadius: "50%", fontSize: 11.5, fontWeight: 700,
-                          background: hoje ? "#999999" : "transparent", color: hoje ? "#F7F7F7" : "#474747",
+                          background: hoje ? "#7AB88C" : "transparent", color: hoje ? "#F5F9F6" : "#325C3E",
                         }}>{d.getDate()}</span>
                         <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
                           {itens.slice(0, 2).map((a) => {
                             const n = a.numeroAnimais ?? loteDoAgendamento(a)?.numeroAnimais;
                             return (
                               <span key={a.id} style={{
-                                fontSize: 10, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#686868",
+                                fontSize: 10, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#49875B",
                                 borderRadius: 4, padding: "1.5px 5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                                 opacity: a.status === "pendente" ? 0.6 : 1,
                               }}>{a.titulo}{n != null ? ` · ${n}` : ""}</span>
                             );
                           })}
-                          {itens.length > 2 && <span style={{ fontSize: 10, color: "#969696" }}>+{itens.length - 2} mais</span>}
+                          {itens.length > 2 && <span style={{ fontSize: 10, color: "#77B589" }}>+{itens.length - 2} mais</span>}
                         </div>
                       </button>
                     );
@@ -6069,18 +6069,18 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                   const hoje = isSameDay(d, new Date());
                   return (
                     <div key={iso} onClick={() => setSelecionado(iso)}
-                      style={{ ...cardStyle, padding: "10px", cursor: "pointer", minHeight: 140, border: iso === selecionado ? "1.5px solid #505050" : cardStyle.border }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, color: "#969696", textTransform: "uppercase" }}>{DIAS_SEMANA[d.getDay()]}</div>
+                      style={{ ...cardStyle, padding: "10px", cursor: "pointer", minHeight: 140, border: iso === selecionado ? "1.5px solid #386846" : cardStyle.border }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: "#77B589", textTransform: "uppercase" }}>{DIAS_SEMANA[d.getDay()]}</div>
                       <div style={{
                         display: "inline-flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: "50%",
-                        fontSize: 12, fontWeight: 700, background: hoje ? "#999999" : "transparent", color: hoje ? "#F7F7F7" : "#242424", marginTop: 2,
+                        fontSize: 12, fontWeight: 700, background: hoje ? "#7AB88C" : "transparent", color: hoje ? "#F5F9F6" : "#1D2B21", marginTop: 2,
                       }}>{d.getDate()}</div>
                       <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
                         {itens.map((a) => {
                           const n = a.numeroAnimais ?? loteDoAgendamento(a)?.numeroAnimais;
                           return (
                             <span key={a.id} style={{
-                              fontSize: 10.5, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#686868",
+                              fontSize: 10.5, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#49875B",
                               borderRadius: 4, padding: "2px 5px", opacity: a.status === "pendente" ? 0.6 : 1,
                             }}>{a.titulo}{n != null ? ` · ${n}` : ""}</span>
                           );
@@ -6095,7 +6095,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
             {/* detalhe do dia selecionado */}
             {(
               <div style={{ marginTop: 20 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>
                   {parseISODate(selecionado).getDate()} de {NOMES_MES[parseISODate(selecionado).getMonth()]}
                 </div>
                 {(porDia[selecionado] || []).length === 0 ? (
@@ -6145,19 +6145,19 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
   };
 
   const corPerfil = (perfil) => ({
-    Administrador: { bg: "#DDDDDD", color: "#434343" },
-    Supervisor: { bg: "#E6E6E6", color: "#727272" },
-    Inseminador: { bg: "#E9E9E9", color: "#3B3B3B" },
-  }[perfil] || { bg: "#E8E8E8", color: "#686868" });
+    Administrador: { bg: "#D6E4DA", color: "#2F573B" },
+    Supervisor: { bg: "#E1EBE4", color: "#509464" },
+    Inseminador: { bg: "#E5EDE7", color: "#294D34" },
+  }[perfil] || { bg: "#E3EDE6", color: "#49875B" });
 
   return (
     <div>
       <SectionTitle icon={Users} title="Usuários" subtitle="Administrador: relatórios, cadastro de fazendas e de usuários (vê todas as fazendas). Supervisor e Inseminador: acesso restrito às fazendas autorizadas pelo Administrador." />
 
       <div style={{ ...cardStyle, marginBottom: 24 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 12 }}>Adicionar usuário</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 12 }}>Adicionar usuário</div>
         {!supabaseConfigurado && (
-          <p style={{ fontSize: 12, color: "#999999", background: "#F4F4F4", border: "1px solid #C2C2C2", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
+          <p style={{ fontSize: 12, color: "#7AB88C", background: "#F2F6F3", border: "1px solid #B0D4BA", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
             ⚠ Supabase não configurado — este usuário será só local, sem senha real (modo de teste).
           </p>
         )}
@@ -6176,12 +6176,12 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
             </select>
           </Field>
         </div>
-        {msg && <p style={{ fontSize: 12.5, color: msg.includes("sucesso") || msg.includes("criado") ? "#505050" : "#787878", margin: "10px 0 0" }}>{msg}</p>}
+        {msg && <p style={{ fontSize: 12.5, color: msg.includes("sucesso") || msg.includes("criado") ? "#386846" : "#549C69", margin: "10px 0 0" }}>{msg}</p>}
         <BtnPrimary disabled={!canSave || salvando} onClick={salvar} style={{ marginTop: 12 }}><Plus size={15} /> {salvando ? "Salvando…" : "Salvar usuário"}</BtnPrimary>
       </div>
 
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 10 }}>Usuários cadastrados</div>
-      <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #DFDFDF", borderRadius: 12, overflowX: "auto" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 10 }}>Usuários cadastrados</div>
+      <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #D9E5DC", borderRadius: 12, overflowX: "auto" }}>
         <table>
           <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Fazendas autorizadas</th><th></th></tr></thead>
           <tbody>
@@ -6198,13 +6198,13 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
                     <td><span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: cor.bg, color: cor.color }}>{u.perfil}</span></td>
                     <td>{temAutorizacao ? `${autorizadas.length} fazenda(s)` : "—"}</td>
                     <td style={{ textAlign: "right" }}>
-                      {temAutorizacao && <ChevronRight size={15} color="#969696" style={{ transform: aberto ? "rotate(90deg)" : "none" }} />}
+                      {temAutorizacao && <ChevronRight size={15} color="#77B589" style={{ transform: aberto ? "rotate(90deg)" : "none" }} />}
                     </td>
                   </tr>
                   {aberto && temAutorizacao && (
                     <tr>
-                      <td colSpan={5} style={{ background: "#F9F9F9", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "#686868", textTransform: "uppercase", marginBottom: 8 }}>Fazendas que {u.nome} pode acessar</div>
+                      <td colSpan={5} style={{ background: "#F8FAF9", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#49875B", textTransform: "uppercase", marginBottom: 8 }}>Fazendas que {u.nome} pode acessar</div>
                         {fazendas.length === 0 ? <EmptyState text="Nenhuma fazenda cadastrada ainda." /> : (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                             {fazendas.map((f) => {
@@ -6214,7 +6214,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
                                   style={{
                                     display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                                     borderRadius: 20, padding: "5px 12px", fontSize: 12.5,
-                                    background: autorizada ? "#E9E9E9" : "#E8E8E8", color: autorizada ? "#3B3B3B" : "#686868",
+                                    background: autorizada ? "#E5EDE7" : "#E3EDE6", color: autorizada ? "#294D34" : "#49875B",
                                   }}>
                                   {autorizada ? <CheckCircle2 size={13} /> : <Circle size={13} />} {f.nome}
                                 </button>
@@ -6329,24 +6329,24 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
 
           <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#242424" }}>Concepção por data de inseminação</div>
-              <div style={{ display: "flex", background: "#E8E8E8", borderRadius: 8, padding: 3, gap: 2 }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#1D2B21" }}>Concepção por data de inseminação</div>
+              <div style={{ display: "flex", background: "#E3EDE6", borderRadius: 8, padding: 3, gap: 2 }}>
                 {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
                   <button key={key} onClick={() => setVisaoData(key)}
                     style={{
                       padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                      background: visaoData === key ? "#505050" : "transparent", color: visaoData === key ? "#FFFFFF" : "#686868",
+                      background: visaoData === key ? "#386846" : "transparent", color: visaoData === key ? "#FFFFFF" : "#49875B",
                     }}>{label}</button>
                 ))}
               </div>
             </div>
-            <p style={{ fontSize: 12, color: "#969696", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
+            <p style={{ fontSize: 12, color: "#77B589", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
             <LinhaConcepcao dados={porData} />
           </div>
 
           <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
 
-          <p style={{ fontSize: 11, color: "#969696" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
+          <p style={{ fontSize: 11, color: "#77B589" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
         </>
       )}
     </div>
@@ -6357,17 +6357,17 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
 // (GraficoColunas) quanto dentro de um card com cabeçalho customizado (data de inseminação).
 function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   const lista = ordenarPorTaxaDesc ? [...dados].sort((a, b) => b.taxa - a.taxa) : dados;
-  if (lista.length === 0) return <p style={{ fontSize: 12, color: "#969696" }}>Sem dados suficientes ainda.</p>;
+  if (lista.length === 0) return <p style={{ fontSize: 12, color: "#77B589" }}>Sem dados suficientes ainda.</p>;
   const maiorTaxa = Math.max(...lista.map((d) => d.taxa || 0), 10);
   const alturaMax = compacto ? 90 : 140;
   return (
     <div className="rola-horizontal" style={{ display: "flex", alignItems: "flex-end", gap: compacto ? 10 : 16, height: compacto ? 140 : 200, paddingTop: 10, overflowX: "auto" }}>
       {lista.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: compacto ? 48 : 64, flexShrink: 0 }}>
-          <div style={{ fontSize: compacto ? 12 : 13, fontWeight: 700, color: "#242424", marginBottom: 6 }}>{d.taxa}%</div>
-          <div style={{ width: compacto ? 32 : 44, height: `${Math.max((d.taxa / maiorTaxa) * alturaMax, 4)}px`, background: "#505050", borderRadius: "4px 4px 0 0" }} />
-          <div style={{ fontSize: compacto ? 10.5 : 11.5, color: "#686868", marginTop: 8, textAlign: "center", maxWidth: compacto ? 64 : 84, wordBreak: "break-word" }}>{d.label}</div>
-          <div style={{ fontSize: compacto ? 9.5 : 10.5, color: "#AAAAAA" }}>n={d.n}</div>
+          <div style={{ fontSize: compacto ? 12 : 13, fontWeight: 700, color: "#1D2B21", marginBottom: 6 }}>{d.taxa}%</div>
+          <div style={{ width: compacto ? 32 : 44, height: `${Math.max((d.taxa / maiorTaxa) * alturaMax, 4)}px`, background: "#386846", borderRadius: "4px 4px 0 0" }} />
+          <div style={{ fontSize: compacto ? 10.5 : 11.5, color: "#49875B", marginTop: 8, textAlign: "center", maxWidth: compacto ? 64 : 84, wordBreak: "break-word" }}>{d.label}</div>
+          <div style={{ fontSize: compacto ? 9.5 : 10.5, color: "#90C3A0" }}>n={d.n}</div>
         </div>
       ))}
     </div>
@@ -6377,8 +6377,8 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
 function GraficoColunas({ titulo, descricao, dados, ordenarPorTaxaDesc, compacto }) {
   return (
     <div style={{ ...cardStyle, marginBottom: compacto ? 0 : 20 }}>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: compacto ? 15 : 17, fontWeight: 600, color: "#242424", marginBottom: 4 }}>{titulo}</div>
-      <p style={{ fontSize: compacto ? 11.5 : 12, color: "#969696", margin: "0 0 16px" }}>{descricao}</p>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: compacto ? 15 : 17, fontWeight: 600, color: "#1D2B21", marginBottom: 4 }}>{titulo}</div>
+      <p style={{ fontSize: compacto ? 11.5 : 12, color: "#77B589", margin: "0 0 16px" }}>{descricao}</p>
       <BarrasConcepcao dados={dados} ordenarPorTaxaDesc={ordenarPorTaxaDesc} compacto={compacto} />
     </div>
   );
@@ -6387,7 +6387,7 @@ function GraficoColunas({ titulo, descricao, dados, ordenarPorTaxaDesc, compacto
 // gráfico de LINHA (SVG simples, sem biblioteca) para a Concepção por data de inseminação —
 // um ponto por data/mês, ligados por uma linha, com a taxa acima do ponto e "n" abaixo do eixo.
 function LinhaConcepcao({ dados }) {
-  if (dados.length === 0) return <p style={{ fontSize: 12, color: "#969696" }}>Sem dados suficientes ainda.</p>;
+  if (dados.length === 0) return <p style={{ fontSize: 12, color: "#77B589" }}>Sem dados suficientes ainda.</p>;
   const alturaUtil = 130;
   const margemTopo = 24;
   const alturaTotal = alturaUtil + margemTopo + 40;
@@ -6404,13 +6404,13 @@ function LinhaConcepcao({ dados }) {
   return (
     <div className="rola-horizontal" style={{ overflowX: "auto" }}>
       <svg width={largura + 20} height={alturaTotal} viewBox={`-10 0 ${largura + 20} ${alturaTotal}`}>
-        <path d={linha} fill="none" stroke="#505050" strokeWidth="2" />
+        <path d={linha} fill="none" stroke="#386846" strokeWidth="2" />
         {pontos.map((p, i) => (
           <g key={`${p.label}-${i}`}>
-            <circle cx={p.x} cy={p.y} r="4" fill="#505050" />
-            <text x={p.x} y={p.y - 10} fontSize="11.5" fontWeight="700" fill="#242424" textAnchor="middle">{p.taxa}%</text>
-            <text x={p.x} y={margemTopo + alturaUtil + 18} fontSize="10.5" fill="#686868" textAnchor="middle">{p.label}</text>
-            <text x={p.x} y={margemTopo + alturaUtil + 32} fontSize="10" fill="#AAAAAA" textAnchor="middle">n={p.n}</text>
+            <circle cx={p.x} cy={p.y} r="4" fill="#386846" />
+            <text x={p.x} y={p.y - 10} fontSize="11.5" fontWeight="700" fill="#1D2B21" textAnchor="middle">{p.taxa}%</text>
+            <text x={p.x} y={margemTopo + alturaUtil + 18} fontSize="10.5" fill="#49875B" textAnchor="middle">{p.label}</text>
+            <text x={p.x} y={margemTopo + alturaUtil + 32} fontSize="10" fill="#90C3A0" textAnchor="middle">n={p.n}</text>
           </g>
         ))}
       </svg>
@@ -6469,41 +6469,41 @@ function calcularEstatisticasBenchmark(taxas) {
 // com outro título/valores.
 function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, aviso }) {
   const barras = [
-    { label: "Sua Fazenda", valor: suaFazenda, cor: "#2A2A2A" },
-    { label: "Média Geral", valor: stats?.mediaGeral ?? null, cor: "#666666" },
-    { label: "25% Melhores", valor: stats?.mediaTop25 ?? null, cor: "#999999" },
-    { label: "25% Piores", valor: stats?.mediaBottom25 ?? null, cor: "#CCCCCC" },
+    { label: "Sua Fazenda", valor: suaFazenda, cor: "#1D3725" },
+    { label: "Média Geral", valor: stats?.mediaGeral ?? null, cor: "#478559" },
+    { label: "25% Melhores", valor: stats?.mediaTop25 ?? null, cor: "#7AB88C" },
+    { label: "25% Piores", valor: stats?.mediaBottom25 ?? null, cor: "#BDDBC6" },
   ];
   const maiorValor = Math.max(...barras.map((b) => b.valor || 0), 10);
 
   return (
     <div style={{ ...cardStyle, marginBottom: 20 }}>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#242424", marginBottom: 4 }}>{titulo}</div>
-      <p style={{ fontSize: 12, color: "#969696", margin: "0 0 20px" }}>{descricao}</p>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#1D2B21", marginBottom: 4 }}>{titulo}</div>
+      <p style={{ fontSize: 12, color: "#77B589", margin: "0 0 20px" }}>{descricao}</p>
 
       {carregando ? (
-        <p style={{ fontSize: 12, color: "#969696" }}>Carregando…</p>
+        <p style={{ fontSize: 12, color: "#77B589" }}>Carregando…</p>
       ) : aviso ? (
-        <p style={{ fontSize: 12, color: "#999999", background: "#F4F4F4", border: "1px solid #C2C2C2", borderRadius: 8, padding: 10 }}>⚠ {aviso}</p>
+        <p style={{ fontSize: 12, color: "#7AB88C", background: "#F2F6F3", border: "1px solid #B0D4BA", borderRadius: 8, padding: 10 }}>⚠ {aviso}</p>
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 20, height: 220, paddingTop: 10 }}>
             {barras.map((b) => (
               <div key={b.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
-                {b.valor != null && <div style={{ fontSize: 13, fontWeight: 700, color: "#242424", marginBottom: 6 }}>{b.valor}%</div>}
+                {b.valor != null && <div style={{ fontSize: 13, fontWeight: 700, color: "#1D2B21", marginBottom: 6 }}>{b.valor}%</div>}
                 <div style={{
                   width: "100%", maxWidth: 70,
                   height: b.valor != null ? `${Math.max((b.valor / maiorValor) * 170, 4)}px` : "4px",
-                  background: b.valor != null ? b.cor : "#DFDFDF",
+                  background: b.valor != null ? b.cor : "#D9E5DC",
                   borderRadius: "4px 4px 0 0",
                 }} />
-                <div style={{ fontSize: 12, color: "#686868", marginTop: 8, textAlign: "center" }}>{b.label}</div>
-                {b.label === "Sua Fazenda" && b.valor == null && <div style={{ fontSize: 10.5, color: "#AAAAAA" }}>sem diagnósticos</div>}
+                <div style={{ fontSize: 12, color: "#49875B", marginTop: 8, textAlign: "center" }}>{b.label}</div>
+                {b.label === "Sua Fazenda" && b.valor == null && <div style={{ fontSize: 10.5, color: "#90C3A0" }}>sem diagnósticos</div>}
               </div>
             ))}
           </div>
           {stats && (
-            <p style={{ fontSize: 11, color: "#AAAAAA", marginTop: 14 }}>
+            <p style={{ fontSize: 11, color: "#90C3A0", marginTop: 14 }}>
               Calculado a partir de {stats.numFazendas} fazenda(s) com diagnóstico registrado (a fazenda selecionada entra na conta se já tiver diagnóstico).
             </p>
           )}
@@ -6559,16 +6559,16 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, safraAt
         <EmptyState text="Selecione uma fazenda ativa para comparar." />
       ) : (
         <>
-          <div style={{ display: "flex", background: "#E8E8E8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+          <div style={{ display: "flex", background: "#E3EDE6", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
             {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
               <button key={key} onClick={() => setEscopo(key)}
                 style={{
                   padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                  background: escopo === key ? "#505050" : "transparent", color: escopo === key ? "#FFFFFF" : "#686868",
+                  background: escopo === key ? "#386846" : "transparent", color: escopo === key ? "#FFFFFF" : "#49875B",
                 }}>{label}</button>
             ))}
           </div>
-          <p style={{ fontSize: 11.5, color: "#969696", marginTop: -12, marginBottom: 18 }}>
+          <p style={{ fontSize: 11.5, color: "#77B589", marginTop: -12, marginBottom: 18 }}>
             {safraAtiva ? `Mostrando dados da safra ${safraAtiva.nome}.` : "Nenhuma safra ativa selecionada — mostrando todo o histórico."}
           </p>
 
@@ -6581,7 +6581,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, safraAt
             aviso={avisoSistema}
           />
 
-          <p style={{ fontSize: 11, color: "#969696" }}>Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.</p>
+          <p style={{ fontSize: 11, color: "#77B589" }}>Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.</p>
         </>
       )}
     </div>
@@ -6742,15 +6742,15 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, man
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
           <div style={cardStyle}>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#242424", marginBottom: 6 }}>Exportação por Animal</div>
-            <p style={{ fontSize: 12.5, color: "#686868", margin: "0 0 14px" }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#1D2B21", marginBottom: 6 }}>Exportação por Animal</div>
+            <p style={{ fontSize: 12.5, color: "#49875B", margin: "0 0 14px" }}>
               Uma planilha com um animal por linha ({totalAnimais} animal(is) na fazenda/safra atual): identificação, categoria, lote e mês de parição, seguidos de um bloco completo de dados (D0, Retirada, Inseminação e Diagnóstico) para cada ordem de IATF (1º, 2º e 3º) em que o animal passou.
             </p>
             <BtnPrimary onClick={exportarPorAnimal} disabled={totalAnimais === 0}><FileDown size={15} /> Exportar por Animal (.xlsx)</BtnPrimary>
           </div>
           <div style={cardStyle}>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#242424", marginBottom: 6 }}>Exportação por Lote</div>
-            <p style={{ fontSize: 12.5, color: "#686868", margin: "0 0 14px" }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#1D2B21", marginBottom: 6 }}>Exportação por Lote</div>
+            <p style={{ fontSize: 12.5, color: "#49875B", margin: "0 0 14px" }}>
               Uma planilha com um lote por linha ({lotes.length} lote(s) na fazenda/safra atual), cada informação numa coluna: retiro, categoria, ordem, datas dos manejos e taxa de prenhez.
             </p>
             <BtnPrimary onClick={exportarPorLote} disabled={lotes.length === 0}><FileDown size={15} /> Exportar por Lote (.xlsx)</BtnPrimary>
