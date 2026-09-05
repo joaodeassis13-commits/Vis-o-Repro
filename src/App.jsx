@@ -1312,7 +1312,7 @@ export default function App() {
     if (tipoInterno) {
       gerarPreAgendamentos({
         tipo: tipoInterno, data: ag.data, loteNome: ag.loteNome, retiroId: ag.retiroId, ordem: ag.ordem,
-        tipoManejo: ag.tipoManejo, protocolo: ag.protocolo, origemAgendamentoId: id,
+        tipoManejo: ag.tipoManejo, protocolo: ag.protocolo, origemAgendamentoId: id, numeroAnimais: ag.numeroAnimais || null,
       });
     }
   };
@@ -1364,7 +1364,7 @@ export default function App() {
       if (tipoInterno) {
         gerarPreAgendamentos({
           tipo: tipoInterno, data: atualizado.data, loteNome: atualizado.loteNome, retiroId: atualizado.retiroId, ordem: atualizado.ordem,
-          tipoManejo: atualizado.tipoManejo, protocolo: atualizado.protocolo, origemAgendamentoId: id,
+          tipoManejo: atualizado.tipoManejo, protocolo: atualizado.protocolo, origemAgendamentoId: id, numeroAnimais: atualizado.numeroAnimais || null,
         });
       }
     }
@@ -1501,8 +1501,8 @@ export default function App() {
         * { box-sizing: border-box; }
         select, input { font-family: 'Work Sans', sans-serif; }
         table { border-collapse: collapse; width: 100%; }
-        th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #8B8676; padding: 8px 10px; border-bottom: 1px solid #E5DFCC; }
-        td { padding: 9px 10px; font-size: 13.5px; color: #159FDB; border-bottom: 1px solid #F0F0F0; }
+        th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #9B9686; padding: 8px 10px; border-bottom: 1px solid #E5DFCC; }
+        td { padding: 9px 10px; font-size: 13.5px; color: #9B9686; border-bottom: 1px solid #F0F0F0; }
         tr:hover td { background: #F8F8F8; }
         /* campos de dose: remove as setas de aumentar/diminuir do number input, deixando livre para digitar */
         input.campo-dose::-webkit-outer-spin-button,
@@ -1527,11 +1527,12 @@ export default function App() {
       <aside style={{
         width: isMobile ? "82vw" : 224, maxWidth: isMobile ? 300 : "none",
         background: "#083C26", color: "#FFFFFF", display: "flex", flexDirection: "column", flexShrink: 0,
+        position: "fixed", top: 0, bottom: 0, left: 0, height: "100vh", overflowY: "auto",
         ...(isMobile ? {
-          position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50,
+          zIndex: 50,
           transform: menuAberto ? "translateX(0)" : "translateX(-100%)",
-          transition: "transform 0.22s ease", overflowY: "auto",
-        } : {}),
+          transition: "transform 0.22s ease",
+        } : { zIndex: 10 }),
       }}>
         <div style={{ padding: "20px 18px", display: "flex", alignItems: "center", gap: 9 }}>
           <img src={logoImg} alt="VArepro" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }} />
@@ -1636,7 +1637,7 @@ export default function App() {
       </aside>
 
       {/* CONTEÚDO */}
-      <main style={{ flex: 1, minWidth: 0 }}>
+      <main style={{ flex: 1, minWidth: 0, marginLeft: isMobile ? 0 : 224 }}>
         {isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#083C26", color: "#FFFFFF", position: "sticky", top: 0, zIndex: 20 }}>
             <button onClick={() => setMenuAberto(true)} aria-label="Abrir menu"
@@ -6512,7 +6513,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
       ) : (
         <>
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20, alignItems: "stretch" }}>
-            <div style={{ ...cardStyle, height: 276, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Resumo</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
                 {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
@@ -6530,7 +6531,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
               </div>
             </div>
 
-            <div style={{ ...cardStyle, height: 276, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
                 {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
               </div>
@@ -6553,7 +6554,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
               </div>
             </div>
 
-            <div style={{ ...cardStyle, height: 276, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Concepção por {OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%" }}>
                 {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
@@ -6761,10 +6762,11 @@ function LinhaConcepcao({ dados, agruparPorMes }) {
 
   return (
     <div className="rola-horizontal" style={{ height: "100%", width: "100%", overflowX: "auto" }}>
-      {/* preserveAspectRatio="none" + width/height 100%: se o card for mais largo que o conteúdo
-          mínimo, o gráfico estica pra preencher (sem sobrar espaço); se for mais estreito (muitos
-          pontos), o minWidth força a rolagem horizontal em vez de espremer os pontos. */}
-      <svg viewBox={`-10 0 ${largura + 20} ${alturaTotal}`} preserveAspectRatio="none"
+      {/* Importante: NÃO usar preserveAspectRatio="none" aqui — ele estica largura e altura em
+          proporções diferentes quando há poucos pontos, o que distorce e borra o texto (que faz
+          parte do desenho SVG). Mantendo a proporção padrão, o gráfico cresce igual nos dois eixos —
+          pode sobrar um pouco de espaço nas laterais com poucos pontos, mas o texto nunca embaça. */}
+      <svg viewBox={`-10 0 ${largura + 20} ${alturaTotal}`} preserveAspectRatio="xMidYMid meet"
         style={{ width: "100%", minWidth: largura + 20, height: "100%", display: "block" }}>
         <path d={linha} fill="none" stroke="#166336" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         {pontos.map((p, i) => (
