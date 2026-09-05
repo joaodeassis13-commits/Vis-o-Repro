@@ -47,3 +47,38 @@ export async function buscarBenchmarkTaxaPrenhezGrupo(safraNome = null) {
   const { data, error } = await supabase.rpc("benchmarking_taxa_prenhez_grupo", { p_safra_nome: safraNome });
   return formatarResposta(data, error);
 }
+
+// taxa de FERTILIDADE (Prenhas / total de animais nos lotes) — todas as fazendas do sistema.
+export async function buscarBenchmarkTaxaFertilidadeSistema(safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_taxa_fertilidade_sistema", { p_safra_nome: safraNome });
+  return formatarResposta(data, error);
+}
+
+// taxa de FERTILIDADE — só as fazendas do grupo do usuário logado.
+export async function buscarBenchmarkTaxaFertilidadeGrupo(safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_taxa_fertilidade_grupo", { p_safra_nome: safraNome });
+  return formatarResposta(data, error);
+}
+
+// concepção por ORDEM (1º/2º/3º IATF ou "Repasse") — todas as fazendas do sistema.
+export async function buscarBenchmarkConcepcaoPorOrdemSistema(ordem, safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_concepcao_por_ordem_sistema", { p_ordem: ordem, p_safra_nome: safraNome });
+  return formatarResposta(data, error);
+}
+
+// concepção por CATEGORIA (Nulípara/Primípara/Multípara) — todas as fazendas do sistema.
+export async function buscarBenchmarkConcepcaoPorCategoriaSistema(categoria, safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_concepcao_por_categoria_sistema", { p_categoria: categoria, p_safra_nome: safraNome });
+  return formatarResposta(data, error);
+}
+
+// fertilidade por CATEGORIA — todas as fazendas do sistema.
+export async function buscarBenchmarkFertilidadePorCategoriaSistema(categoria, safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_fertilidade_por_categoria_sistema", { p_categoria: categoria, p_safra_nome: safraNome });
+  return formatarResposta(data, error);
+}

@@ -16,6 +16,12 @@ import { supabase, supabaseConfigurado } from "./supabaseClient.js";
 const toSnake = (s) => s.replace(/([A-Z])/g, "_$1").toLowerCase();
 const toCamel = (s) => s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
 
+// "usuarios.id" precisa ser um uuid de verdade (o mesmo do Supabase Auth) — diferente de
+// quase todas as outras tabelas, que usam um id de texto gerado no cliente. Um registro de
+// usuário com id inválido (ex.: criado offline, num bug já corrigido) não pode ser
+// sincronizado — mas não pode travar o envio dos demais usuários válidos também.
+const REGEX_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function linhaParaSupabase(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj)) out[toSnake(k)] = v;
@@ -58,13 +64,28 @@ async function enviarColecao(colecao, itens) {
   const tabela = TABELAS[colecao];
   if (!tabela) return { ok: true, enviados: 0 };
   const remover = CAMPOS_SO_LOCAIS[colecao] || [];
-  const linhas = itens.map((item) => {
+
+  let validos = itens;
+  let invalidos = [];
+  if (colecao === "usuarios") {
+    validos = itens.filter((u) => REGEX_UUID.test(u.id));
+    invalidos = itens.filter((u) => !REGEX_UUID.test(u.id));
+  }
+  const avisoInvalidos = invalidos.length > 0
+    ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
+    : null;
+  if (validos.length === 0) {
+    return avisoInvalidos ? { ok: false, erro: avisoInvalidos } : { ok: true, enviados: 0 };
+  }
+
+  const linhas = validos.map((item) => {
     const limpo = { ...item };
     remover.forEach((campo) => delete limpo[campo]);
     return linhaParaSupabase(limpo);
   });
   const { error } = await supabase.from(tabela).upsert(linhas, { onConflict: "id" });
   if (error) return { ok: false, erro: error.message };
+  if (avisoInvalidos) return { ok: false, enviados: linhas.length, erro: avisoInvalidos };
   return { ok: true, enviados: linhas.length };
 }
 
@@ -89,7 +110,7 @@ async function enviarAutorizacoes(usuarios) {
   if (!supabaseConfigurado || !usuarios || usuarios.length === 0) return { ok: true, erros: [] };
   const erros = [];
   for (const u of usuarios) {
-    if (!u.id) continue;
+    if (!u.id || !REGEX_UUID.test(u.id)) continue; // id inválido: nem tenta, já foi avisado em enviarColecao
     const fazendas = u.fazendasAutorizadas || [];
     const { error: erroDelete } = await supabase.from("usuario_fazendas").delete().eq("usuario_id", u.id);
     if (erroDelete) { erros.push(`${u.nome || u.id}: ${erroDelete.message}`); continue; }

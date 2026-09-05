@@ -9,7 +9,10 @@ import {
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos } from "./lib/db.js";
 import { sincronizar, buscarPerfilProprio } from "./lib/sync.js";
-import { buscarBenchmarkTaxaPrenhezSistema } from "./lib/benchmarking.js";
+import {
+  buscarBenchmarkTaxaPrenhezSistema, buscarBenchmarkTaxaFertilidadeSistema,
+  buscarBenchmarkConcepcaoPorOrdemSistema, buscarBenchmarkConcepcaoPorCategoriaSistema, buscarBenchmarkFertilidadePorCategoriaSistema,
+} from "./lib/benchmarking.js";
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
 import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario } from "./lib/auth.js";
 import logoImg from "./assets/logo.png";
@@ -1034,17 +1037,34 @@ export default function App() {
   // as duas tabelas ficam ligadas (ver supabase/schema.sql). Sem Supabase,
   // cai no cadastro só local de antes (sem senha real), para seguir
   // testável offline.
+  // gera um "login" internamente (a tela não pergunta mais isso ao usuário, já que ele nunca foi
+  // usado de fato para entrar no sistema — o login real sempre foi por e-mail/senha ou, no modo
+  // de teste, escolhendo o nome numa lista). A coluna no banco continua exigindo um valor único,
+  // então geramos algo razoável a partir do e-mail (ou do nome, se não houver e-mail).
+  const derivarLogin = (nome, email) => {
+    if (email) return email.split("@")[0].toLowerCase();
+    const base = (nome || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "");
+    return `${base || "usuario"}.${Math.random().toString(36).slice(2, 7)}`;
+  };
+
   const addUsuario = async (u) => {
     if (supabaseConfigurado && u.email && u.senha) {
       const r = await criarUsuario(u.email, u.senha);
       if (!r.ok) return { ok: false, erro: r.erro };
-      setUsers((a) => [...a, { id: r.authUserId, nome: u.nome, login: u.login, email: u.email, perfil: u.perfil, criadoPor: currentUser?.id || null, fazendasAutorizadas: [] }]);
+      setUsers((a) => [...a, { id: r.authUserId, nome: u.nome, login: derivarLogin(u.nome, u.email), email: u.email, perfil: u.perfil, criadoPor: currentUser?.id || null, fazendasAutorizadas: [] }]);
       marcaPendencia();
       return { ok: true, precisaConfirmarEmail: r.precisaConfirmarEmail };
     }
-    setUsers((a) => [...a, { ...u, id: uid("u"), criadoPor: currentUser?.id || null, fazendasAutorizadas: u.fazendasAutorizadas || [] }]);
+    setUsers((a) => [...a, { ...u, id: uid("u"), login: derivarLogin(u.nome, u.email), criadoPor: currentUser?.id || null, fazendasAutorizadas: u.fazendasAutorizadas || [] }]);
     marcaPendencia();
     return { ok: true };
+  };
+  // remove um usuário só localmente (do estado do app) — não apaga a conta de login real no
+  // Supabase Auth, caso exista uma. Pensada principalmente para limpar registros quebrados
+  // (ex.: usuários com id inválido que nunca chegaram a sincronizar de verdade).
+  const removerUsuario = (userId) => {
+    setUsers((a) => a.filter((u) => u.id !== userId));
+    marcaPendencia();
   };
   const toggleAutorizacaoFazenda = (userId, fazendaId) => {
     setUsers((a) => a.map((u) => u.id === userId
@@ -1272,7 +1292,7 @@ export default function App() {
 
   const gerarPreAgendamentos = (m) => {
     const addDiasISO = (iso, n) => ymd(addDays(parseISODate(iso), n));
-    const base = { loteNome: m.loteNome || "", retiroId: m.retiroId || null, ordem: m.ordem || null, origemAgendamentoId: m.origemAgendamentoId || null, numeroAnimais: m.numeroAnimais || null };
+    const base = { loteNome: m.loteNome || "", retiroId: m.retiroId || null, ordem: m.ordem || null, categoria: m.categoria || null, origemAgendamentoId: m.origemAgendamentoId || null, numeroAnimais: m.numeroAnimais || null };
     const sugerir = (tipo, dias, dataBase = m.data) => {
       const data = addDiasISO(dataBase, dias);
       criarPreAgendamento({ ...base, tipo, data, titulo: `${tipo} — ${base.loteNome}` });
@@ -1311,7 +1331,7 @@ export default function App() {
     const tipoInterno = TIPO_AGENDAMENTO_PARA_MANEJO[ag.tipo];
     if (tipoInterno) {
       gerarPreAgendamentos({
-        tipo: tipoInterno, data: ag.data, loteNome: ag.loteNome, retiroId: ag.retiroId, ordem: ag.ordem,
+        tipo: tipoInterno, data: ag.data, loteNome: ag.loteNome, retiroId: ag.retiroId, ordem: ag.ordem, categoria: ag.categoria,
         tipoManejo: ag.tipoManejo, protocolo: ag.protocolo, origemAgendamentoId: id, numeroAnimais: ag.numeroAnimais || null,
       });
     }
@@ -1329,7 +1349,7 @@ export default function App() {
     marcaPendencia();
     // a retirada, assim que agendada (mesmo ainda pendente de confirmação), já sugere a inseminação
     if (ag.tipo === "Retirada") {
-      gerarPreAgendamentos({ tipo: "retirada", data: ag.data, loteNome: ag.loteNome, retiroId: ag.retiroId, ordem: ag.ordem, origemAgendamentoId: id, numeroAnimais: ag.numeroAnimais || null });
+      gerarPreAgendamentos({ tipo: "retirada", data: ag.data, loteNome: ag.loteNome, retiroId: ag.retiroId, ordem: ag.ordem, categoria: ag.categoria, origemAgendamentoId: id, numeroAnimais: ag.numeroAnimais || null });
     }
   };
 
@@ -1338,7 +1358,7 @@ export default function App() {
     marcaPendencia();
     const ag = agendamentos.find((x) => x.id === id);
     if (ag && ag.tipo === "Retirada" && !existeSugestaoDeInseminacao(id)) {
-      gerarPreAgendamentos({ tipo: "retirada", data: ag.data, loteNome: ag.loteNome, retiroId: ag.retiroId, ordem: ag.ordem, origemAgendamentoId: id, numeroAnimais: ag.numeroAnimais || null });
+      gerarPreAgendamentos({ tipo: "retirada", data: ag.data, loteNome: ag.loteNome, retiroId: ag.retiroId, ordem: ag.ordem, categoria: ag.categoria, origemAgendamentoId: id, numeroAnimais: ag.numeroAnimais || null });
     }
   };
 
@@ -1363,7 +1383,7 @@ export default function App() {
       const tipoInterno = TIPO_AGENDAMENTO_PARA_MANEJO[atualizado.tipo];
       if (tipoInterno) {
         gerarPreAgendamentos({
-          tipo: tipoInterno, data: atualizado.data, loteNome: atualizado.loteNome, retiroId: atualizado.retiroId, ordem: atualizado.ordem,
+          tipo: tipoInterno, data: atualizado.data, loteNome: atualizado.loteNome, retiroId: atualizado.retiroId, ordem: atualizado.ordem, categoria: atualizado.categoria,
           tipoManejo: atualizado.tipoManejo, protocolo: atualizado.protocolo, origemAgendamentoId: id, numeroAnimais: atualizado.numeroAnimais || null,
         });
       }
@@ -1510,10 +1530,13 @@ export default function App() {
         input.campo-dose { -moz-appearance: textfield; appearance: textfield; }
         /* Relatórios: 3 gráficos lado a lado no computador, empilhados no celular */
         .grid-relatorios-3 { grid-template-columns: repeat(3, 1fr); }
+        /* Benchmarking: Resumo (1/3) + Taxa de concepção/fertilidade (2/3) lado a lado, empilhados no celular */
+        .grid-bench-2 { grid-template-columns: 1fr 2fr; }
         @media (max-width: 860px) {
           th { font-size: 10.5px; padding: 7px 8px; }
           td { padding: 8px 8px; font-size: 13px; }
           .grid-relatorios-3 { grid-template-columns: 1fr; }
+          .grid-bench-2 { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -1743,13 +1766,13 @@ export default function App() {
           </div>
 
           <div style={{ display: section === "usuarios" ? "block" : "none" }}>
-            <AbaUsuarios users={users} fazendas={fazendasVisiveis} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} />
+            <AbaUsuarios users={users} fazendas={fazendasVisiveis} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} removerUsuario={removerUsuario} currentUser={currentUser} />
           </div>
           <div style={{ display: section === "relatorios" ? "block" : "none" }}>
             <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil} />
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
-            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} safraAtiva={safraAtiva} safras={safras} />
+            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras} />
           </div>
           <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
             <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} />
@@ -2599,7 +2622,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     };
 
     const manejoId = registrarManejo({
-      tipo: "implantacao", loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, medicamentos, localEstoque,
+      tipo: "implantacao", loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos, localEstoque,
       implanteId, benzoatoId, doseBenzoato: dB, prostaglandinaId, doseProstaglandina: dP,
       gnrhId: gnrhId || null, doseGnrh: dG, data: dataManejo,
       animaisLidos: comLeitura ? animaisLidos.map((a) => a.brinco) : [],
@@ -3388,7 +3411,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
     };
 
     const manejoId = registrarManejo({
-      tipo: "retirada", loteId, loteNome, retiroId: retiroIdLote, ordem: loteAtual?.ordem || null, numeroAnimais: numBR(numeroAnimais), medicamentos, localEstoque,
+      tipo: "retirada", loteId, loteNome, retiroId: retiroIdLote, ordem: loteAtual?.ordem || null, numeroAnimais: numBR(numeroAnimais), protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos, localEstoque,
       prostaglandinaId, doseProstaglandina: dPGF, cipionatoId, doseCipionato: dCip, ecgHcgId, doseEcgHcg: dEH, data: dataManejo,
       perdasImplante: String(perdasImplante).trim() !== "" ? numBR(perdasImplante) : null,
       horarioInicial: horarioInicial || null, horarioFinal: horarioFinal || null,
@@ -3521,7 +3544,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             {comLeitura && (
               <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
-                  <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR ou digitar" value={brinco}
+                  <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder={loteId ? "Ler brinco / QR ou digitar" : "Selecione um lote antes"} value={brinco} disabled={!loteId}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
                   <Field label="ECC">
                     <select style={inputStyle} value={ecc} onChange={(e) => setEcc(e.target.value)}>
@@ -3529,8 +3552,8 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     </select>
                   </Field>
                   <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
-                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}>Registrar animal</BtnPrimary>
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
+                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }} disabled={!loteId}>Registrar animal</BtnPrimary>
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={!loteId} />
                 </div>
                 {animaisLidos.length === 0 ? (
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
@@ -3994,12 +4017,24 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, alignItems: "end" }}>
               <Field label="Identificação">
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
+                  <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
                     onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
                 </div>
               </Field>
+              {avisoImediato && (
+                <div style={{ gridColumn: "1 / -1", marginBottom: 4, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                  </div>
+                  {avisoImediato.avisos.map((a, i) => (
+                    <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                  ))}
+                  <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente; a confirmação final aparecerá ao registrar o animal.</p>
+                </div>
+              )}
               <Field label="Raça da matriz (opcional)">
                 <input style={inputStyle} list="racas-conhecidas" value={racaMatriz} onChange={(e) => { limparMsgSeSucesso(); setRacaMatriz(e.target.value); }} placeholder="Ex: Nelore" />
                 <datalist id="racas-conhecidas">
@@ -4044,21 +4079,8 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 labelDose="Dose (mL)"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => setDoseGnrh(e.target.value)} placeholder="0" />}
               />
-              <BtnPrimary onClick={adicionar} style={{ marginBottom: 14 }}>Registrar animal</BtnPrimary>
+              <BtnPrimary onClick={adicionar} style={{ marginBottom: 14 }} disabled={lotesSelecionados.length === 0}>Registrar animal</BtnPrimary>
             </div>
-
-            {avisoImediato && (
-              <div style={{ marginBottom: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
-                </div>
-                {avisoImediato.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
-                ))}
-                <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente; a confirmação final aparecerá ao registrar o animal.</p>
-              </div>
-            )}
 
             {pendente && (
               <div style={{ marginBottom: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
@@ -4450,11 +4472,11 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               </Field>
               <Field label="Leitura do animal (obrigatória)">
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
+                  <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
                     onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
-                  <BtnPrimary onClick={() => { if (brinco.trim()) conferirAoLer(); resultadoInputRef.current?.focus(); }}><ScanLine size={15} /></BtnPrimary>
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
+                  <BtnPrimary onClick={() => { if (brinco.trim()) conferirAoLer(); resultadoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0}><ScanLine size={15} /></BtnPrimary>
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
                 </div>
               </Field>
               <Field label="Resultado">
@@ -4671,13 +4693,21 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
     return diags.reduce((mais, atual) => (atual.data > mais.data ? atual : mais));
   };
 
-  // aviso imediato assim que o brinco é lido — antes mesmo do Resultado ser preenchido
-  const [avisoImediato, setAvisoImediato] = useState(null);
+  // aviso imediato assim que o brinco é lido — antes mesmo do Resultado ser preenchido: prenhez
+  // anterior E se o animal já pertence a outro lote diferente do(s) selecionado(s).
+  const [avisoImediato, setAvisoImediato] = useState(null); // { brinco, avisos: [] }
   const conferirAoLer = () => {
     const b = brinco.trim();
     if (!b) return;
+    const avisos = [];
     const prenhezAnterior = buscarPrenhezAnterior(b);
-    setAvisoImediato(prenhezAnterior ? { brinco: b, mensagem: `Este animal já tem um registro de Prenha em ${fmtDate(prenhezAnterior.data)}.` } : null);
+    if (prenhezAnterior) avisos.push(`Este animal já tem um registro de Prenha em ${fmtDate(prenhezAnterior.data)}.`);
+    const loteDoBicho = lotes.find((l) => (l.animais || []).includes(b));
+    if (loteDoBicho && !lotesSelecionados.includes(loteDoBicho.id)) {
+      const nomesSelecionados = lotes.filter((l) => lotesSelecionados.includes(l.id)).map((l) => l.nome).join(", ") || "—";
+      avisos.push(`Este animal já pertence ao lote "${loteDoBicho.nome}", diferente do(s) lote(s) selecionado(s) (${nomesSelecionados}).`);
+    }
+    setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
   };
 
   const adicionar = () => {
@@ -4750,10 +4780,10 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, alignItems: "end" }}>
               <Field label="Identificação (obrigatória)">
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
+                  <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
                     onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
                 </div>
               </Field>
               <Field label="Resultado">
@@ -4774,7 +4804,9 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                   <EarTag size="sm">{avisoImediato.brinco}</EarTag>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
                 </div>
-                <p style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {avisoImediato.mensagem}</p>
+                {avisoImediato.avisos.map((a, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                ))}
                 <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente.</p>
               </div>
             )}
@@ -5331,6 +5363,10 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
     const i = insumos.find((x) => x.id === id);
     return i ? nomeItem(i) : "—";
   };
+  const embalagemInsumo = (id) => {
+    const i = insumos.find((x) => x.id === id);
+    return i?.tamanhoEmbalagem != null ? `${i.tamanhoEmbalagem} ${i.unidadeEmbalagem || ""}`.trim() : "—";
+  };
 
   return (
     <div>
@@ -5453,12 +5489,13 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Últimas entradas — {categoriaTab}</div>
           {entradas.length === 0 ? <EmptyState text="Nenhuma entrada registrada ainda nesta categoria." /> : (
             <table>
-              <thead><tr><th>Item</th><th>Qtd.</th><th>Valor unitário</th><th>Valor total</th><th>Data</th><th></th></tr></thead>
+              <thead><tr><th>Item</th><th>Quantidade</th><th>Embalagem</th><th>Valor unitário</th><th>Valor total</th><th>Data</th><th></th></tr></thead>
               <tbody>
                 {entradas.map((m) => (
                   <tr key={m.id}>
                     <td>{nomeInsumo(m.insumoId)}</td>
                     <td>{m.quantidade}</td>
+                    <td>{embalagemInsumo(m.insumoId)}</td>
                     <td>{m.valorUnitario != null ? `R$ ${m.valorUnitario.toFixed(2)}` : "—"}</td>
                     <td>{m.valorUnitario != null ? `R$ ${(m.valorUnitario * m.quantidade).toFixed(2)}` : "—"}</td>
                     <td>{fmtDate(m.data)}</td>
@@ -5512,7 +5549,7 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
             ) : (
               <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
-                  <thead><tr><th>Insumo</th><th>Qtd.</th><th>Origem (manejo)</th><th>Data</th></tr></thead>
+                  <thead><tr><th>Insumo</th><th>Quantidade</th><th>Origem (manejo)</th><th>Data</th></tr></thead>
                   <tbody>
                     {itens.map((m) => (
                       <tr key={m.id}>
@@ -5674,7 +5711,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
     return () => (mq.removeEventListener ? mq.removeEventListener("change", aoMudar) : mq.removeListener(aoMudar));
   }, []);
 
-  const empty = { retiroId: "", loteNome: "", tipo: TIPOS_AGENDAMENTO[0], data: todayISO(), ordem: "", numeroAnimais: "", tipoManejo: TIPOS_MANEJO_IMPLANTACAO[0], protocolo: PROTOCOLOS_IMPLANTACAO[0] };
+  const empty = { retiroId: "", loteNome: "", categoria: "", tipo: TIPOS_AGENDAMENTO[0], data: todayISO(), ordem: "", numeroAnimais: "", tipoManejo: TIPOS_MANEJO_IMPLANTACAO[0], protocolo: PROTOCOLOS_IMPLANTACAO[0] };
   const [form, setForm] = useState(empty);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -5965,6 +6002,12 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                   {lotes.map((l) => <option key={l.id} value={l.nome} />)}
                 </datalist>
               </Field>
+              <Field label="Categoria">
+                <select style={inputStyle} value={form.categoria} onChange={set("categoria")}>
+                  <option value="">Selecione a categoria</option>
+                  {CATEGORIAS_LOTE.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
               <Field label="Manejo">
                 <select style={inputStyle} value={form.tipo} onChange={set("tipo")}>
                   {TIPOS_AGENDAMENTO.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -6184,16 +6227,20 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
 
 const PERFIS_USUARIO = ["Administrador", "Supervisor", "Inseminador"];
+// mesmo formato de uuid exigido pelo Supabase Auth/usuarios.id — usado só para avisar na tela
+// quando um usuário tem um id inválido (não vai sincronizar) e precisa ser excluído e recriado.
+const REGEX_UUID_USUARIO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) {
-  const empty = { nome: "", login: "", email: "", senha: "", perfil: "Inseminador" };
+function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, removerUsuario, currentUser }) {
+  const empty = { nome: "", email: "", senha: "", perfil: "Inseminador" };
   const [form, setForm] = useState(empty);
   const [usuarioAberto, setUsuarioAberto] = useState(null);
+  const [confirmarExclusaoId, setConfirmarExclusaoId] = useState(null);
   const [msg, setMsg] = useState("");
   const [salvando, setSalvando] = useState(false);
   const set = (k) => (e) => { setForm((f) => ({ ...f, [k]: e.target.value })); if (msg) setMsg(""); };
 
-  const canSave = form.nome.trim() !== "" && form.login.trim() !== ""
+  const canSave = form.nome.trim() !== ""
     && (!supabaseConfigurado || (form.email.trim() !== "" && form.senha.length >= 6));
 
   const salvar = async () => {
@@ -6227,7 +6274,6 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
           <Field label="Nome"><input style={inputStyle} value={form.nome} onChange={set("nome")} placeholder="Nome completo" /></Field>
-          <Field label="Login"><input style={inputStyle} value={form.login} onChange={set("login")} placeholder="usuario.login" /></Field>
           {supabaseConfigurado && (
             <>
               <Field label="E-mail (login de acesso)"><input type="email" style={inputStyle} value={form.email} onChange={set("email")} placeholder="pessoa@fazenda.com" /></Field>
@@ -6247,22 +6293,35 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
       <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Usuários cadastrados</div>
       <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
         <table>
-          <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Fazendas autorizadas</th><th></th></tr></thead>
+          <thead><tr><th>Nome</th><th>Perfil</th><th>Fazendas autorizadas</th><th></th><th></th></tr></thead>
           <tbody>
             {users.map((u) => {
               const cor = corPerfil(u.perfil);
               const aberto = usuarioAberto === u.id;
               const autorizadas = u.fazendasAutorizadas || [];
               const temAutorizacao = true; // todo perfil, inclusive Administrador, agora tem seu grupo próprio de fazendas
+              const idInvalido = !REGEX_UUID_USUARIO.test(u.id); // criado com bug antigo — nunca vai sincronizar
               return (
                 <React.Fragment key={u.id}>
                   <tr onClick={() => temAutorizacao && setUsuarioAberto(aberto ? null : u.id)} style={{ cursor: temAutorizacao ? "pointer" : "default" }}>
-                    <td>{u.nome}</td>
-                    <td>{u.login}</td>
+                    <td>{u.nome}{idInvalido && <span style={{ marginLeft: 6, fontSize: 10.5, color: "#A32D2D", fontWeight: 700 }}>⚠ não sincroniza</span>}</td>
                     <td><span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: cor.bg, color: cor.color }}>{u.perfil}</span></td>
                     <td>{temAutorizacao ? `${autorizadas.length} fazenda(s)` : "—"}</td>
                     <td style={{ textAlign: "right" }}>
                       {temAutorizacao && <ChevronRight size={15} color="#9B9686" style={{ transform: aberto ? "rotate(90deg)" : "none" }} />}
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right" }}>
+                      {u.id !== currentUser?.id && (
+                        confirmarExclusaoId === u.id ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 11, color: "#A32D2D" }}>Excluir?</span>
+                            <button onClick={() => { removerUsuario(u.id); setConfirmarExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Check size={14} /></button>
+                            <button onClick={() => setConfirmarExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
+                          </span>
+                        ) : (
+                          <button onClick={() => setConfirmarExclusaoId(u.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={13} /></button>
+                        )
+                      )}
                     </td>
                   </tr>
                   {aberto && temAutorizacao && (
@@ -6312,6 +6371,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
   const idsDesconhecidos = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
   const inseminacoes = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidos.has(m.loteId));
   const diagnosticos = manejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId));
+  const d0Ressinc = manejos.filter((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && !idsDesconhecidos.has(m.loteId));
 
   const nomeTouro = (semenId, touroInformado) => {
     if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.touro) return insumo.touro; }
@@ -6325,6 +6385,11 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
 
   const registros = [];
   inseminacoes.forEach((insem) => {
+    // D0/Ressinc mais recente do mesmo lote+ordem, feito até a data da Inseminação — é dali que
+    // vêm o protocolo padrão usado, a duração do protocolo e o número de manejos (3/4 manejos).
+    const candidatosD0 = d0Ressinc.filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.data <= insem.data);
+    const d0MaisRecente = candidatosD0.length > 0 ? candidatosD0.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)) : null;
+
     (insem.detalhes || []).forEach((detIns) => {
       const candidatas = diagnosticos.filter((d) =>
         d.ordem === insem.ordem && d.data >= insem.data && (d.detalhes || []).some((x) => x.brinco === detIns.brinco)
@@ -6340,6 +6405,9 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
+        protocoloPadrao: d0MaisRecente?.protocoloPadrao || null,
+        numeroManejos: d0MaisRecente?.tipoManejo || null,
+        duracaoProtocolo: d0MaisRecente?.protocolo || null,
       });
     });
   });
@@ -6366,23 +6434,27 @@ const CATEGORIAS_RESUMO = ["Nulípara", "Primípara", "Multípara"];
 
 function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimentos, perfil }) {
   const [visaoData, setVisaoData] = useState("dia"); // "dia" | "mes"
-  const [visaoBarra, setVisaoBarra] = useState("ordem"); // "ordem" | "categoria" | "retiro" | "ecc" | "inseminador"
+  const [visaoBarra, setVisaoBarra] = useState("ordem"); // "ordem" | "categoria" | "retiro" | "ecc" | "inseminador" | "paricao"
+  const [visaoProtocolo, setVisaoProtocolo] = useState("protocolo"); // "protocolo" | "manejos" | "duracao"
   const [visaoResumo, setVisaoResumo] = useState("animais"); // "animais" | "inseminacoes" | "prenhas"
   const [visaoGeral, setVisaoGeral] = useState("concepcao"); // "concepcao" | "fertilidade"
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || null;
 
-  // ---------- filtros de Retiro e Lote — reduzem todo o relatório a um recorte específico ----------
+  // ---------- filtros de Retiro, Lote e Categoria — reduzem todo o relatório a um recorte específico ----------
   const [filtroRetiroId, setFiltroRetiroId] = useState("");
   const [filtroLoteId, setFiltroLoteId] = useState("");
-  const lotesDoRetiroFiltro = filtroRetiroId ? lotes.filter((l) => l.retiroId === filtroRetiroId) : lotes;
-  // se o lote escolhido não pertencer mais ao retiro selecionado (trocou de retiro), limpa o filtro de lote
+  const [filtroCategoria, setFiltroCategoria] = useState("");
+  const lotesDoRetiroFiltro = lotes.filter((l) => (!filtroRetiroId || l.retiroId === filtroRetiroId) && (!filtroCategoria || l.categoria === filtroCategoria));
+  // se o lote escolhido não bater mais com o retiro ou a categoria selecionados, limpa o filtro de lote
   React.useEffect(() => {
     if (filtroLoteId && !lotesDoRetiroFiltro.some((l) => l.id === filtroLoteId)) setFiltroLoteId("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroRetiroId]);
-  const filtroAtivo = !!(filtroRetiroId || filtroLoteId);
+  }, [filtroRetiroId, filtroCategoria]);
+  const filtroAtivo = !!(filtroRetiroId || filtroLoteId || filtroCategoria);
   const idsLotesFiltrados = new Set(
-    lotes.filter((l) => (!filtroRetiroId || l.retiroId === filtroRetiroId) && (!filtroLoteId || l.id === filtroLoteId)).map((l) => l.id)
+    lotes.filter((l) =>
+      (!filtroRetiroId || l.retiroId === filtroRetiroId) && (!filtroLoteId || l.id === filtroLoteId) && (!filtroCategoria || l.categoria === filtroCategoria)
+    ).map((l) => l.id)
   );
   const lotesFiltrados = filtroAtivo ? lotes.filter((l) => idsLotesFiltrados.has(l.id)) : lotes;
   const manejosFiltrados = filtroAtivo ? manejos.filter((m) => idsLotesFiltrados.has(m.loteId)) : manejos;
@@ -6408,6 +6480,9 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     (r) => r.touro
   );
   const porMesParicao = agruparConcepcao(registros, (r) => r.mesParicao);
+  const porProtocoloPadrao = agruparConcepcao(registros, (r) => r.protocoloPadrao);
+  const porNumeroManejos = agruparConcepcao(registros, (r) => r.numeroManejos);
+  const porDuracaoProtocolo = agruparConcepcao(registros, (r) => r.duracaoProtocolo);
 
   const OPCOES_BARRA_CONCEPCAO = {
     ordem: { label: "Ordem", dados: porOrdem, descricao: "Taxa de concepção em cada ordem de IATF." },
@@ -6415,6 +6490,13 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     retiro: { label: "Retiro", dados: porRetiro, descricao: "Taxa de concepção por retiro." },
     ecc: { label: "ECC", dados: porEcc, descricao: "Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." },
     inseminador: { label: "Inseminador", dados: porInseminador, descricao: "Taxa de concepção por quem realizou a Inseminação." },
+    paricao: { label: "Parição", dados: porMesParicao, descricao: "Taxa de concepção por mês de parição do lote." },
+  };
+
+  const OPCOES_PROTOCOLO_CONCEPCAO = {
+    protocolo: { label: "Protocolo", dados: porProtocoloPadrao, descricao: "Taxa de concepção por protocolo padrão usado no D0/Ressinc." },
+    manejos: { label: "Manejos", dados: porNumeroManejos, descricao: "Taxa de concepção pelo número de manejos do protocolo (3 ou 4 manejos)." },
+    duracao: { label: "Duração", dados: porDuracaoProtocolo, descricao: "Taxa de concepção pela duração do protocolo usado no D0/Ressinc." },
   };
 
   // ---------- resumo do topo: Total de animais / Inseminações / Prenhas ----------
@@ -6500,6 +6582,11 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
               <option value="">Todos os retiros</option>
               {retiros.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
             </select>
+            <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}
+              style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
+              <option value="">Todas as categorias</option>
+              {CATEGORIAS_RESUMO.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
             <select value={filtroLoteId} onChange={(e) => setFiltroLoteId(e.target.value)}
               style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
               <option value="">Todos os lotes</option>
@@ -6574,10 +6661,19 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
 
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
             <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por mês de parição</div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por mês de parição do lote.</p>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por {OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].label.toLowerCase()}</div>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
+                {Object.entries(OPCOES_PROTOCOLO_CONCEPCAO).map(([key, op]) => (
+                  <button key={key} onClick={() => setVisaoProtocolo(key)}
+                    style={{
+                      padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                      background: visaoProtocolo === key ? "#166336" : "transparent", color: visaoProtocolo === key ? "#FFFFFF" : "#6B685E",
+                    }}>{op.label}</button>
+                ))}
+              </div>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].descricao}</p>
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <BarrasConcepcao dados={porMesParicao} compacto />
+                <BarrasConcepcao dados={OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].dados} compacto />
               </div>
             </div>
 
@@ -6707,11 +6803,11 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
       {lista.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
-            <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa}%</div>
-            <div style={{ width: compacto ? 28 : 44, height: `${Math.max((d.taxa / maiorTaxa) * 100, 3)}%`, background: "#166336", borderRadius: "4px 4px 0 0" }} />
+            <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa != null ? `${d.taxa}%` : "—"}</div>
+            <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * 100, 3) : 1}%`, background: d.taxa != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
-          <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>
+          {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>}
         </div>
       ))}
     </div>
@@ -6821,6 +6917,146 @@ function taxasDePrenhezPorFazenda(listaManejos) {
     .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
 }
 
+// taxa de FERTILIDADE por fazenda = Prenhas / total de animais nos lotes (diferente da taxa de
+// prenhez/concepção acima, que só considera quem já tem Diagnóstico). Lote "Desconhecidos" nunca entra.
+function taxasDeFertilidadePorFazenda(listaLotes, listaManejos) {
+  const idsDesconhecidos = new Set(listaLotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  const animaisPorFazenda = {};
+  listaLotes.filter((l) => !idsDesconhecidos.has(l.id)).forEach((l) => {
+    animaisPorFazenda[l.fazendaId] = (animaisPorFazenda[l.fazendaId] || 0) + (l.animais || []).length;
+  });
+  const prenhasPorFazenda = {};
+  listaManejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId)).forEach((m) => {
+    prenhasPorFazenda[m.fazendaId] = (prenhasPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length;
+  });
+  return Object.entries(animaisPorFazenda)
+    .filter(([, total]) => total > 0)
+    .map(([fazendaId, total]) => ({ fazendaId, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
+}
+
+// concepção por ORDEM (1º/2º/3º IATF ou "Repasse"), calculada no cliente para o escopo "Meu Grupo".
+function taxasDePrenhezPorOrdemPorFazenda(listaManejos, ordem) {
+  const porFazenda = {};
+  listaManejos
+    .filter((m) => (ordem === "Repasse" ? m.tipo === "diagnostico_repasse" : (m.tipo === "diagnostico" && m.ordem === ordem)))
+    .forEach((m) => {
+      if (!porFazenda[m.fazendaId]) porFazenda[m.fazendaId] = { prenhas: 0, avaliadas: 0 };
+      (m.detalhes || []).forEach((d) => {
+        porFazenda[m.fazendaId].avaliadas += 1;
+        if (d.resultado === "Prenha") porFazenda[m.fazendaId].prenhas += 1;
+      });
+    });
+  return Object.entries(porFazenda)
+    .filter(([, v]) => v.avaliadas > 0)
+    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+}
+
+// concepção por CATEGORIA (Nulípara/Primípara/Multípara) — a categoria não fica salva no manejo
+// de diagnóstico, então resolve via o lote (categoria atual dele).
+function taxasDePrenhezPorCategoriaPorFazenda(listaManejos, listaLotes, categoria) {
+  const categoriaDoLote = (loteId) => listaLotes.find((l) => l.id === loteId)?.categoria;
+  const porFazenda = {};
+  listaManejos.filter((m) => m.tipo === "diagnostico" && categoriaDoLote(m.loteId) === categoria).forEach((m) => {
+    if (!porFazenda[m.fazendaId]) porFazenda[m.fazendaId] = { prenhas: 0, avaliadas: 0 };
+    (m.detalhes || []).forEach((d) => {
+      porFazenda[m.fazendaId].avaliadas += 1;
+      if (d.resultado === "Prenha") porFazenda[m.fazendaId].prenhas += 1;
+    });
+  });
+  return Object.entries(porFazenda)
+    .filter(([, v]) => v.avaliadas > 0)
+    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+}
+
+// fertilidade por CATEGORIA — Prenhas daquela categoria / total de animais nos lotes daquela categoria.
+function taxasDeFertilidadePorCategoriaPorFazenda(listaLotes, listaManejos, categoria) {
+  const idsDesconhecidos = new Set(listaLotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  const categoriaDoLote = (loteId) => listaLotes.find((l) => l.id === loteId)?.categoria;
+  const animaisPorFazenda = {};
+  listaLotes.filter((l) => !idsDesconhecidos.has(l.id) && l.categoria === categoria).forEach((l) => {
+    animaisPorFazenda[l.fazendaId] = (animaisPorFazenda[l.fazendaId] || 0) + (l.animais || []).length;
+  });
+  const prenhasPorFazenda = {};
+  listaManejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId) && categoriaDoLote(m.loteId) === categoria).forEach((m) => {
+    prenhasPorFazenda[m.fazendaId] = (prenhasPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length;
+  });
+  return Object.entries(animaisPorFazenda)
+    .filter(([, total]) => total > 0)
+    .map(([fazendaId, total]) => ({ fazendaId, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
+}
+
+// card genérico de comparação (Sua Fazenda / Média Geral / Melhores / Piores) com botões pra
+// trocar a "opção" (ordem, categoria...) e o escopo (Meu Grupo / Geral do Sistema).
+function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSistema, safraAtiva, fazendaAtivaId }) {
+  const [opcaoAtual, setOpcaoAtual] = useState(opcoes[0].key);
+  const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
+  const [sistemaCache, setSistemaCache] = useState({});
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  React.useEffect(() => {
+    if (escopo !== "sistema" || !supabaseConfigurado) return;
+    setErro(""); setCarregando(true);
+    buscarTaxasSistema(opcaoAtual, safraAtiva?.nome || null).then((r) => {
+      if (r.ok) setSistemaCache((s) => ({ ...s, [opcaoAtual]: r }));
+      else setErro(r.motivo);
+      setCarregando(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escopo, opcaoAtual, safraAtiva?.nome]);
+
+  const taxasGrupo = calcularTaxasGrupo(opcaoAtual);
+  const suaFazenda = taxasGrupo.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
+  const statsGrupo = calcularEstatisticasBenchmark(taxasGrupo.map((f) => f.taxa));
+  const statsAtual = escopo === "grupo" ? statsGrupo : sistemaCache[opcaoAtual];
+
+  const avisoSistema = escopo === "sistema" && !supabaseConfigurado
+    ? 'A comparação "Geral do Sistema" precisa do Supabase configurado.'
+    : escopo === "sistema" && erro
+    ? `Não foi possível carregar: ${erro}`
+    : null;
+
+  return (
+    <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 8 }}>{titulo}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
+          {opcoes.map((op) => (
+            <button key={op.key} onClick={() => setOpcaoAtual(op.key)}
+              style={{
+                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                background: opcaoAtual === op.key ? "#166336" : "transparent", color: opcaoAtual === op.key ? "#FFFFFF" : "#6B685E",
+              }}>{op.label}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+          {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
+            <button key={key} onClick={() => setEscopo(key)}
+              style={{
+                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
+              }}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        {carregando && escopo === "sistema" ? (
+          <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
+        ) : avisoSistema ? (
+          <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {avisoSistema}</p>
+        ) : (
+          <BarrasConcepcao dados={[
+            { label: "Sua Fazenda", n: null, taxa: suaFazenda },
+            { label: "Média Geral", n: null, taxa: statsAtual?.mediaGeral ?? null },
+            { label: "Melhores", n: null, taxa: statsAtual?.mediaTop25 ?? null },
+            { label: "Piores", n: null, taxa: statsAtual?.mediaBottom25 ?? null },
+          ]} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // "média das médias": tira a média simples entre as taxas já calculadas por
 // fazenda (ex.: (42% + 35% + 54%) / 3) — nunca soma os animais de todas as
 // fazendas numa conta só — e separa as 25% melhores / 25% piores fazendas.
@@ -6887,43 +7123,101 @@ function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, av
   );
 }
 
-function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, safraAtiva, safras }) {
+function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDoGrupo, safraAtiva, safras }) {
   const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
-  const [sistema, setSistema] = useState(null);
+  const [visaoMetrica, setVisaoMetrica] = useState("concepcao"); // "concepcao" | "fertilidade"
+  const [visaoResumo, setVisaoResumo] = useState("matrizes"); // "matrizes" | "inseminacoes" | "prenhas"
+  const [sistemaConcepcao, setSistemaConcepcao] = useState(null);
+  const [sistemaFertilidade, setSistemaFertilidade] = useState(null);
   const [carregandoSistema, setCarregandoSistema] = useState(false);
   const [erroSistema, setErroSistema] = useState("");
 
-  // recarrega "Geral do Sistema" sempre que trocar de escopo OU de safra ativa —
+  // recarrega "Geral do Sistema" sempre que trocar de escopo, de safra ativa OU de métrica —
   // o filtro de safra precisa refletir no servidor também, não só no cálculo local.
   React.useEffect(() => {
     if (escopo !== "sistema" || !supabaseConfigurado) return;
-    setSistema(null); setErroSistema(""); setCarregandoSistema(true);
-    buscarBenchmarkTaxaPrenhezSistema(safraAtiva?.nome || null).then((r) => {
-      if (r.ok) setSistema(r); else setErroSistema(r.motivo);
+    setErroSistema(""); setCarregandoSistema(true);
+    const buscar = visaoMetrica === "concepcao" ? buscarBenchmarkTaxaPrenhezSistema : buscarBenchmarkTaxaFertilidadeSistema;
+    buscar(safraAtiva?.nome || null).then((r) => {
+      if (r.ok) (visaoMetrica === "concepcao" ? setSistemaConcepcao : setSistemaFertilidade)(r);
+      else setErroSistema(r.motivo);
       setCarregandoSistema(false);
     });
-  }, [escopo, safraAtiva?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [escopo, safraAtiva?.nome, visaoMetrica]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // filtra pela safra ativa comparando pelo NOME da safra (ex.: "2024/2025") — cada
   // fazenda tem seus próprios ids de safra, mas o nome é o que permite comparar a
   // "mesma safra" entre fazendas diferentes do grupo. Sem safra ativa selecionada,
   // usa o histórico completo (sem filtro).
-  const manejosDaSafra = useMemo(() => {
-    if (!safraAtiva) return manejosDoGrupo;
+  const filtrarPelaSafra = (lista, campoSafraId) => {
+    if (!safraAtiva) return lista;
     const idsDaMesmaSafra = new Set(safras.filter((s) => s.nome === safraAtiva.nome).map((s) => s.id));
-    return manejosDoGrupo.filter((m) => idsDaMesmaSafra.has(m.safraId));
-  }, [manejosDoGrupo, safras, safraAtiva]);
+    return lista.filter((item) => idsDaMesmaSafra.has(item[campoSafraId]));
+  };
+  const manejosDaSafra = useMemo(() => filtrarPelaSafra(manejosDoGrupo, "safraId"), [manejosDoGrupo, safras, safraAtiva]);
+  const lotesDaSafra = useMemo(() => filtrarPelaSafra(lotesDoGrupo, "safraId"), [lotesDoGrupo, safras, safraAtiva]);
 
-  const taxasGrupo = useMemo(() => taxasDePrenhezPorFazenda(manejosDaSafra), [manejosDaSafra]);
-  const statsGrupo = useMemo(() => calcularEstatisticasBenchmark(taxasGrupo.map((f) => f.taxa)), [taxasGrupo]);
-  const suaFazenda = taxasGrupo.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
+  const taxasGrupoConcepcao = useMemo(() => taxasDePrenhezPorFazenda(manejosDaSafra), [manejosDaSafra]);
+  const statsGrupoConcepcao = useMemo(() => calcularEstatisticasBenchmark(taxasGrupoConcepcao.map((f) => f.taxa)), [taxasGrupoConcepcao]);
+  const taxasGrupoFertilidade = useMemo(() => taxasDeFertilidadePorFazenda(lotesDaSafra, manejosDaSafra), [lotesDaSafra, manejosDaSafra]);
+  const statsGrupoFertilidade = useMemo(() => calcularEstatisticasBenchmark(taxasGrupoFertilidade.map((f) => f.taxa)), [taxasGrupoFertilidade]);
 
-  const statsAtual = escopo === "grupo" ? statsGrupo : sistema;
+  const taxasGrupoAtual = visaoMetrica === "concepcao" ? taxasGrupoConcepcao : taxasGrupoFertilidade;
+  const suaFazenda = taxasGrupoAtual.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
+  const statsAtual = escopo === "grupo"
+    ? (visaoMetrica === "concepcao" ? statsGrupoConcepcao : statsGrupoFertilidade)
+    : (visaoMetrica === "concepcao" ? sistemaConcepcao : sistemaFertilidade);
   const avisoSistema = escopo === "sistema" && !supabaseConfigurado
     ? 'A comparação "Geral do Sistema" precisa do Supabase configurado — ela olha fazendas de outros grupos, calculada no servidor sem expor nenhum dado bruto de ninguém, só as médias.'
     : escopo === "sistema" && erroSistema
     ? `Não foi possível carregar a comparação geral: ${erroSistema}`
     : null;
+
+  // ---------- Resumo (mesmo modelo do Relatório) — totais só da fazenda ativa ----------
+  const idsDesconhecidosBench = new Set(lotesDaSafra.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  const lotesFazenda = lotesDaSafra.filter((l) => l.fazendaId === fazendaAtivaId && !idsDesconhecidosBench.has(l.id));
+  const manejosFazenda = manejosDaSafra.filter((m) => m.fazendaId === fazendaAtivaId && !idsDesconhecidosBench.has(m.loteId));
+  const categoriaDoLoteBench = (loteId) => lotesDaSafra.find((l) => l.id === loteId)?.categoria;
+
+  const totalMatrizes = lotesFazenda.reduce((s, l) => s + (l.animais || []).length, 0);
+  const matrizesPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
+    label: `${cat}s`, valor: lotesFazenda.filter((l) => l.categoria === cat).reduce((s, l) => s + (l.animais || []).length, 0),
+  }));
+
+  const inseminacoesFazenda = manejosFazenda.filter((m) => m.tipo === "inseminacao");
+  const totalInseminacoes = inseminacoesFazenda.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+  const inseminacoesPorCategoriaBench = CATEGORIAS_RESUMO.map((cat) => ({
+    label: `${cat}s`, valor: inseminacoesFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
+  }));
+  const inseminacoesPorOrdemBench = ORDENS_IATF.map((ordem) => ({
+    label: ordem, valor: inseminacoesFazenda.filter((m) => m.ordem === ordem).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
+  }));
+
+  const contarPrenhasBench = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length, 0);
+  const diagnosticosFazenda = manejosFazenda.filter((m) => m.tipo === "diagnostico");
+  const diagnosticosRepasseFazenda = manejosFazenda.filter((m) => m.tipo === "diagnostico_repasse");
+  const totalPrenhas = contarPrenhasBench(diagnosticosFazenda) + contarPrenhasBench(diagnosticosRepasseFazenda);
+  const prenhasPorCategoriaBench = CATEGORIAS_RESUMO.map((cat) => ({
+    label: `${cat}s`,
+    valor: contarPrenhasBench(diagnosticosFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat))
+      + contarPrenhasBench(diagnosticosRepasseFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat)),
+  }));
+  const prenhasPorOrdemBench = [
+    ...ORDENS_IATF.map((ordem) => ({ label: ordem, valor: contarPrenhasBench(diagnosticosFazenda.filter((m) => m.ordem === ordem)) })),
+    { label: "Repasse", valor: contarPrenhasBench(diagnosticosRepasseFazenda) },
+  ];
+
+  const OPCOES_RESUMO_BENCH = {
+    matrizes: { label: "Matrizes", grupos: [{ titulo: "Por categoria", total: totalMatrizes, itens: matrizesPorCategoria }] },
+    inseminacoes: { label: "Inseminações", grupos: [
+      { titulo: "Por categoria", total: totalInseminacoes, itens: inseminacoesPorCategoriaBench },
+      { titulo: "Por ordem", total: totalInseminacoes, itens: inseminacoesPorOrdemBench },
+    ] },
+    prenhas: { label: "Prenhas", grupos: [
+      { titulo: "Por categoria", total: totalPrenhas, itens: prenhasPorCategoriaBench },
+      { titulo: "Por ordem", total: totalPrenhas, itens: prenhasPorOrdemBench },
+    ] },
+  };
 
   return (
     <div>
@@ -6933,29 +7227,100 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, safraAt
         <EmptyState text="Selecione uma fazenda ativa para comparar." />
       ) : (
         <>
-          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
-            {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
-              <button key={key} onClick={() => setEscopo(key)}
-                style={{
-                  padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                  background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
-                }}>{label}</button>
-            ))}
-          </div>
-          <p style={{ fontSize: 11.5, color: "#9B9686", marginTop: -12, marginBottom: 18 }}>
+          <p style={{ fontSize: 11.5, color: "#9B9686", marginBottom: 18 }}>
             {safraAtiva ? `Mostrando dados da safra ${safraAtiva.nome}.` : "Nenhuma safra ativa selecionada — mostrando todo o histórico."}
           </p>
 
-          <GraficoBenchmark
-            titulo="Taxa de prenhez geral (%)"
-            descricao={`Percentual de diagnósticos com resultado Prenha, comparado com ${escopo === "grupo" ? "as fazendas do seu grupo" : "todas as fazendas do sistema"}.`}
-            suaFazenda={suaFazenda}
-            stats={statsAtual}
-            carregando={escopo === "sistema" && carregandoSistema}
-            aviso={avisoSistema}
-          />
+          <div className="grid-bench-2" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Resumo</div>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content", flexWrap: "wrap" }}>
+                {Object.entries(OPCOES_RESUMO_BENCH).map(([key, op]) => (
+                  <button key={key} onClick={() => setVisaoResumo(key)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                      background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
+                    }}>{op.label}</button>
+                ))}
+              </div>
+              <div style={{ flex: 1, display: "flex", gap: 24, justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap", overflow: "hidden" }}>
+                {OPCOES_RESUMO_BENCH[visaoResumo].grupos.map((g) => (
+                  <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
+                ))}
+              </div>
+            </div>
 
-          <p style={{ fontSize: 11, color: "#9B9686" }}>Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.</p>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
+                {visaoMetrica === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+                  {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
+                    <button key={key} onClick={() => setVisaoMetrica(key)}
+                      style={{
+                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                        background: visaoMetrica === key ? "#166336" : "transparent", color: visaoMetrica === key ? "#FFFFFF" : "#6B685E",
+                      }}>{label}</button>
+                  ))}
+                </div>
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+                  {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
+                    <button key={key} onClick={() => setEscopo(key)}
+                      style={{
+                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                        background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
+                      }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                {carregandoSistema && escopo === "sistema" ? (
+                  <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
+                ) : avisoSistema ? (
+                  <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {avisoSistema}</p>
+                ) : (
+                  <BarrasConcepcao dados={[
+                    { label: "Sua Fazenda", n: null, taxa: suaFazenda },
+                    { label: "Geral", n: null, taxa: statsAtual?.mediaGeral ?? null },
+                    { label: "Melhores", n: null, taxa: statsAtual?.mediaTop25 ?? null },
+                    { label: "Piores", n: null, taxa: statsAtual?.mediaBottom25 ?? null },
+                  ]} />
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+            <CardBenchComparacao
+              titulo="Concepção por ordem"
+              opcoes={[...ORDENS_IATF.map((o) => ({ key: o, label: o })), { key: "Repasse", label: "Repasse" }]}
+              calcularTaxasGrupo={(ordem) => taxasDePrenhezPorOrdemPorFazenda(manejosDaSafra, ordem)}
+              buscarTaxasSistema={buscarBenchmarkConcepcaoPorOrdemSistema}
+              safraAtiva={safraAtiva}
+              fazendaAtivaId={fazendaAtivaId}
+            />
+            <CardBenchComparacao
+              titulo="Concepção por categoria"
+              opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
+              calcularTaxasGrupo={(cat) => taxasDePrenhezPorCategoriaPorFazenda(manejosDaSafra, lotesDaSafra, cat)}
+              buscarTaxasSistema={buscarBenchmarkConcepcaoPorCategoriaSistema}
+              safraAtiva={safraAtiva}
+              fazendaAtivaId={fazendaAtivaId}
+            />
+            <CardBenchComparacao
+              titulo="Fertilidade por categoria"
+              opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
+              calcularTaxasGrupo={(cat) => taxasDeFertilidadePorCategoriaPorFazenda(lotesDaSafra, manejosDaSafra, cat)}
+              buscarTaxasSistema={buscarBenchmarkFertilidadePorCategoriaSistema}
+              safraAtiva={safraAtiva}
+              fazendaAtivaId={fazendaAtivaId}
+            />
+          </div>
+
+          <p style={{ fontSize: 11, color: "#9B9686" }}>
+            Concepção considera só quem já tem Inseminação e Diagnóstico registrados; Fertilidade compara Prenhas com o total de animais nos lotes. Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.
+          </p>
         </>
       )}
     </div>

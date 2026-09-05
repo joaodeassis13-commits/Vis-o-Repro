@@ -135,6 +135,7 @@ create table if not exists manejos (
   mes_paricao text,
   tipo_manejo text,   -- '3 manejos' | '4 manejos' (D0/Ressinc)
   protocolo text,
+  protocolo_padrao text,  -- nome do protocolo padrão salvo (D0/Retirada, opcional)
   local_estoque text check (local_estoque in ('fazenda', 'externo')),
   operador text,
   inseminador text,  -- quem fisicamente aplicou a inseminação (pode ser diferente de quem registrou); inseminação
@@ -244,6 +245,7 @@ create table if not exists agendamentos (
   retiro_id text references retiros (id),
   lote_nome text,
   ordem text,
+  categoria text,
   numero_animais integer,
   tipo text not null,  -- 'Indução' | 'D0' | 'Retirada' | 'PGF 5' | 'Inseminação' | 'Diagnóstico' | 'Outro'
   tipo_manejo text,
@@ -256,8 +258,9 @@ create table if not exists agendamentos (
   criado_em timestamptz not null default now()
 );
 
--- garante a coluna mesmo em bancos criados antes dela existir
+-- garante as colunas mesmo em bancos criados antes delas existirem
 alter table agendamentos add column if not exists numero_animais integer;
+alter table agendamentos add column if not exists categoria text;
 
 -- =====================================================================
 -- RLS (row-level security) — cada usuário só vê as fazendas autorizadas
@@ -518,3 +521,303 @@ returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, 
 $$ language sql stable security definer set search_path = public;
 
 grant execute on function benchmarking_taxa_prenhez_grupo(text) to authenticated;
+
+-- taxa de FERTILIDADE (Prenhas / total de animais nos lotes, diferente da taxa de prenhez/concepção
+-- acima, que só considera quem já tem Diagnóstico) — mesma estrutura das duas funções anteriores,
+-- uma pro sistema todo, outra só pro grupo de quem chamou.
+drop function if exists benchmarking_taxa_fertilidade_sistema();
+create or replace function benchmarking_taxa_fertilidade_sistema(p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with prenhas_por_fazenda as (
+    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+    from manejos m
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico'
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+  ),
+  animais_por_fazenda as (
+    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
+    from lotes l
+    where l.nome <> 'Desconhecidos'
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
+    group by l.fazenda_id
+  ),
+  por_fazenda as (
+    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
+    from animais_por_fazenda a
+    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
+    where a.total_animais > 0
+  ),
+  tamanho as (
+    select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda
+  ),
+  ranqueadas as (
+    select
+      taxa,
+      row_number() over (order by taxa asc)  as posicao_da_pior,
+      row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_taxa_fertilidade_sistema(text) to authenticated;
+
+drop function if exists benchmarking_taxa_fertilidade_grupo();
+create or replace function benchmarking_taxa_fertilidade_grupo(p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with prenhas_por_fazenda as (
+    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+    from manejos m
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico'
+      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+  ),
+  animais_por_fazenda as (
+    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
+    from lotes l
+    where l.nome <> 'Desconhecidos'
+      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = l.fazenda_id)
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
+    group by l.fazenda_id
+  ),
+  por_fazenda as (
+    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
+    from animais_por_fazenda a
+    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
+    where a.total_animais > 0
+  ),
+  tamanho as (
+    select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda
+  ),
+  ranqueadas as (
+    select
+      taxa,
+      row_number() over (order by taxa asc)  as posicao_da_pior,
+      row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_taxa_fertilidade_grupo(text) to authenticated;
+
+-- ---------- concepção POR ORDEM (1º/2º/3º IATF ou "Repasse") ----------
+-- mesma metodologia (média das médias) das funções acima, mas filtrando por uma ordem específica.
+-- "Repasse" olha os manejos tipo 'diagnostico_repasse'; as demais olham 'diagnostico' com aquela ordem.
+drop function if exists benchmarking_concepcao_por_ordem_sistema(text);
+create or replace function benchmarking_concepcao_por_ordem_sistema(p_ordem text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with por_fazenda as (
+    select
+      m.fazenda_id,
+      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
+    from manejos m
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where (
+        (p_ordem = 'Repasse' and m.tipo = 'diagnostico_repasse')
+        or (p_ordem <> 'Repasse' and m.tipo = 'diagnostico' and m.ordem = p_ordem)
+      )
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+    having count(*) > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_concepcao_por_ordem_sistema(text, text) to authenticated;
+
+drop function if exists benchmarking_concepcao_por_ordem_grupo(text);
+create or replace function benchmarking_concepcao_por_ordem_grupo(p_ordem text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with por_fazenda as (
+    select
+      m.fazenda_id,
+      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
+    from manejos m
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where (
+        (p_ordem = 'Repasse' and m.tipo = 'diagnostico_repasse')
+        or (p_ordem <> 'Repasse' and m.tipo = 'diagnostico' and m.ordem = p_ordem)
+      )
+      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+    having count(*) > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_concepcao_por_ordem_grupo(text, text) to authenticated;
+
+-- ---------- concepção POR CATEGORIA (Nulípara/Primípara/Multípara) ----------
+-- a categoria não fica salva no manejo de diagnóstico, então cruza com o lote (categoria atual dele).
+drop function if exists benchmarking_concepcao_por_categoria_sistema(text);
+create or replace function benchmarking_concepcao_por_categoria_sistema(p_categoria text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with por_fazenda as (
+    select
+      m.fazenda_id,
+      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
+    from manejos m
+    join lotes l on l.id = m.lote_id
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico' and l.categoria = p_categoria
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+    having count(*) > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_concepcao_por_categoria_sistema(text, text) to authenticated;
+
+drop function if exists benchmarking_concepcao_por_categoria_grupo(text);
+create or replace function benchmarking_concepcao_por_categoria_grupo(p_categoria text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with por_fazenda as (
+    select
+      m.fazenda_id,
+      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
+    from manejos m
+    join lotes l on l.id = m.lote_id
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico' and l.categoria = p_categoria
+      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+    having count(*) > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_concepcao_por_categoria_grupo(text, text) to authenticated;
+
+-- ---------- fertilidade POR CATEGORIA (Nulípara/Primípara/Multípara) ----------
+-- Prenhas daquela categoria / total de animais nos lotes daquela categoria (não só quem tem Diagnóstico).
+drop function if exists benchmarking_fertilidade_por_categoria_sistema(text);
+create or replace function benchmarking_fertilidade_por_categoria_sistema(p_categoria text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with prenhas_por_fazenda as (
+    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+    from manejos m
+    join lotes l on l.id = m.lote_id
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico' and l.categoria = p_categoria
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+  ),
+  animais_por_fazenda as (
+    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
+    from lotes l
+    where l.nome <> 'Desconhecidos' and l.categoria = p_categoria
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
+    group by l.fazenda_id
+  ),
+  por_fazenda as (
+    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
+    from animais_por_fazenda a
+    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
+    where a.total_animais > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_fertilidade_por_categoria_sistema(text, text) to authenticated;
+
+drop function if exists benchmarking_fertilidade_por_categoria_grupo(text);
+create or replace function benchmarking_fertilidade_por_categoria_grupo(p_categoria text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with prenhas_por_fazenda as (
+    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+    from manejos m
+    join lotes l on l.id = m.lote_id
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico' and l.categoria = p_categoria
+      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+  ),
+  animais_por_fazenda as (
+    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
+    from lotes l
+    where l.nome <> 'Desconhecidos' and l.categoria = p_categoria
+      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = l.fazenda_id)
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
+    group by l.fazenda_id
+  ),
+  por_fazenda as (
+    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
+    from animais_por_fazenda a
+    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
+    where a.total_animais > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_fertilidade_por_categoria_grupo(text, text) to authenticated;
