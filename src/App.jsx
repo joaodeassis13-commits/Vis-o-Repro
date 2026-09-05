@@ -1456,9 +1456,12 @@ export default function App() {
         input.campo-dose::-webkit-outer-spin-button,
         input.campo-dose::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input.campo-dose { -moz-appearance: textfield; appearance: textfield; }
+        /* Relatórios: 3 gráficos lado a lado no computador, empilhados no celular */
+        .grid-relatorios-3 { grid-template-columns: repeat(3, 1fr); }
         @media (max-width: 860px) {
           th { font-size: 10.5px; padding: 7px 8px; }
           td { padding: 8px 8px; font-size: 13px; }
+          .grid-relatorios-3 { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -6315,14 +6318,16 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
         <EmptyState text="Ainda não há Inseminações com Diagnóstico correspondente para calcular a taxa de concepção. Os gráficos aparecem aqui assim que houver dados (animais do lote Desconhecidos não entram na conta)." />
       ) : (
         <>
-          <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} />
-          <GraficoColunas titulo="Concepção por ordem" descricao="Taxa de concepção em cada ordem de IATF." dados={porOrdem} />
-          <GraficoColunas titulo="Concepção por categoria" descricao="Taxa de concepção por categoria do lote no momento da Inseminação." dados={porCategoria} />
-          <GraficoColunas titulo="Concepção por retiro" descricao="Taxa de concepção por retiro." dados={porRetiro} />
-          <GraficoColunas titulo="Concepção por ECC na Inseminação" descricao="Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." dados={porEcc} />
-          <GraficoColunas titulo="Concepção por Inseminador" descricao="Taxa de concepção por quem realizou a Inseminação." dados={porInseminador} />
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 4 }}>
+            <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} compacto />
+            <GraficoColunas titulo="Concepção por ordem" descricao="Taxa de concepção em cada ordem de IATF." dados={porOrdem} compacto />
+            <GraficoColunas titulo="Concepção por categoria" descricao="Taxa de concepção por categoria do lote no momento da Inseminação." dados={porCategoria} compacto />
+            <GraficoColunas titulo="Concepção por retiro" descricao="Taxa de concepção por retiro." dados={porRetiro} compacto />
+            <GraficoColunas titulo="Concepção por ECC na Inseminação" descricao="Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." dados={porEcc} compacto />
+            <GraficoColunas titulo="Concepção por Inseminador" descricao="Taxa de concepção por quem realizou a Inseminação." dados={porInseminador} compacto />
+          </div>
 
-          <div style={{ ...cardStyle, marginBottom: 20 }}>
+          <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
               <div style={{ display: "flex", background: "#EFE8D6", borderRadius: 8, padding: 3, gap: 2 }}>
@@ -6336,7 +6341,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
               </div>
             </div>
             <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
-            <BarrasConcepcao dados={porData} />
+            <LinhaConcepcao dados={porData} />
           </div>
 
           <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
@@ -6350,30 +6355,65 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
 
 // barras de um gráfico de coluna — recebe [{ label, n, taxa }]. Usada tanto direto
 // (GraficoColunas) quanto dentro de um card com cabeçalho customizado (data de inseminação).
-function BarrasConcepcao({ dados, ordenarPorTaxaDesc }) {
+function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   const lista = ordenarPorTaxaDesc ? [...dados].sort((a, b) => b.taxa - a.taxa) : dados;
   if (lista.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorTaxa = Math.max(...lista.map((d) => d.taxa || 0), 10);
+  const alturaMax = compacto ? 90 : 140;
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "flex-end", gap: 16, height: 200, paddingTop: 10, overflowX: "auto" }}>
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "flex-end", gap: compacto ? 10 : 16, height: compacto ? 140 : 200, paddingTop: 10, overflowX: "auto" }}>
       {lista.map((d, i) => (
-        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 64, flexShrink: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#232520", marginBottom: 6 }}>{d.taxa}%</div>
-          <div style={{ width: 44, height: `${Math.max((d.taxa / maiorTaxa) * 140, 4)}px`, background: "#3B5D45", borderRadius: "4px 4px 0 0" }} />
-          <div style={{ fontSize: 11.5, color: "#6B685E", marginTop: 8, textAlign: "center", maxWidth: 84, wordBreak: "break-word" }}>{d.label}</div>
-          <div style={{ fontSize: 10.5, color: "#B0AA98" }}>n={d.n}</div>
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: compacto ? 48 : 64, flexShrink: 0 }}>
+          <div style={{ fontSize: compacto ? 12 : 13, fontWeight: 700, color: "#232520", marginBottom: 6 }}>{d.taxa}%</div>
+          <div style={{ width: compacto ? 32 : 44, height: `${Math.max((d.taxa / maiorTaxa) * alturaMax, 4)}px`, background: "#3B5D45", borderRadius: "4px 4px 0 0" }} />
+          <div style={{ fontSize: compacto ? 10.5 : 11.5, color: "#6B685E", marginTop: 8, textAlign: "center", maxWidth: compacto ? 64 : 84, wordBreak: "break-word" }}>{d.label}</div>
+          <div style={{ fontSize: compacto ? 9.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>
         </div>
       ))}
     </div>
   );
 }
 
-function GraficoColunas({ titulo, descricao, dados, ordenarPorTaxaDesc }) {
+function GraficoColunas({ titulo, descricao, dados, ordenarPorTaxaDesc, compacto }) {
   return (
-    <div style={{ ...cardStyle, marginBottom: 20 }}>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 4 }}>{titulo}</div>
-      <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>{descricao}</p>
-      <BarrasConcepcao dados={dados} ordenarPorTaxaDesc={ordenarPorTaxaDesc} />
+    <div style={{ ...cardStyle, marginBottom: compacto ? 0 : 20 }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: compacto ? 15 : 17, fontWeight: 600, color: "#232520", marginBottom: 4 }}>{titulo}</div>
+      <p style={{ fontSize: compacto ? 11.5 : 12, color: "#9B9686", margin: "0 0 16px" }}>{descricao}</p>
+      <BarrasConcepcao dados={dados} ordenarPorTaxaDesc={ordenarPorTaxaDesc} compacto={compacto} />
+    </div>
+  );
+}
+
+// gráfico de LINHA (SVG simples, sem biblioteca) para a Concepção por data de inseminação —
+// um ponto por data/mês, ligados por uma linha, com a taxa acima do ponto e "n" abaixo do eixo.
+function LinhaConcepcao({ dados }) {
+  if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
+  const alturaUtil = 130;
+  const margemTopo = 24;
+  const alturaTotal = alturaUtil + margemTopo + 40;
+  const largura = Math.max(dados.length * 70, 260);
+  const maiorTaxa = Math.max(...dados.map((d) => d.taxa || 0), 10);
+  const passoX = dados.length > 1 ? largura / (dados.length - 1) : 0;
+  const pontos = dados.map((d, i) => ({
+    ...d,
+    x: dados.length === 1 ? largura / 2 : i * passoX,
+    y: margemTopo + (alturaUtil - (d.taxa / maiorTaxa) * alturaUtil),
+  }));
+  const linha = pontos.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+  return (
+    <div className="rola-horizontal" style={{ overflowX: "auto" }}>
+      <svg width={largura + 20} height={alturaTotal} viewBox={`-10 0 ${largura + 20} ${alturaTotal}`}>
+        <path d={linha} fill="none" stroke="#3B5D45" strokeWidth="2" />
+        {pontos.map((p, i) => (
+          <g key={`${p.label}-${i}`}>
+            <circle cx={p.x} cy={p.y} r="4" fill="#3B5D45" />
+            <text x={p.x} y={p.y - 10} fontSize="11.5" fontWeight="700" fill="#232520" textAnchor="middle">{p.taxa}%</text>
+            <text x={p.x} y={margemTopo + alturaUtil + 18} fontSize="10.5" fill="#6B685E" textAnchor="middle">{p.label}</text>
+            <text x={p.x} y={margemTopo + alturaUtil + 32} fontSize="10" fill="#B0AA98" textAnchor="middle">n={p.n}</text>
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
