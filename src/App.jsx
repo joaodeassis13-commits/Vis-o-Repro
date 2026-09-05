@@ -6400,7 +6400,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
       if (!detDiag?.resultado) return;
       registros.push({
         brinco: detIns.brinco, prenha: detDiag.resultado === "Prenha", ordem: insem.ordem,
-        categoria: insem.categoria || null, retiroId: insem.retiroId || null,
+        categoria: insem.categoria || null, retiroId: insem.retiroId || null, fazendaId: insem.fazendaId,
         ecc: detIns.ecc || null, inseminador: insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
@@ -6804,7 +6804,7 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa != null ? `${d.taxa}%` : "—"}</div>
-            <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * 100, 3) : 1}%`, background: d.taxa != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
+            <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * 100, 3) : 1}%`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
           {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>}
@@ -6985,11 +6985,25 @@ function taxasDeFertilidadePorCategoriaPorFazenda(listaLotes, listaManejos, cate
     .map(([fazendaId, total]) => ({ fazendaId, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
 }
 
+// concepção por atributo do protocolo (número de manejos "3/4 manejos", ou duração) — usa os
+// registros já cruzados (Inseminação + Diagnóstico + D0/Ressinc) por construirRegistrosConcepcao,
+// só que agora agrupando por fazenda em vez de olhar só a fazenda ativa.
+function taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, campo, valor) {
+  const porFazenda = {};
+  registrosGrupo.filter((r) => r[campo] === valor).forEach((r) => {
+    if (!porFazenda[r.fazendaId]) porFazenda[r.fazendaId] = { prenhas: 0, avaliadas: 0 };
+    porFazenda[r.fazendaId].avaliadas += 1;
+    if (r.prenha) porFazenda[r.fazendaId].prenhas += 1;
+  });
+  return Object.entries(porFazenda)
+    .filter(([, v]) => v.avaliadas > 0)
+    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+}
+
 // card genérico de comparação (Sua Fazenda / Média Geral / Melhores / Piores) com botões pra
 // trocar a "opção" (ordem, categoria...) e o escopo (Meu Grupo / Geral do Sistema).
-function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSistema, safraAtiva, fazendaAtivaId }) {
+function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSistema, safraAtiva, fazendaAtivaId, escopo }) {
   const [opcaoAtual, setOpcaoAtual] = useState(opcoes[0].key);
-  const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
   const [sistemaCache, setSistemaCache] = useState({});
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
@@ -7019,25 +7033,14 @@ function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSi
   return (
     <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
       <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 8 }}>{titulo}</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-        <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
-          {opcoes.map((op) => (
-            <button key={op.key} onClick={() => setOpcaoAtual(op.key)}
-              style={{
-                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
-                background: opcaoAtual === op.key ? "#166336" : "transparent", color: opcaoAtual === op.key ? "#FFFFFF" : "#6B685E",
-              }}>{op.label}</button>
-          ))}
-        </div>
-        <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-          {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
-            <button key={key} onClick={() => setEscopo(key)}
-              style={{
-                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
-                background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
-              }}>{label}</button>
-          ))}
-        </div>
+      <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap", marginBottom: 8, width: "fit-content" }}>
+        {opcoes.map((op) => (
+          <button key={op.key} onClick={() => setOpcaoAtual(op.key)}
+            style={{
+              padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+              background: opcaoAtual === op.key ? "#166336" : "transparent", color: opcaoAtual === op.key ? "#FFFFFF" : "#6B685E",
+            }}>{op.label}</button>
+        ))}
       </div>
       <div style={{ flex: 1, overflow: "hidden" }}>
         {carregando && escopo === "sistema" ? (
@@ -7046,16 +7049,79 @@ function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSi
           <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {avisoSistema}</p>
         ) : (
           <BarrasConcepcao dados={[
-            { label: "Sua Fazenda", n: null, taxa: suaFazenda },
-            { label: "Média Geral", n: null, taxa: statsAtual?.mediaGeral ?? null },
-            { label: "Melhores", n: null, taxa: statsAtual?.mediaTop25 ?? null },
-            { label: "Piores", n: null, taxa: statsAtual?.mediaBottom25 ?? null },
+            { label: "Sua Fazenda", n: null, taxa: suaFazenda, cor: "#159FDB" },
+            { label: "Média Geral", n: null, taxa: statsAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
+            { label: "Melhores", n: null, taxa: statsAtual?.mediaTop25 ?? null, cor: "#166336" },
+            { label: "Piores", n: null, taxa: statsAtual?.mediaBottom25 ?? null, cor: "#C0392B" },
           ]} />
         )}
       </div>
     </div>
   );
 }
+
+// card específico de "Concepção por número de manejos/duração do protocolo" — diferente dos
+// outros, precisa de DOIS níveis de escolha: primeiro Manejos/Duração, depois o valor específico
+// (ex.: "3 manejos" ou uma duração concreta), já que os valores possíveis variam com os dados.
+function CardBenchProtocolo({ registrosGrupo, escopo, fazendaAtivaId }) {
+  const [modo, setModo] = useState("manejos"); // "manejos" | "duracao"
+  const campo = modo === "manejos" ? "numeroManejos" : "duracaoProtocolo";
+  const valoresDisponiveis = [...new Set(registrosGrupo.map((r) => r[campo]).filter(Boolean))];
+  const [valorAtual, setValorAtual] = useState(valoresDisponiveis[0] || null);
+
+  React.useEffect(() => {
+    const disponiveis = [...new Set(registrosGrupo.map((r) => r[campo]).filter(Boolean))];
+    if (!disponiveis.includes(valorAtual)) setValorAtual(disponiveis[0] || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modo, registrosGrupo]);
+
+  const taxasGrupo = valorAtual ? taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, campo, valorAtual) : [];
+  const suaFazenda = taxasGrupo.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
+  const stats = calcularEstatisticasBenchmark(taxasGrupo.map((f) => f.taxa));
+
+  return (
+    <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 8 }}>Concepção por número de manejos/duração do protocolo</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+          {[["manejos", "Manejos"], ["duracao", "Duração"]].map(([key, label]) => (
+            <button key={key} onClick={() => setModo(key)}
+              style={{
+                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                background: modo === key ? "#166336" : "transparent", color: modo === key ? "#FFFFFF" : "#6B685E",
+              }}>{label}</button>
+          ))}
+        </div>
+        {valoresDisponiveis.length > 0 && (
+          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
+            {valoresDisponiveis.map((v) => (
+              <button key={v} onClick={() => setValorAtual(v)}
+                style={{
+                  padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                  background: valorAtual === v ? "#166336" : "transparent", color: valorAtual === v ? "#FFFFFF" : "#6B685E",
+                }}>{v}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        {escopo === "sistema" ? (
+          <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ Essa comparação ainda não está disponível para “Geral do Sistema”.</p>
+        ) : valoresDisponiveis.length === 0 ? (
+          <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>
+        ) : (
+          <BarrasConcepcao dados={[
+            { label: "Sua Fazenda", n: null, taxa: suaFazenda, cor: "#159FDB" },
+            { label: "Geral", n: null, taxa: stats.mediaGeral, cor: "#1F5C7A" },
+            { label: "Melhores", n: null, taxa: stats.mediaTop25, cor: "#166336" },
+            { label: "Piores", n: null, taxa: stats.mediaBottom25, cor: "#C0392B" },
+          ]} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 // "média das médias": tira a média simples entre as taxas já calculadas por
 // fazenda (ex.: (42% + 35% + 54%) / 3) — nunca soma os animais de todas as
@@ -7156,6 +7222,10 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
   };
   const manejosDaSafra = useMemo(() => filtrarPelaSafra(manejosDoGrupo, "safraId"), [manejosDoGrupo, safras, safraAtiva]);
   const lotesDaSafra = useMemo(() => filtrarPelaSafra(lotesDoGrupo, "safraId"), [lotesDoGrupo, safras, safraAtiva]);
+  // registros por animal (Inseminação + Diagnóstico + D0/Ressinc cruzados) de todo o grupo — usado
+  // pelo card "Concepção por número de manejos/duração do protocolo". Sem insumos aqui porque essa
+  // função só precisa desses dados quando resolve touro/raça, que este card não usa.
+  const registrosGrupo = useMemo(() => construirRegistrosConcepcao(manejosDaSafra, lotesDaSafra, []), [manejosDaSafra, lotesDaSafra]);
 
   const taxasGrupoConcepcao = useMemo(() => taxasDePrenhezPorFazenda(manejosDaSafra), [manejosDaSafra]);
   const statsGrupoConcepcao = useMemo(() => calcularEstatisticasBenchmark(taxasGrupoConcepcao.map((f) => f.taxa)), [taxasGrupoConcepcao]);
@@ -7227,11 +7297,20 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
         <EmptyState text="Selecione uma fazenda ativa para comparar." />
       ) : (
         <>
+          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content" }}>
+            {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
+              <button key={key} onClick={() => setEscopo(key)}
+                style={{
+                  padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                  background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
+                }}>{label}</button>
+            ))}
+          </div>
           <p style={{ fontSize: 11.5, color: "#9B9686", marginBottom: 18 }}>
             {safraAtiva ? `Mostrando dados da safra ${safraAtiva.nome}.` : "Nenhuma safra ativa selecionada — mostrando todo o histórico."}
           </p>
 
-          <div className="grid-bench-2" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Resumo</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content", flexWrap: "wrap" }}>
@@ -7254,25 +7333,14 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
                 {visaoMetrica === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
-                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-                  {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
-                    <button key={key} onClick={() => setVisaoMetrica(key)}
-                      style={{
-                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
-                        background: visaoMetrica === key ? "#166336" : "transparent", color: visaoMetrica === key ? "#FFFFFF" : "#6B685E",
-                      }}>{label}</button>
-                  ))}
-                </div>
-                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-                  {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
-                    <button key={key} onClick={() => setEscopo(key)}
-                      style={{
-                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
-                        background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
-                      }}>{label}</button>
-                  ))}
-                </div>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
+                {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
+                  <button key={key} onClick={() => setVisaoMetrica(key)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                      background: visaoMetrica === key ? "#166336" : "transparent", color: visaoMetrica === key ? "#FFFFFF" : "#6B685E",
+                    }}>{label}</button>
+                ))}
               </div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {carregandoSistema && escopo === "sistema" ? (
@@ -7281,24 +7349,23 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
                   <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {avisoSistema}</p>
                 ) : (
                   <BarrasConcepcao dados={[
-                    { label: "Sua Fazenda", n: null, taxa: suaFazenda },
-                    { label: "Geral", n: null, taxa: statsAtual?.mediaGeral ?? null },
-                    { label: "Melhores", n: null, taxa: statsAtual?.mediaTop25 ?? null },
-                    { label: "Piores", n: null, taxa: statsAtual?.mediaBottom25 ?? null },
+                    { label: "Sua Fazenda", n: null, taxa: suaFazenda, cor: "#159FDB" },
+                    { label: "Geral", n: null, taxa: statsAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
+                    { label: "Melhores", n: null, taxa: statsAtual?.mediaTop25 ?? null, cor: "#166336" },
+                    { label: "Piores", n: null, taxa: statsAtual?.mediaBottom25 ?? null, cor: "#C0392B" },
                   ]} />
                 )}
               </div>
             </div>
-          </div>
 
-          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
             <CardBenchComparacao
-              titulo="Concepção por ordem"
-              opcoes={[...ORDENS_IATF.map((o) => ({ key: o, label: o })), { key: "Repasse", label: "Repasse" }]}
-              calcularTaxasGrupo={(ordem) => taxasDePrenhezPorOrdemPorFazenda(manejosDaSafra, ordem)}
-              buscarTaxasSistema={buscarBenchmarkConcepcaoPorOrdemSistema}
+              titulo="Fertilidade por categoria"
+              opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
+              calcularTaxasGrupo={(cat) => taxasDeFertilidadePorCategoriaPorFazenda(lotesDaSafra, manejosDaSafra, cat)}
+              buscarTaxasSistema={buscarBenchmarkFertilidadePorCategoriaSistema}
               safraAtiva={safraAtiva}
               fazendaAtivaId={fazendaAtivaId}
+              escopo={escopo}
             />
             <CardBenchComparacao
               titulo="Concepção por categoria"
@@ -7307,15 +7374,18 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               buscarTaxasSistema={buscarBenchmarkConcepcaoPorCategoriaSistema}
               safraAtiva={safraAtiva}
               fazendaAtivaId={fazendaAtivaId}
+              escopo={escopo}
             />
             <CardBenchComparacao
-              titulo="Fertilidade por categoria"
-              opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
-              calcularTaxasGrupo={(cat) => taxasDeFertilidadePorCategoriaPorFazenda(lotesDaSafra, manejosDaSafra, cat)}
-              buscarTaxasSistema={buscarBenchmarkFertilidadePorCategoriaSistema}
+              titulo="Concepção por ordem"
+              opcoes={[...ORDENS_IATF.map((o) => ({ key: o, label: o })), { key: "Repasse", label: "Repasse" }]}
+              calcularTaxasGrupo={(ordem) => taxasDePrenhezPorOrdemPorFazenda(manejosDaSafra, ordem)}
+              buscarTaxasSistema={buscarBenchmarkConcepcaoPorOrdemSistema}
               safraAtiva={safraAtiva}
               fazendaAtivaId={fazendaAtivaId}
+              escopo={escopo}
             />
+            <CardBenchProtocolo registrosGrupo={registrosGrupo} escopo={escopo} fazendaAtivaId={fazendaAtivaId} />
           </div>
 
           <p style={{ fontSize: 11, color: "#9B9686" }}>
