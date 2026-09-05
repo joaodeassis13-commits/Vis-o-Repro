@@ -13,7 +13,7 @@ html, body {
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #FFFFFF;
+  background: #F5F5F5;
   -webkit-user-select: none;
   user-select: none; /* evita selecionar texto sem querer ao arrastar/tocar, como num app nativo */
 }
@@ -48,13 +48,13 @@ table {
 th, td {
   text-align: left;
   padding: 8px 10px;
-  border-bottom: 1px solid #D9E5DC;
+  border-bottom: 1px solid #E5DFCC;
   white-space: nowrap;
 }
 
 th {
   font-size: 11px;
   text-transform: uppercase;
-  color: #77B589;
+  color: #9B9686;
   font-weight: 700;
 }
