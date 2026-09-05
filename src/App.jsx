@@ -255,7 +255,7 @@ const inputStyle = {
   boxSizing: "border-box",
 };
 const labelStyle = { fontSize: 12, fontWeight: 600, color: "#0B4D2A", marginBottom: 5, display: "block", textTransform: "uppercase", letterSpacing: "0.4px" };
-const cardStyle = { background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 12, padding: "18px 20px" };
+const cardStyle = { background: "#EEEEEE", border: "1px solid #E5DFCC", borderRadius: 12, padding: "18px 20px" };
 
 function Field({ label, children }) {
   return (
