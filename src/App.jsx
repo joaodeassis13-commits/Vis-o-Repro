@@ -232,8 +232,8 @@ function SectionTitle({ icon: Icon, title, subtitle }) {
   return (
     <div style={{ marginBottom: 22 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 8, background: "#EEE8D8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon size={18} color="#166336" />
+        <div style={{ width: 34, height: 34, borderRadius: 8, background: "#166336", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon size={18} color="#FFFFFF" />
         </div>
         <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: "#232520", margin: 0 }}>{title}</h2>
       </div>
@@ -246,11 +246,11 @@ const inputStyle = {
   width: "100%",
   padding: "9px 11px",
   borderRadius: 7,
-  border: "1px solid #D8D2C0",
+  border: "1px solid #D6D6D6",
   fontSize: 14,
   fontFamily: "'Work Sans', sans-serif",
   color: "#232520",
-  background: "#FBF9F3",
+  background: "#FFFFFF",
   outline: "none",
   boxSizing: "border-box",
 };
@@ -287,7 +287,7 @@ function BtnPrimary({ children, onClick, style, type = "button", disabled }) {
       disabled={disabled}
       style={{
         display: "inline-flex", alignItems: "center", gap: 6,
-        background: disabled ? "#C7B9A0" : "#166336", color: "#FFF6E9",
+        background: disabled ? "#C4C4C4" : "#166336", color: "#FFFFFF",
         border: "none", borderRadius: 8, padding: "9px 16px",
         fontSize: 13.5, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
         fontFamily: "'Work Sans', sans-serif",
@@ -343,14 +343,14 @@ function useAvisarSaidaComPendencia(haPendencia) {
 
 function SeletorLocalEstoque({ local, setLocal, style }) {
   return (
-    <div style={{ display: "flex", background: "#EEE8D8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content", ...style }}>
+    <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content", ...style }}>
       {[["fazenda", "Estoque da fazenda"], ["externo", "Estoque externo"]].map(([key, label]) => (
         <button key={key} onClick={() => setLocal(key)}
           style={{
             padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer",
             fontSize: 12.5, fontWeight: 600,
             background: local === key ? "#166336" : "transparent",
-            color: local === key ? "#F5EFDD" : "#6B685E",
+            color: local === key ? "#FFFFFF" : "#6B685E",
           }}>{label}</button>
       ))}
     </div>
@@ -412,14 +412,14 @@ function ScannerCodigoBarras({ aberto, onFechar, onDetectado }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,15,12,0.92)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ color: "#F5EFDD", fontSize: 14, fontWeight: 600 }}>Aponte para o código de barras / QR do brinco</span>
-          <button onClick={onFechar} style={{ background: "none", border: "none", color: "#F5EFDD", cursor: "pointer", padding: 4 }} aria-label="Fechar leitor">
+          <span style={{ color: "#FFFFFF", fontSize: 14, fontWeight: 600 }}>Aponte para o código de barras / QR do brinco</span>
+          <button onClick={onFechar} style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", padding: 4 }} aria-label="Fechar leitor">
             <X size={22} />
           </button>
         </div>
         <div id={divId} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#000" }} />
         {erro && <p style={{ color: "#E3A45C", fontSize: 12.5, marginTop: 10 }}>{erro}</p>}
-        <button onClick={onFechar} style={{ marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid #4C6E56", background: "transparent", color: "#F5EFDD", fontSize: 13, cursor: "pointer" }}>
+        <button onClick={onFechar} style={{ marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid #4C6E56", background: "transparent", color: "#FFFFFF", fontSize: 13, cursor: "pointer" }}>
           Cancelar e digitar manualmente
         </button>
       </div>
@@ -437,7 +437,7 @@ function BotaoCameraLeitura({ onLido, disabled }) {
         title="Ler identificação pela câmera (código de barras / QR)"
         style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          width: 38, height: 38, borderRadius: 8, border: "1px solid #D8D2C0", background: "#FBF9F3",
+          width: 38, height: 38, borderRadius: 8, border: "1px solid #D6D6D6", background: "#FFFFFF",
           color: "#4A473E", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, flexShrink: 0,
         }}>
         <Camera size={16} />
@@ -483,7 +483,7 @@ function CampoMedicamentos({ insumos, local, selecionados, setSelecionados }) {
           {selecionados.map((s) => {
             const m = insumos.find((i) => i.id === s.medicamentoId);
             return (
-              <span key={s.medicamentoId} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEE8D8", border: "1px solid #DCD2B3", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+              <span key={s.medicamentoId} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                 {m?.produtoComercial} ({s.dose} {m?.unidadeEmbalagem})
                 <button onClick={() => remover(s.medicamentoId)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
               </span>
@@ -541,7 +541,7 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
             <div style={{ fontSize: 12, color: "#9B9686" }}>Controle de IATF a campo</div>
           </div>
         </div>
-        <div style={{ height: 1, background: "#EEE8D8", margin: "20px 0" }} />
+        <div style={{ height: 1, background: "#EEEEEE", margin: "20px 0" }} />
 
         {supabaseConfigurado ? (
           <>
@@ -1450,8 +1450,8 @@ export default function App() {
         select, input { font-family: 'Work Sans', sans-serif; }
         table { border-collapse: collapse; width: 100%; }
         th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #8B8676; padding: 8px 10px; border-bottom: 1px solid #E5DFCC; }
-        td { padding: 9px 10px; font-size: 13.5px; color: #159FDB; border-bottom: 1px solid #F0EBDD; }
-        tr:hover td { background: #FBF8EF; }
+        td { padding: 9px 10px; font-size: 13.5px; color: #159FDB; border-bottom: 1px solid #F0F0F0; }
+        tr:hover td { background: #F8F8F8; }
         /* campos de dose: remove as setas de aumentar/diminuir do number input, deixando livre para digitar */
         input.campo-dose::-webkit-outer-spin-button,
         input.campo-dose::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -1474,7 +1474,7 @@ export default function App() {
       {/* SIDEBAR — fixa na lateral em telas largas; menu retrátil (fora da tela até abrir) no celular */}
       <aside style={{
         width: isMobile ? "82vw" : 224, maxWidth: isMobile ? 300 : "none",
-        background: "#083C26", color: "#F5EFDD", display: "flex", flexDirection: "column", flexShrink: 0,
+        background: "#083C26", color: "#FFFFFF", display: "flex", flexDirection: "column", flexShrink: 0,
         ...(isMobile ? {
           position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50,
           transform: menuAberto ? "translateX(0)" : "translateX(-100%)",
@@ -1486,7 +1486,7 @@ export default function App() {
           <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 18 }}>VArepro</div>
           {isMobile && (
             <button onClick={() => setMenuAberto(false)} aria-label="Fechar menu"
-              style={{ marginLeft: "auto", background: "none", border: "none", color: "#F5EFDD", cursor: "pointer", padding: 4 }}>
+              style={{ marginLeft: "auto", background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", padding: 4 }}>
               <X size={20} />
             </button>
           )}
@@ -1502,7 +1502,7 @@ export default function App() {
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 10,
                   padding: "10px 12px", marginBottom: 3, borderRadius: 8, border: "none",
-                  background: active ? "#166336" : "transparent", color: active ? "#F5EFDD" : "#C9CBB9",
+                  background: active ? "#166336" : "transparent", color: active ? "#FFFFFF" : "#CCCCCC",
                   fontSize: 13.5, fontWeight: 500, cursor: "pointer", textAlign: "left",
                 }}>
                 <Icon size={16} />
@@ -1524,7 +1524,7 @@ export default function App() {
                   value={fazendaAtivaId}
                   onChange={(e) => setFazendaAtivaId(e.target.value)}
                   style={{
-                    width: "100%", background: "#166336", color: "#F5EFDD", border: "1px solid #4C6E56",
+                    width: "100%", background: "#166336", color: "#FFFFFF", border: "1px solid #4C6E56",
                     borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                   }}>
                   {fazendasVisiveis.length === 0 && <option value="">Nenhuma fazenda</option>}
@@ -1537,7 +1537,7 @@ export default function App() {
                   value={safraAtivaId}
                   onChange={(e) => setSafraAtivaId(e.target.value)}
                   style={{
-                    width: "100%", background: "#166336", color: "#F5EFDD", border: "1px solid #4C6E56",
+                    width: "100%", background: "#166336", color: "#FFFFFF", border: "1px solid #4C6E56",
                     borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                   }}>
                   {safrasAtivas.length === 0 && <option value="">Nenhuma safra</option>}
@@ -1547,7 +1547,7 @@ export default function App() {
             </>
           )}
           <div style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #3F5B49", marginBottom: 8, fontSize: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#C9CBB9", marginBottom: supabaseConfigurado ? 6 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#CCCCCC", marginBottom: supabaseConfigurado ? 6 : 0 }}>
               {online ? <Wifi size={14} color="#8FBF7A" /> : <WifiOff size={14} color="#E3A45C" />}
               {online ? "Conectado" : "Sem internet — salvando localmente"}
               {pendencias > 0 && ` · ${pendencias} alteração(ões) não sincronizada(s)`}
@@ -1557,7 +1557,7 @@ export default function App() {
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                   padding: "6px 8px", borderRadius: 6, border: "1px solid #4C6E56",
-                  background: "transparent", color: online ? "#C9CBB9" : "#6B7A6F", fontSize: 11.5,
+                  background: "transparent", color: online ? "#CCCCCC" : "#6B7A6F", fontSize: 11.5,
                   cursor: online && !sincronizando ? "pointer" : "not-allowed",
                 }}>
                 <RefreshCw size={12} />
@@ -1576,7 +1576,7 @@ export default function App() {
               <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser.nome}</div>
               <div style={{ fontSize: 10.5, color: "#9FA890" }}>{currentUser.perfil}</div>
             </div>
-            <button onClick={() => (supabaseConfigurado ? sairDaConta() : setCurrentUser(null))} title="Sair" style={{ background: "transparent", border: "none", color: "#C9CBB9", cursor: "pointer" }}>
+            <button onClick={() => (supabaseConfigurado ? sairDaConta() : setCurrentUser(null))} title="Sair" style={{ background: "transparent", border: "none", color: "#CCCCCC", cursor: "pointer" }}>
               <LogOut size={15} />
             </button>
           </div>
@@ -1586,9 +1586,9 @@ export default function App() {
       {/* CONTEÚDO */}
       <main style={{ flex: 1, minWidth: 0 }}>
         {isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#083C26", color: "#F5EFDD", position: "sticky", top: 0, zIndex: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#083C26", color: "#FFFFFF", position: "sticky", top: 0, zIndex: 20 }}>
             <button onClick={() => setMenuAberto(true)} aria-label="Abrir menu"
-              style={{ background: "none", border: "none", color: "#F5EFDD", cursor: "pointer", padding: 4, display: "flex" }}>
+              style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", padding: 4, display: "flex" }}>
               <Menu size={22} />
             </button>
             <img src={logoImg} alt="VArepro" style={{ width: 26, height: 26, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} />
@@ -1596,7 +1596,7 @@ export default function App() {
           </div>
         )}
         {SUBTABS[section] && (
-          <div className={isMobile ? "rola-horizontal" : ""} style={{ display: "flex", gap: 6, padding: isMobile ? "12px 14px 0" : "16px 28px 0", borderBottom: "1px solid #E5DFCC", background: "#F6F1E4", overflowX: isMobile ? "auto" : "visible" }}>
+          <div className={isMobile ? "rola-horizontal" : ""} style={{ display: "flex", gap: 6, padding: isMobile ? "12px 14px 0" : "16px 28px 0", borderBottom: "1px solid #E5DFCC", background: "#FFFFFF", overflowX: isMobile ? "auto" : "visible" }}>
             {SUBTABS[section].map((t) => {
               const Icon = t.icon;
               const active = sub === t.key;
@@ -1612,7 +1612,7 @@ export default function App() {
                   <Icon size={14} />
                   {t.label}
                   {pendentesSubtab > 0 && (
-                    <span style={{ background: "#166336", color: "#FFF6E9", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentesSubtab}</span>
+                    <span style={{ background: "#166336", color: "#FFFFFF", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentesSubtab}</span>
                   )}
                 </button>
               );
@@ -1785,7 +1785,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
           ) : (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {retirosNovos.map((nome, i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEE8D8", border: "1px solid #DCD2B3", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                   <Building2 size={12} /> {nome}
                   <button onClick={() => removerRetiroNovo(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                 </span>
@@ -1806,7 +1806,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
           ) : (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {safrasNovas.map((ano, i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEE8D8", border: "1px solid #DCD2B3", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                   <Calendar size={12} /> {ano}/{Number(ano) + 1}
                   <button onClick={() => removerSafraNova(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                 </span>
@@ -1872,7 +1872,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                     </tr>
                     {aberta && (
                       <tr>
-                        <td colSpan={9} style={{ background: "#FBF9F3", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                        <td colSpan={9} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Retiros de {f.nome}</div>
                           <div style={{ display: "flex", gap: 8, marginBottom: 10, maxWidth: 380 }}>
                             <input style={inputStyle} placeholder="Nome do novo retiro" value={nomeRetiroExistente}
@@ -1883,7 +1883,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                           {rets.length === 0 ? <EmptyState text="Nenhum retiro cadastrado para esta fazenda." /> : (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
                               {rets.map((r) => (
-                                <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEE8D8", border: "1px solid #DCD2B3", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                                <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                                   <Building2 size={12} /> {r.nome}
                                   <button onClick={() => removeRetiro(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                                 </span>
@@ -1901,7 +1901,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                           {safs.length === 0 ? <EmptyState text="Nenhuma safra cadastrada para esta fazenda." /> : (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                               {safs.map((s) => (
-                                <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEE8D8", border: "1px solid #DCD2B3", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                                <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                                   <Calendar size={12} /> {s.nome}
                                   <button onClick={() => removeSafra(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                                 </span>
@@ -2080,7 +2080,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
             {erro && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 12 }}>⚠ {erro}</p>}
 
             {linhasValidas.length > 0 && (
-              <div style={{ marginTop: 16, background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
+              <div style={{ marginTop: 16, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
                 <p style={{ fontSize: 12.5, color: "#4A473E", margin: "0 0 6px" }}><strong>{arquivoNome}</strong></p>
                 <p style={{ fontSize: 12.5, color: "#166336", margin: "0 0 4px" }}>✓ {linhasValidas.length} animal(is) lido(s), em {lotesDistintos} lote(s) distinto(s).</p>
                 <p style={{ fontSize: 12.5, color: "#166336", margin: "0 0 4px" }}>
@@ -2287,7 +2287,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
             </div>
 
             {comLeitura && (
-              <div style={{ marginBottom: 14, background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lerAnimal()} />
@@ -2697,21 +2697,21 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
         <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos. Todo manejo e lote precisa pertencer a uma safra." />
       ) : (
         <>
-          <div style={{ display: "flex", background: "#EEE8D8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
             <button onClick={() => setAbaInterna("d0")}
               style={{
                 padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                background: abaInterna === "d0" ? "#166336" : "transparent", color: abaInterna === "d0" ? "#F5EFDD" : "#6B685E",
+                background: abaInterna === "d0" ? "#166336" : "transparent", color: abaInterna === "d0" ? "#FFFFFF" : "#6B685E",
               }}>D0</button>
             <button onClick={() => setAbaInterna("ressinc")}
               style={{
                 padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
                 display: "inline-flex", alignItems: "center", gap: 6,
-                background: abaInterna === "ressinc" ? "#166336" : "transparent", color: abaInterna === "ressinc" ? "#F5EFDD" : "#6B685E",
+                background: abaInterna === "ressinc" ? "#166336" : "transparent", color: abaInterna === "ressinc" ? "#FFFFFF" : "#6B685E",
               }}>
               Ressinc
               {sugestoesRessinc.length > 0 && (
-                <span style={{ background: "#166336", color: "#FFF6E9", borderRadius: 20, fontSize: 10.5, fontWeight: 700, padding: "1.5px 6px" }}>{sugestoesRessinc.length}</span>
+                <span style={{ background: "#166336", color: "#FFFFFF", borderRadius: 20, fontSize: 10.5, fontWeight: 700, padding: "1.5px 6px" }}>{sugestoesRessinc.length}</span>
               )}
             </button>
           </div>
@@ -2832,7 +2832,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             </div>
 
             {comLeitura && (
-              <div style={{ marginBottom: 14, background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
                   <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR ou digitar" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
@@ -3013,7 +3013,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           style={{
                             display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                             borderRadius: 20, padding: "4px 10px", fontSize: 12.5,
-                            background: selecionado ? "#EEE8D8" : "#EEE8D8", opacity: selecionado ? 1 : 0.55,
+                            background: selecionado ? "#EEEEEE" : "#EEEEEE", opacity: selecionado ? 1 : 0.55,
                           }}>
                           {selecionado ? <CheckCircle2 size={13} color="#166336" /> : <Circle size={13} color="#9B9686" />}
                           <EarTag size="sm">{b}</EarTag>
@@ -3033,10 +3033,10 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
                         <Field label="Categoria">
-                          <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={categoriaR} readOnly />
+                          <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={categoriaR} readOnly />
                         </Field>
                         <Field label="Ordem">
-                          <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={ordemR} readOnly />
+                          <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={ordemR} readOnly />
                         </Field>
                         <Field label="Número de manejos">
                           <select style={inputStyle} value={tipoManejoR} onChange={(e) => {
@@ -3390,7 +3390,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                 </select>
               </Field>
               <Field label="Ordem">
-                <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={loteAtual?.ordem || "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.ordem || "—"} readOnly />
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Protocolo padrão (opcional)">
@@ -3455,7 +3455,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             </div>
 
             {comLeitura && (
-              <div style={{ marginBottom: 14, background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
+              <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
                   <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR ou digitar" value={brinco}
                     onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
@@ -3885,7 +3885,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E6EFE5" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E6EFE5" : "#EEEEEE", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
                     }}>
                     {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
                     {l.nome} <span style={{ opacity: 0.7 }}>· {l.ordem || "—"}</span>
@@ -3897,7 +3897,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             {lotesSelecionados.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
                 <Field label="Ordem (comum aos lotes selecionados)">
-                  <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
+                  <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
                 </Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => setDataManejo(e.target.value)} /></Field>
                 <Field label="Retiro / Categoria por lote">
@@ -4363,7 +4363,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E6EFE5" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E6EFE5" : "#EEEEEE", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
                     }}>
                     {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
                     {l.nome} <span style={{ opacity: 0.7 }}>— {l.categoria} · {l.ordem || "—"}</span>
@@ -4374,7 +4374,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
             {msgLote && <p style={{ fontSize: 12.5, color: "#A32D2D", margin: "0 0 10px" }}>⚠ {msgLote}</p>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, alignItems: "end" }}>
               <Field label="Ordem (comum aos lotes selecionados)">
-                <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
               </Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <Field label="Destino para vazias">
@@ -4675,7 +4675,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E6EFE5" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E6EFE5" : "#EEEEEE", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
                     }}>
                     {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
                     {l.nome}
@@ -4778,16 +4778,16 @@ function AbaDiagnostico(props) {
     <div>
       <SectionTitle icon={UltrasoundIcon} title="Diagnóstico" subtitle="Escolha se o diagnóstico é da Inseminação ou do Repasse." />
       <FazendaAtivaBanner fazendaAtiva={props.fazendaAtiva} />
-      <div style={{ display: "flex", background: "#EEE8D8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+      <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
         <button onClick={() => setAbaInterna("inseminacao")}
           style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "inseminacao" ? "#166336" : "transparent", color: abaInterna === "inseminacao" ? "#F5EFDD" : "#6B685E",
+            background: abaInterna === "inseminacao" ? "#166336" : "transparent", color: abaInterna === "inseminacao" ? "#FFFFFF" : "#6B685E",
           }}>Diagnóstico de Inseminação</button>
         <button onClick={() => setAbaInterna("repasse")}
           style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "repasse" ? "#166336" : "transparent", color: abaInterna === "repasse" ? "#F5EFDD" : "#6B685E",
+            background: abaInterna === "repasse" ? "#166336" : "transparent", color: abaInterna === "repasse" ? "#FFFFFF" : "#6B685E",
           }}>Diagnóstico de Repasse</button>
       </div>
       <div style={{ display: abaInterna === "inseminacao" ? "block" : "none" }}>
@@ -4907,10 +4907,10 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
                 </select>
               </Field>
               <Field label="Categoria">
-                <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={loteAtual?.categoria || "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.categoria || "—"} readOnly />
               </Field>
               <Field label="Retiro">
-                <input style={{ ...inputStyle, background: "#F0EBDD", color: "#6B685E" }} value={loteAtual?.retiroId ? nomeRetiro(loteAtual.retiroId) : "—"} readOnly />
+                <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.retiroId ? nomeRetiro(loteAtual.retiroId) : "—"} readOnly />
               </Field>
               <Field label="Nº de animais em repasse"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Início"><input style={inputStyle} type="date" value={dataInicio} onChange={(e) => { limparMsgSeSucesso(); setDataInicio(e.target.value); }} /></Field>
@@ -5111,7 +5111,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
             </div>
 
             {consultaAtual && (
-              <div style={{ marginTop: 16, background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
+              <div style={{ marginTop: 16, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <EarTag size="sm">{consultaAtual.brinco}</EarTag>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4A473E" }}>Dados encontrados — confira e complete DG Final / Tempo informado, depois Enter para registrar</span>
@@ -5284,14 +5284,14 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
               : `Vinculado a você (${currentUser?.nome || "usuário"}) — pode ser usado em qualquer fazenda que você acessar.`}
           </p>
 
-          <div style={{ display: "flex", background: "#EEE8D8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 18, width: "fit-content" }}>
+          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 18, width: "fit-content" }}>
             {CATEGORIAS_ESTOQUE.map((c) => (
               <button key={c} onClick={() => setCategoriaTab(c)}
                 style={{
                   padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: 600,
                   background: categoriaTab === c ? "#166336" : "transparent",
-                  color: categoriaTab === c ? "#F5EFDD" : "#6B685E",
+                  color: categoriaTab === c ? "#FFFFFF" : "#6B685E",
                 }}>{c}</button>
             ))}
           </div>
@@ -5724,9 +5724,9 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
   const StatusBadge = ({ status }) => {
     const cfg = {
-      pendente: { bg: "#EEE8D8", color: "#8A3E15", label: "Aguardando confirmação" },
+      pendente: { bg: "#EEEEEE", color: "#8A3E15", label: "Aguardando confirmação" },
       confirmado: { bg: "#E6EFE5", color: "#2A4531", label: "Confirmado" },
-    }[status] || { bg: "#EEE8D8", color: "#6B685E", label: status };
+    }[status] || { bg: "#EEEEEE", color: "#6B685E", label: status };
     return <span style={{ fontSize: 10.5, fontWeight: 700, background: cfg.bg, color: cfg.color, borderRadius: 20, padding: "2px 9px", whiteSpace: "nowrap" }}>{cfg.label}</span>;
   };
 
@@ -5835,7 +5835,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                       style={{
                         display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                         borderRadius: 20, padding: "5px 12px", fontSize: 12.5,
-                        background: selecionada ? "#E6EFE5" : "#EEE8D8", color: selecionada ? "#2A4531" : "#6B685E",
+                        background: selecionada ? "#E6EFE5" : "#EEEEEE", color: selecionada ? "#2A4531" : "#6B685E",
                       }}>
                       {selecionada ? <CheckCircle2 size={13} /> : <Circle size={13} />} {f.nome}
                     </button>
@@ -5861,7 +5861,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {grupo.map((a) => (
-                        <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: "8px 10px" }}>
+                        <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: "8px 10px" }}>
                           <span style={{ fontSize: 12.5, color: "#4A473E" }}>{fmtDate(a.data)} · {a.status === "pendente" ? "Aguardando confirmação" : "Confirmado"}</span>
                           <BtnPrimary onClick={() => manterEDescartarOutros(grupo, a.id)}>Manter este</BtnPrimary>
                         </div>
@@ -5950,20 +5950,20 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
             {/* barra de controle: navegação + seletor de período */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button onClick={() => irPara(-1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #D8D2C0", background: "#FFF", cursor: "pointer", color: "#4A473E" }}>‹</button>
-                <button onClick={() => irPara(1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #D8D2C0", background: "#FFF", cursor: "pointer", color: "#4A473E" }}>›</button>
+                <button onClick={() => irPara(-1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #D6D6D6", background: "#FFF", cursor: "pointer", color: "#4A473E" }}>‹</button>
+                <button onClick={() => irPara(1)} style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid #D6D6D6", background: "#FFF", cursor: "pointer", color: "#4A473E" }}>›</button>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16.5, fontWeight: 600, color: "#232520", marginLeft: 4, textTransform: "capitalize" }}>{rotuloPeriodo()}</div>
                 <BtnGhost onClick={irParaHoje} style={{ marginLeft: 6 }}><CalendarClock size={13} /> Hoje</BtnGhost>
               </div>
 
-              <div style={{ display: "flex", background: "#EEE8D8", borderRadius: 8, padding: 3, gap: 2 }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
                 {[["mes", "Mês"], ["semana", "Semana"]].map(([key, label]) => (
                   <button key={key} onClick={() => setViewMode(key)}
                     style={{
                       padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer",
                       fontSize: 12.5, fontWeight: 600,
                       background: viewMode === key ? "#166336" : "transparent",
-                      color: viewMode === key ? "#F5EFDD" : "#6B685E",
+                      color: viewMode === key ? "#FFFFFF" : "#6B685E",
                     }}>{label}</button>
                 ))}
               </div>
@@ -5998,16 +5998,16 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                             position: "relative", aspectRatio: "1 / 1", overflow: "hidden",
                             display: "flex", flexDirection: "column", justifyContent: "flex-end",
                             gap: 2, padding: "3px 3px 3px", border: "none",
-                            borderRight: (i + 1) % 7 !== 0 ? "1px solid #F0EBDD" : "none",
-                            borderBottom: "1px solid #F0EBDD",
-                            background: ativo ? "#F6F1E4" : "#FFF", cursor: "pointer",
+                            borderRight: (i + 1) % 7 !== 0 ? "1px solid #F0F0F0" : "none",
+                            borderBottom: "1px solid #F0F0F0",
+                            background: ativo ? "#FFFFFF" : "#FFF", cursor: "pointer",
                             opacity: foraDoMes ? 0.4 : 1,
                           }}>
                           <span style={{
                             position: "absolute", top: 2, right: 3,
                             display: "inline-flex", alignItems: "center", justifyContent: "center",
                             minWidth: 15, height: 15, borderRadius: "50%", fontSize: 9.5, fontWeight: 700,
-                            background: hoje ? "#166336" : "transparent", color: hoje ? "#FFF6E9" : "#9B9686",
+                            background: hoje ? "#166336" : "transparent", color: hoje ? "#FFFFFF" : "#9B9686",
                           }}>{d.getDate()}</span>
                           <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 14 }}>
                             {visiveis.map((a) => {
@@ -6030,15 +6030,15 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                       <button key={i} onClick={() => setSelecionado(iso)}
                         style={{
                           minHeight: 74, textAlign: "left", padding: "6px 6px", border: "none",
-                          borderRight: (i + 1) % 7 !== 0 ? "1px solid #F0EBDD" : "none",
-                          borderBottom: "1px solid #F0EBDD",
-                          background: ativo ? "#F6F1E4" : "#FFF", cursor: "pointer",
+                          borderRight: (i + 1) % 7 !== 0 ? "1px solid #F0F0F0" : "none",
+                          borderBottom: "1px solid #F0F0F0",
+                          background: ativo ? "#FFFFFF" : "#FFF", cursor: "pointer",
                           opacity: foraDoMes ? 0.4 : 1,
                         }}>
                         <span style={{
                           display: "inline-flex", alignItems: "center", justifyContent: "center",
                           width: 20, height: 20, borderRadius: "50%", fontSize: 11.5, fontWeight: 700,
-                          background: hoje ? "#166336" : "transparent", color: hoje ? "#FFF6E9" : "#4A473E",
+                          background: hoje ? "#166336" : "transparent", color: hoje ? "#FFFFFF" : "#4A473E",
                         }}>{d.getDate()}</span>
                         <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
                           {itens.slice(0, 2).map((a) => {
@@ -6073,7 +6073,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: "#9B9686", textTransform: "uppercase" }}>{DIAS_SEMANA[d.getDay()]}</div>
                       <div style={{
                         display: "inline-flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: "50%",
-                        fontSize: 12, fontWeight: 700, background: hoje ? "#166336" : "transparent", color: hoje ? "#FFF6E9" : "#232520", marginTop: 2,
+                        fontSize: 12, fontWeight: 700, background: hoje ? "#166336" : "transparent", color: hoje ? "#FFFFFF" : "#232520", marginTop: 2,
                       }}>{d.getDate()}</div>
                       <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
                         {itens.map((a) => {
@@ -6146,9 +6146,9 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
 
   const corPerfil = (perfil) => ({
     Administrador: { bg: "#E4D6EE", color: "#5A2A8A" },
-    Supervisor: { bg: "#F0E4D6", color: "#8A5A1F" },
+    Supervisor: { bg: "#EFEFEF", color: "#8A5A1F" },
     Inseminador: { bg: "#E6EFE5", color: "#2A4531" },
-  }[perfil] || { bg: "#EEE8D8", color: "#6B685E" });
+  }[perfil] || { bg: "#EEEEEE", color: "#6B685E" });
 
   return (
     <div>
@@ -6203,7 +6203,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
                   </tr>
                   {aberto && temAutorizacao && (
                     <tr>
-                      <td colSpan={5} style={{ background: "#FBF9F3", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                      <td colSpan={5} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Fazendas que {u.nome} pode acessar</div>
                         {fazendas.length === 0 ? <EmptyState text="Nenhuma fazenda cadastrada ainda." /> : (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -6214,7 +6214,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
                                   style={{
                                     display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                                     borderRadius: 20, padding: "5px 12px", fontSize: 12.5,
-                                    background: autorizada ? "#E6EFE5" : "#EEE8D8", color: autorizada ? "#2A4531" : "#6B685E",
+                                    background: autorizada ? "#E6EFE5" : "#EEEEEE", color: autorizada ? "#2A4531" : "#6B685E",
                                   }}>
                                   {autorizada ? <CheckCircle2 size={13} /> : <Circle size={13} />} {f.nome}
                                 </button>
@@ -6330,12 +6330,12 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
           <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
-              <div style={{ display: "flex", background: "#EEE8D8", borderRadius: 8, padding: 3, gap: 2 }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
                 {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
                   <button key={key} onClick={() => setVisaoData(key)}
                     style={{
                       padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                      background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#F5EFDD" : "#6B685E",
+                      background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
                     }}>{label}</button>
                 ))}
               </div>
@@ -6559,12 +6559,12 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, safraAt
         <EmptyState text="Selecione uma fazenda ativa para comparar." />
       ) : (
         <>
-          <div style={{ display: "flex", background: "#EEE8D8", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
+          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
             {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"]].map(([key, label]) => (
               <button key={key} onClick={() => setEscopo(key)}
                 style={{
                   padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                  background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#F5EFDD" : "#6B685E",
+                  background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
                 }}>{label}</button>
             ))}
           </div>
