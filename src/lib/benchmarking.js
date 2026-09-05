@@ -29,18 +29,21 @@ function formatarResposta(data, error) {
   };
 }
 
-// taxa de prenhez — todas as fazendas do sistema, de todos os grupos
-export async function buscarBenchmarkTaxaPrenhezSistema() {
+// taxa de prenhez — todas as fazendas do sistema, de todos os grupos.
+// safraNome: quando informado, filtra para diagnósticos de manejos cuja safra
+// tenha esse nome (ex.: "2024/2025") — comparável entre fazendas diferentes,
+// já que o nome da safra é o que se repete entre elas (o id é local a cada uma).
+export async function buscarBenchmarkTaxaPrenhezSistema(safraNome = null) {
   if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
-  const { data, error } = await supabase.rpc("benchmarking_taxa_prenhez_sistema");
+  const { data, error } = await supabase.rpc("benchmarking_taxa_prenhez_sistema", { p_safra_nome: safraNome });
   return formatarResposta(data, error);
 }
 
 // taxa de prenhez — só as fazendas do grupo do usuário logado, calculada no
 // servidor (equivalente à conta que o app já faz no cliente para "Meu Grupo";
 // fica disponível aqui também caso seja útil comparar os dois cálculos).
-export async function buscarBenchmarkTaxaPrenhezGrupo() {
+export async function buscarBenchmarkTaxaPrenhezGrupo(safraNome = null) {
   if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
-  const { data, error } = await supabase.rpc("benchmarking_taxa_prenhez_grupo");
+  const { data, error } = await supabase.rpc("benchmarking_taxa_prenhez_grupo", { p_safra_nome: safraNome });
   return formatarResposta(data, error);
 }

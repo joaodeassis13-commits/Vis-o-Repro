@@ -100,6 +100,13 @@ const fmtDate = (iso) => {
   return `${d}/${m}/${y}`;
 };
 
+// formata uma chave de mês "aaaa-mm" (usada para agrupar a Concepção por data de
+// inseminação quando a visão está em "Por mês") para "mm/aaaa".
+const fmtMes = (chaveAnoMes) => {
+  const [y, m] = chaveAnoMes.split("-");
+  return `${m}/${y}`;
+};
+
 const resumoMedicamentos = (arr, insumos) => {
   if (!arr || arr.length === 0) return "—";
   return arr.map((m) => {
@@ -837,11 +844,11 @@ export default function App() {
     //   (c) desconta estoque (registrarSaidaEstoque não é chamada aqui — mesmo quando o
     //       touro da planilha bate com um sêmen já cadastrado, é só um vínculo
     //       informativo no manejo, sem mexer na quantidade disponível).
-    let safrasCriadas = 0, retirosCriados = 0, lotesCriados = 0, lotesAtualizados = 0, manejosCriados = 0;
+    let safrasCriadas = 0, retirosCriados = 0, lotesCriados = 0, lotesAtualizados = 0, manejosCriados = 0, manejosAtualizados = 0;
     let safrasAtuais = [...safras];
     let retirosAtuais = [...retiros];
     let lotesAtuais = [...lotes];
-    let manejosNovos = [];
+    let manejosAtuais = [...manejos]; // começa com os já existentes — re-importar deve achar e atualizar, não duplicar
 
     const acharOuCriarSafra = (nome) => {
       const nomeLimpo = nome.trim();
@@ -868,6 +875,28 @@ export default function App() {
       const encontrado = insumos.find((i) => i.categoria === "Sêmen" && i.fazendaId === fazendaAtivaId && (i.touro || "").trim().toLowerCase() === nomeTouro.trim().toLowerCase());
       return encontrado?.id || null;
     };
+    // acha um manejo (Inseminação/Diagnóstico) já existente para o mesmo lote+ordem+data — é
+    // assim que uma reimportação corrige/completa dados em vez de duplicar o manejo inteiro.
+    // Quando encontra, mescla por brinco: quem já estava e continua na planilha é atualizado,
+    // quem é novo é adicionado — nenhum animal antigo que não veio nesta reimportação é removido.
+    const criarOuAtualizarManejo = (tipo, grupo, detalhesNovos) => {
+      const existente = manejosAtuais.find((m) => m.tipo === tipo && m.loteId === grupo.infoLote.loteId && m.ordem === grupo.ordem && m.data === grupo.data);
+      if (existente) {
+        const porBrinco = new Map((existente.detalhes || []).map((d) => [d.brinco, d]));
+        detalhesNovos.forEach((d) => porBrinco.set(d.brinco, d));
+        const detalhesFinal = [...porBrinco.values()];
+        manejosAtuais = manejosAtuais.map((m) => m.id === existente.id ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco) } : m);
+        manejosAtualizados++;
+      } else {
+        manejosAtuais = [...manejosAtuais, {
+          id: uid("man"), tipo, fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
+          loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
+          data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos,
+          operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
+        }];
+        manejosCriados++;
+      }
+    };
 
     // 1) agrupa as linhas por (safra, retiro, lote) — cada grupo vira um lote com a lista de animais
     const gruposLote = new Map();
@@ -890,7 +919,7 @@ export default function App() {
       }
     });
 
-    const chaveLote = new Map(); // "safra|retiro|lote" -> loteId, para o passo 2 achar o lote de cada linha
+    const chaveLote = new Map(); // "safra|retiro|lote" -> loteId, para os passos 2 e 3 acharem o lote de cada linha
     gruposLote.forEach((grupo, chave) => {
       const safraId = acharOuCriarSafra(grupo.safraNome);
       const retiroId = acharOuCriarRetiro(grupo.retiroNome);
@@ -903,7 +932,12 @@ export default function App() {
         const animaisMesclados = [...new Set([...(loteExistente.animais || []), ...grupo.animais])];
         const ordemFinal = grupo.ordemMaisAvancada && (!loteExistente.ordem || ORDENS_IATF.indexOf(grupo.ordemMaisAvancada) > ORDENS_IATF.indexOf(loteExistente.ordem))
           ? grupo.ordemMaisAvancada : loteExistente.ordem;
-        lotesAtuais = lotesAtuais.map((l) => l.id === loteExistente.id ? { ...l, animais: animaisMesclados, numeroAnimais: animaisMesclados.length, ordem: ordemFinal } : l);
+        // reimportar também corrige categoria/raça/mês de parição — usa o valor novo da planilha
+        // quando preenchido; se a linha vier em branco nesse campo, mantém o que já estava.
+        lotesAtuais = lotesAtuais.map((l) => l.id === loteExistente.id ? {
+          ...l, animais: animaisMesclados, numeroAnimais: animaisMesclados.length, ordem: ordemFinal,
+          categoria: grupo.categoria || l.categoria, raca: grupo.raca || l.raca, mesParicao: grupo.mesParicao || l.mesParicao,
+        } : l);
         lotesAtualizados++;
         loteId = loteExistente.id;
       } else {
@@ -919,7 +953,7 @@ export default function App() {
       chaveLote.set(chave, { loteId, safraId, retiroId, loteNome: grupo.loteNome, retiroNome: grupo.retiroNome });
     });
 
-    // 2) agrupa as linhas com dado de Inseminação (por lote + ordem + data) e cria um manejo por grupo
+    // 2) agrupa as linhas com dado de Inseminação (por lote + ordem + data) e cria/atualiza um manejo por grupo
     const gruposInsem = new Map();
     linhas.forEach((linha) => {
       if (!linha.dataInseminacao) return;
@@ -931,15 +965,7 @@ export default function App() {
       if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, animais: [] });
       gruposInsem.get(chave).animais.push({ brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro), touroInformado: linha.touro?.trim() || null });
     });
-    gruposInsem.forEach((grupo) => {
-      manejosNovos.push({
-        id: uid("man"), tipo: "inseminacao", fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
-        loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
-        data: grupo.data, animaisLidos: grupo.animais.map((a) => a.brinco), detalhes: grupo.animais,
-        operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
-      });
-      manejosCriados++;
-    });
+    gruposInsem.forEach((grupo) => criarOuAtualizarManejo("inseminacao", grupo, grupo.animais));
 
     // 3) mesma coisa para Diagnóstico
     const gruposDiag = new Map();
@@ -957,22 +983,14 @@ export default function App() {
         tempoGestacaoInformado: linha.tempoGestacaoInformado?.trim() ? numBR(linha.tempoGestacaoInformado) : null,
       });
     });
-    gruposDiag.forEach((grupo) => {
-      manejosNovos.push({
-        id: uid("man"), tipo: "diagnostico", fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
-        loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
-        data: grupo.data, animaisLidos: grupo.animais.map((a) => a.brinco), detalhes: grupo.animais,
-        operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
-      });
-      manejosCriados++;
-    });
+    gruposDiag.forEach((grupo) => criarOuAtualizarManejo("diagnostico", grupo, grupo.animais));
 
     setSafras(safrasAtuais);
     setRetiros(retirosAtuais);
     setLotes(lotesAtuais);
-    if (manejosNovos.length > 0) setManejos((a) => [...manejosNovos, ...a]);
+    setManejos(manejosAtuais);
     marcaPendencia();
-    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, animaisImportados: linhas.length };
+    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length };
   };
 
   /* ---------- usuários (Administrador cadastra e autoriza acesso a fazendas) ---------- */
@@ -1672,10 +1690,10 @@ export default function App() {
             <AbaUsuarios users={users} fazendas={fazendasVisiveis} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} />
           </div>
           <div style={{ display: section === "relatorios" ? "block" : "none" }}>
-            <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil} />
+            <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil} />
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
-            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} />
+            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} safraAtiva={safraAtiva} safras={safras} />
           </div>
           <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
             <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} />
@@ -1901,7 +1919,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
   );
 }
 
-const CATEGORIAS_LOTE = ["Novilha", "Primípara", "Multípara"];
+const CATEGORIAS_LOTE = ["Nulípara", "Primípara", "Multípara"];
 
 
 const HORMONIOS = ["Progesterona", "Progesterona injetável", "Prostaglandina", "Cipionato", "Benzoato", "GnRH", "ECG", "HCG"];
@@ -2083,7 +2101,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
                 <p style={{ fontSize: 12.5, color: "#2A4531", margin: 0, lineHeight: 1.6 }}>
                   ✓ Importação concluída: {resultado.safrasCriadas} safra(s) nova(s), {resultado.retirosCriados} retiro(s) novo(s), {resultado.lotesCriados} lote(s) novo(s)
                   {resultado.lotesAtualizados > 0 ? `, ${resultado.lotesAtualizados} lote(s) já existente(s) atualizado(s)` : ""}
-                  {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""} — {resultado.animaisImportados} animal(is) no total.
+                  {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""}
+                  {resultado.manejosAtualizados > 0 ? `, ${resultado.manejosAtualizados} manejo(s) já existente(s) atualizado(s)` : ""} — {resultado.animaisImportados} animal(is) no total.
                 </p>
               </div>
             )}
@@ -6217,12 +6236,144 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
    RELATÓRIOS
 ========================================================= */
 
-function AbaRelatorios({ fazendaAtiva, lotes, insumos, manejos, movimentos, perfil }) {
+// junta, por animal, a Inseminação com o Diagnóstico que veio depois dela (mesmo brinco,
+// mesma ordem) — é esse cruzamento que permite quebrar a Taxa de Concepção por categoria,
+// retiro, ECC, inseminador, data e touro, já que esses dados vivem na Inseminação, não no
+// Diagnóstico. Animais do lote "Desconhecidos" são sempre ignorados. Um animal inseminado
+// mas ainda sem diagnóstico correspondente também fica de fora (resultado ainda não existe).
+function construirRegistrosConcepcao(manejos, lotes, insumos) {
+  const idsDesconhecidos = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  const inseminacoes = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidos.has(m.loteId));
+  const diagnosticos = manejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId));
+
+  const nomeTouro = (semenId, touroInformado) => {
+    if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.touro) return insumo.touro; }
+    return touroInformado || null;
+  };
+
+  const registros = [];
+  inseminacoes.forEach((insem) => {
+    (insem.detalhes || []).forEach((detIns) => {
+      const candidatas = diagnosticos.filter((d) =>
+        d.ordem === insem.ordem && d.data >= insem.data && (d.detalhes || []).some((x) => x.brinco === detIns.brinco)
+      );
+      if (candidatas.length === 0) return;
+      const diag = candidatas.reduce((mais, atual) => (atual.data < mais.data ? atual : mais)); // o diagnóstico mais próximo depois da inseminação
+      const detDiag = (diag.detalhes || []).find((x) => x.brinco === detIns.brinco);
+      if (!detDiag?.resultado) return;
+      registros.push({
+        brinco: detIns.brinco, prenha: detDiag.resultado === "Prenha", ordem: insem.ordem,
+        categoria: insem.categoria || null, retiroId: insem.retiroId || null,
+        ecc: detIns.ecc || null, inseminador: insem.inseminador || null,
+        dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
+      });
+    });
+  });
+  return registros;
+}
+
+// agrupa os registros por uma dimensão (categoria, retiro, ECC, ...) e calcula a taxa de
+// cada grupo — registros sem essa dimensão preenchida ficam de fora (não viram um grupo
+// "vazio" no gráfico).
+function agruparConcepcao(registros, chaveFn) {
+  const grupos = new Map();
+  registros.forEach((r) => {
+    const chave = chaveFn(r);
+    if (chave == null || chave === "") return;
+    if (!grupos.has(chave)) grupos.set(chave, { n: 0, prenhas: 0 });
+    const g = grupos.get(chave);
+    g.n += 1;
+    if (r.prenha) g.prenhas += 1;
+  });
+  return [...grupos.entries()].map(([label, v]) => ({ label, n: v.n, taxa: Math.round((v.prenhas / v.n) * 1000) / 10 }));
+}
+
+function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimentos, perfil }) {
+  const [visaoData, setVisaoData] = useState("dia"); // "dia" | "mes"
+  const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || null;
+
+  const registros = useMemo(() => construirRegistrosConcepcao(manejos, lotes, insumos), [manejos, lotes, insumos]);
+
+  const geral = agruparConcepcao(registros, () => "Geral");
+  const porOrdem = ORDENS_IATF.map((o) => agruparConcepcao(registros.filter((r) => r.ordem === o), () => o)[0]).filter(Boolean);
+  const porCategoria = agruparConcepcao(registros, (r) => r.categoria);
+  const porRetiro = agruparConcepcao(registros, (r) => nomeRetiro(r.retiroId));
+  const porEcc = OPCOES_ECC.map((e) => agruparConcepcao(registros.filter((r) => r.ecc === e), () => e)[0]).filter(Boolean);
+  const porInseminador = agruparConcepcao(registros, (r) => r.inseminador);
+  const porData = agruparConcepcao(registros, (r) => visaoData === "mes" ? r.dataInseminacao?.slice(0, 7) : r.dataInseminacao)
+    .sort((a, b) => (a.label < b.label ? -1 : 1))
+    .map((d) => ({ ...d, label: visaoData === "mes" ? fmtMes(d.label) : fmtDate(d.label) }));
+  const porTouro = agruparConcepcao(registros, (r) => r.touro);
+
   return (
     <div>
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
       <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
-      <EmptyState text="Os gráficos deste relatório serão adicionados aqui. Para planilhas com a lista completa de animais ou lotes, use a aba Exportações." />
+      {!fazendaAtiva ? (
+        <EmptyState text="Selecione uma fazenda ativa para ver os relatórios." />
+      ) : registros.length === 0 ? (
+        <EmptyState text="Ainda não há Inseminações com Diagnóstico correspondente para calcular a taxa de concepção. Os gráficos aparecem aqui assim que houver dados (animais do lote Desconhecidos não entram na conta)." />
+      ) : (
+        <>
+          <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} />
+          <GraficoColunas titulo="Concepção por ordem" descricao="Taxa de concepção em cada ordem de IATF." dados={porOrdem} />
+          <GraficoColunas titulo="Concepção por categoria" descricao="Taxa de concepção por categoria do lote no momento da Inseminação." dados={porCategoria} />
+          <GraficoColunas titulo="Concepção por retiro" descricao="Taxa de concepção por retiro." dados={porRetiro} />
+          <GraficoColunas titulo="Concepção por ECC na Inseminação" descricao="Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." dados={porEcc} />
+          <GraficoColunas titulo="Concepção por Inseminador" descricao="Taxa de concepção por quem realizou a Inseminação." dados={porInseminador} />
+
+          <div style={{ ...cardStyle, marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
+              <div style={{ display: "flex", background: "#EFE8D6", borderRadius: 8, padding: 3, gap: 2 }}>
+                {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
+                  <button key={key} onClick={() => setVisaoData(key)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                      background: visaoData === key ? "#3B5D45" : "transparent", color: visaoData === key ? "#F5EFDD" : "#6B685E",
+                    }}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
+            <BarrasConcepcao dados={porData} />
+          </div>
+
+          <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
+
+          <p style={{ fontSize: 11, color: "#9B9686" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// barras de um gráfico de coluna — recebe [{ label, n, taxa }]. Usada tanto direto
+// (GraficoColunas) quanto dentro de um card com cabeçalho customizado (data de inseminação).
+function BarrasConcepcao({ dados, ordenarPorTaxaDesc }) {
+  const lista = ordenarPorTaxaDesc ? [...dados].sort((a, b) => b.taxa - a.taxa) : dados;
+  if (lista.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
+  const maiorTaxa = Math.max(...lista.map((d) => d.taxa || 0), 10);
+  return (
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "flex-end", gap: 16, height: 200, paddingTop: 10, overflowX: "auto" }}>
+      {lista.map((d, i) => (
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 64, flexShrink: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#232520", marginBottom: 6 }}>{d.taxa}%</div>
+          <div style={{ width: 44, height: `${Math.max((d.taxa / maiorTaxa) * 140, 4)}px`, background: "#3B5D45", borderRadius: "4px 4px 0 0" }} />
+          <div style={{ fontSize: 11.5, color: "#6B685E", marginTop: 8, textAlign: "center", maxWidth: 84, wordBreak: "break-word" }}>{d.label}</div>
+          <div style={{ fontSize: 10.5, color: "#B0AA98" }}>n={d.n}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GraficoColunas({ titulo, descricao, dados, ordenarPorTaxaDesc }) {
+  return (
+    <div style={{ ...cardStyle, marginBottom: 20 }}>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 4 }}>{titulo}</div>
+      <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>{descricao}</p>
+      <BarrasConcepcao dados={dados} ordenarPorTaxaDesc={ordenarPorTaxaDesc} />
     </div>
   );
 }
@@ -6322,22 +6473,34 @@ function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, av
   );
 }
 
-function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo }) {
+function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, safraAtiva, safras }) {
   const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
   const [sistema, setSistema] = useState(null);
   const [carregandoSistema, setCarregandoSistema] = useState(false);
   const [erroSistema, setErroSistema] = useState("");
 
+  // recarrega "Geral do Sistema" sempre que trocar de escopo OU de safra ativa —
+  // o filtro de safra precisa refletir no servidor também, não só no cálculo local.
   React.useEffect(() => {
-    if (escopo !== "sistema" || sistema || !supabaseConfigurado) return;
-    setCarregandoSistema(true);
-    buscarBenchmarkTaxaPrenhezSistema().then((r) => {
+    if (escopo !== "sistema" || !supabaseConfigurado) return;
+    setSistema(null); setErroSistema(""); setCarregandoSistema(true);
+    buscarBenchmarkTaxaPrenhezSistema(safraAtiva?.nome || null).then((r) => {
       if (r.ok) setSistema(r); else setErroSistema(r.motivo);
       setCarregandoSistema(false);
     });
-  }, [escopo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [escopo, safraAtiva?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const taxasGrupo = useMemo(() => taxasDePrenhezPorFazenda(manejosDoGrupo), [manejosDoGrupo]);
+  // filtra pela safra ativa comparando pelo NOME da safra (ex.: "2024/2025") — cada
+  // fazenda tem seus próprios ids de safra, mas o nome é o que permite comparar a
+  // "mesma safra" entre fazendas diferentes do grupo. Sem safra ativa selecionada,
+  // usa o histórico completo (sem filtro).
+  const manejosDaSafra = useMemo(() => {
+    if (!safraAtiva) return manejosDoGrupo;
+    const idsDaMesmaSafra = new Set(safras.filter((s) => s.nome === safraAtiva.nome).map((s) => s.id));
+    return manejosDoGrupo.filter((m) => idsDaMesmaSafra.has(m.safraId));
+  }, [manejosDoGrupo, safras, safraAtiva]);
+
+  const taxasGrupo = useMemo(() => taxasDePrenhezPorFazenda(manejosDaSafra), [manejosDaSafra]);
   const statsGrupo = useMemo(() => calcularEstatisticasBenchmark(taxasGrupo.map((f) => f.taxa)), [taxasGrupo]);
   const suaFazenda = taxasGrupo.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
 
@@ -6365,6 +6528,9 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo }) {
                 }}>{label}</button>
             ))}
           </div>
+          <p style={{ fontSize: 11.5, color: "#9B9686", marginTop: -12, marginBottom: 18 }}>
+            {safraAtiva ? `Mostrando dados da safra ${safraAtiva.nome}.` : "Nenhuma safra ativa selecionada — mostrando todo o histórico."}
+          </p>
 
           <GraficoBenchmark
             titulo="Taxa de prenhez geral (%)"

@@ -5,30 +5,11 @@
 --
 -- As tabelas estão em ORDEM DE DEPENDÊNCIA (cada uma só referencia
 -- tabelas já criadas antes dela) — rode o arquivo inteiro de uma vez,
--- de cima para baixo, no SQL Editor do Supabase.
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- MIGRAÇÃO — corrige um erro de tipo que impedia a sincronização de
--- quase tudo: fazendas/retiros/safras tinham "id uuid", mas o app gera
--- esses ids no CLIENTE como texto (ex.: "faz_mtlcl6cf_84jjp"), não como
--- UUID de verdade. Isso apaga e recria as tabelas afetadas — não apaga
--- "usuarios" nem as contas de login. É seguro rodar agora porque, com
--- esse erro, nada nessas tabelas estava sincronizando de verdade antes.
--- Se você já tinha dados reais nelas, avise antes de rodar este arquivo.
--- ---------------------------------------------------------------------
-drop table if exists sugestoes_repasse cascade;
-drop table if exists sugestoes_ressinc cascade;
-drop table if exists protocolos_padrao cascade;
-drop table if exists agendamentos cascade;
-drop table if exists movimentos cascade;
-drop table if exists manejos cascade;
-drop table if exists insumos cascade;
-drop table if exists lotes cascade;
-drop table if exists usuario_fazendas cascade;
-drop table if exists safras cascade;
-drop table if exists retiros cascade;
-drop table if exists fazendas cascade;
+-- de cima para baixo, no SQL Editor do Supabase. É seguro rodar de novo
+-- a qualquer momento (todo comando aqui é "se já existir, não recriar" —
+-- exceto os "drop function"/"drop policy" pontuais, que servem só para
+-- trocar o tipo de parâmetro ou a regra de uma função/política já
+-- existente, sem apagar dado nenhum).
 
 -- ---------- fazenda (raiz de tudo — nenhuma outra tabela depende dela vir depois) ----------
 -- id text: mesmo id gerado no cliente (uid()), igual às demais tabelas — não é
@@ -100,6 +81,9 @@ create table if not exists lotes (
   animais text[] not null default '{}',  -- brincos oficialmente atribuídos ao lote
   criado_em timestamptz not null default now()
 );
+
+-- renomeia a categoria "Novilha" para "Nulípara" em lotes já sincronizados antes dessa mudança
+update lotes set categoria = 'Nulípara' where categoria = 'Novilha';
 
 -- ---------- insumo (hormônio / sêmen / medicamento / utensílio) ----------
 create table if not exists insumos (
@@ -449,8 +433,16 @@ create policy "usuario_fazendas: acesso" on usuario_fazendas
 -- nas melhores. Usa a mesma regra de arredondamento do lado do app (JS
 -- Math.round / "arredonda para o inteiro mais próximo, 0,5 para cima").
 
--- taxa de prenhez comparando TODAS as fazendas do sistema (todos os grupos)
-create or replace function benchmarking_taxa_prenhez_sistema()
+-- taxa de prenhez comparando TODAS as fazendas do sistema (todos os grupos).
+-- p_safra_nome: quando informado, considera só diagnósticos de manejos cuja
+-- safra tenha esse NOME (ex.: "2024/2025") — o nome é o que permite comparar
+-- "a mesma safra" entre fazendas diferentes, já que o id de safra é local a
+-- cada fazenda. Null (padrão) = sem filtro de safra, todo o histórico.
+-- "drop function" primeiro porque mudar a lista de parâmetros de uma função já
+-- existente cria uma sobrecarga nova em vez de substituir — só apagar e
+-- recriar do zero evita duas versões ambíguas da mesma função.
+drop function if exists benchmarking_taxa_prenhez_sistema();
+create or replace function benchmarking_taxa_prenhez_sistema(p_safra_nome text default null)
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
   with por_fazenda as (
     select
@@ -459,41 +451,9 @@ returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, 
     from manejos m
     cross join lateral jsonb_array_elements(m.detalhes) as d
     where m.tipo = 'diagnostico'
-    group by m.fazenda_id
-    having count(*) > 0
-  ),
-  tamanho as (
-    select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda
-  ),
-  ranqueadas as (
-    select
-      taxa,
-      row_number() over (order by taxa asc)  as posicao_da_pior,
-      row_number() over (order by taxa desc) as posicao_da_melhor
-    from por_fazenda
-  )
-  select
-    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
-    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
-    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
-    (select count(*) from por_fazenda) as num_fazendas;
-$$ language sql stable security definer set search_path = public;
-
-grant execute on function benchmarking_taxa_prenhez_sistema() to authenticated;
-
--- taxa de prenhez comparando só as fazendas do PRÓPRIO grupo de quem chamou
--- (auth.uid()) — usada quando o filtro "Meu Grupo" está selecionado no app.
-create or replace function benchmarking_taxa_prenhez_grupo()
-returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
-  with por_fazenda as (
-    select
-      m.fazenda_id,
-      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
-    from manejos m
-    cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico'
-      and exists (
-        select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id
+      and (
+        p_safra_nome is null
+        or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome)
       )
     group by m.fazenda_id
     having count(*) > 0
@@ -515,4 +475,46 @@ returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, 
     (select count(*) from por_fazenda) as num_fazendas;
 $$ language sql stable security definer set search_path = public;
 
-grant execute on function benchmarking_taxa_prenhez_grupo() to authenticated;
+grant execute on function benchmarking_taxa_prenhez_sistema(text) to authenticated;
+
+-- taxa de prenhez comparando só as fazendas do PRÓPRIO grupo de quem chamou
+-- (auth.uid()) — usada quando o filtro "Meu Grupo" está selecionado no app.
+-- Mesmo filtro opcional de safra (por nome) do que a função acima.
+drop function if exists benchmarking_taxa_prenhez_grupo();
+create or replace function benchmarking_taxa_prenhez_grupo(p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with por_fazenda as (
+    select
+      m.fazenda_id,
+      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
+    from manejos m
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico'
+      and exists (
+        select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id
+      )
+      and (
+        p_safra_nome is null
+        or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome)
+      )
+    group by m.fazenda_id
+    having count(*) > 0
+  ),
+  tamanho as (
+    select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda
+  ),
+  ranqueadas as (
+    select
+      taxa,
+      row_number() over (order by taxa asc)  as posicao_da_pior,
+      row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_taxa_prenhez_grupo(text) to authenticated;
