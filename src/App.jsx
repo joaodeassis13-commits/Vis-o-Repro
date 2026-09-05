@@ -612,6 +612,7 @@ export default function App() {
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [pendencias, setPendencias] = useState(0);
   const [carregadoDoBanco, setCarregadoDoBanco] = useState(false);
+  const [erroCarregamentoBanco, setErroCarregamentoBanco] = useState(false);
   const [ultimaSincronizacao, setUltimaSincronizacao] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -629,7 +630,7 @@ export default function App() {
   // ---------- carrega o banco local (IndexedDB) uma única vez, ao abrir o app ----------
   // Se já havia dados salvos de uma sessão anterior (mesmo sem internet), eles
   // substituem os dados de exemplo (seed) assim que terminam de carregar.
-  React.useEffect(() => {
+  const tentarCarregarBanco = () => {
     carregarTudo().then((dados) => {
       if (dados.usuarios.length) setUsers(dados.usuarios);
       if (dados.fazendas.length) setFazendas(dados.fazendas);
@@ -644,11 +645,21 @@ export default function App() {
       if (dados.sugestoesRepasse?.length) setSugestoesRepasse(dados.sugestoesRepasse);
       if (dados.protocolosPadrao?.length) setProtocolosPadrao(dados.protocolosPadrao);
       if (Object.keys(dados.rascunhos).length) setRascunhos(dados.rascunhos);
+      // só a partir daqui a gravação automática é liberada — é crítico nunca marcar isso como
+      // concluído sem ter, de fato, lido os dados com sucesso: as gravações automáticas
+      // (useEffect logo abaixo) SEMPRE apagam a tabela antes de regravar, então se isso disparasse
+      // com o estado ainda vazio (por causa de uma falha de leitura), apagaria os dados reais que
+      // ainda estavam salvos no aparelho, só não tinham sido lidos ainda.
+      setErroCarregamentoBanco(false);
       setCarregadoDoBanco(true);
     }).catch((e) => {
       console.error("Falha ao carregar banco local:", e);
-      setCarregadoDoBanco(true); // segue com os dados de exemplo em memória mesmo assim
+      setErroCarregamentoBanco(true); // NUNCA marcar carregadoDoBanco aqui — ver comentário acima
     });
+  };
+
+  React.useEffect(() => {
+    tentarCarregarBanco();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1440,6 +1451,24 @@ export default function App() {
   // fecha o menu automaticamente ao trocar de seção/aba (celular)
   React.useEffect(() => { setMenuAberto(false); }, [section, sub]);
 
+  // se o IndexedDB local não pôde ser lido (erro de versão, navegador, etc.), interrompe aqui em
+  // vez de deixar o app seguir com dados vazios — é isso que evita a gravação automática apagar
+  // dados reais que só não puderam ser lidos ainda (ver comentário em tentarCarregarBanco).
+  if (erroCarregamentoBanco) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
+        <div style={{ textAlign: "center", maxWidth: 420 }}>
+          <p style={{ color: "#A32D2D", fontWeight: 700, marginBottom: 10, fontSize: 15 }}>Não foi possível abrir os dados salvos neste aparelho.</p>
+          <p style={{ fontSize: 13, color: "#4A473E", marginBottom: 18, lineHeight: 1.6 }}>
+            Isso costuma ser um problema temporário do navegador. Seus dados <strong>não foram apagados</strong> —
+            por segurança, o app parou antes de continuar, para não arriscar sobrescrever nada enquanto não
+            conseguir ler o que já estava salvo. Tente de novo; se persistir, feche e reabra o app.
+          </p>
+          <BtnPrimary onClick={tentarCarregarBanco}>Tentar novamente</BtnPrimary>
+        </div>
+      </div>
+    );
+  }
   if (!sessaoAuthCarregada) return null; // evita piscar a tela de login antes de checar sessão salva
   if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} />;
   if (currentUser._aguardandoPerfil) {
@@ -6309,6 +6338,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
         ecc: detIns.ecc || null, inseminador: insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
+        mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
       });
     });
   });
@@ -6340,7 +6370,23 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   const [visaoGeral, setVisaoGeral] = useState("concepcao"); // "concepcao" | "fertilidade"
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || null;
 
-  const registros = useMemo(() => construirRegistrosConcepcao(manejos, lotes, insumos), [manejos, lotes, insumos]);
+  // ---------- filtros de Retiro e Lote — reduzem todo o relatório a um recorte específico ----------
+  const [filtroRetiroId, setFiltroRetiroId] = useState("");
+  const [filtroLoteId, setFiltroLoteId] = useState("");
+  const lotesDoRetiroFiltro = filtroRetiroId ? lotes.filter((l) => l.retiroId === filtroRetiroId) : lotes;
+  // se o lote escolhido não pertencer mais ao retiro selecionado (trocou de retiro), limpa o filtro de lote
+  React.useEffect(() => {
+    if (filtroLoteId && !lotesDoRetiroFiltro.some((l) => l.id === filtroLoteId)) setFiltroLoteId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroRetiroId]);
+  const filtroAtivo = !!(filtroRetiroId || filtroLoteId);
+  const idsLotesFiltrados = new Set(
+    lotes.filter((l) => (!filtroRetiroId || l.retiroId === filtroRetiroId) && (!filtroLoteId || l.id === filtroLoteId)).map((l) => l.id)
+  );
+  const lotesFiltrados = filtroAtivo ? lotes.filter((l) => idsLotesFiltrados.has(l.id)) : lotes;
+  const manejosFiltrados = filtroAtivo ? manejos.filter((m) => idsLotesFiltrados.has(m.loteId)) : manejos;
+
+  const registros = useMemo(() => construirRegistrosConcepcao(manejosFiltrados, lotesFiltrados, insumos), [manejosFiltrados, lotesFiltrados, insumos]);
 
   const geral = agruparConcepcao(registros, () => "Geral");
   const porOrdem = ORDENS_IATF.map((o) => agruparConcepcao(registros.filter((r) => r.ordem === o), () => o)[0]).filter(Boolean);
@@ -6360,6 +6406,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     visaoRacaTouro === "todas" ? registros : registros.filter((r) => r.racaTouro === visaoRacaTouro),
     (r) => r.touro
   );
+  const porMesParicao = agruparConcepcao(registros, (r) => r.mesParicao);
 
   const OPCOES_BARRA_CONCEPCAO = {
     ordem: { label: "Ordem", dados: porOrdem, descricao: "Taxa de concepção em cada ordem de IATF." },
@@ -6372,7 +6419,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   // ---------- resumo do topo: Total de animais / Inseminações / Prenhas ----------
   // mesma regra do resto do relatório: lote "Desconhecidos" nunca entra na conta.
   const idsDesconhecidosResumo = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
-  const lotesValidos = lotes.filter((l) => !idsDesconhecidosResumo.has(l.id));
+  const lotesValidos = lotesFiltrados.filter((l) => !idsDesconhecidosResumo.has(l.id));
   const categoriaDoLote = (loteId) => lotes.find((l) => l.id === loteId)?.categoria;
 
   const totalAnimais = lotesValidos.reduce((s, l) => s + (l.animais || []).length, 0);
@@ -6380,7 +6427,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     label: `${cat}s`, valor: lotesValidos.filter((l) => l.categoria === cat).reduce((s, l) => s + (l.animais || []).length, 0),
   }));
 
-  const inseminacoesValidas = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidosResumo.has(m.loteId));
+  const inseminacoesValidas = manejosFiltrados.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidosResumo.has(m.loteId));
   const totalInseminacoes = inseminacoesValidas.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
   const inseminacoesPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
     label: `${cat}s`, valor: inseminacoesValidas.filter((m) => categoriaDoLote(m.loteId) === cat).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
@@ -6390,8 +6437,8 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   }));
 
   const contarPrenhas = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length, 0);
-  const diagnosticosValidos = manejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidosResumo.has(m.loteId));
-  const diagnosticosRepasseValidos = manejos.filter((m) => m.tipo === "diagnostico_repasse" && !idsDesconhecidosResumo.has(m.loteId));
+  const diagnosticosValidos = manejosFiltrados.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidosResumo.has(m.loteId));
+  const diagnosticosRepasseValidos = manejosFiltrados.filter((m) => m.tipo === "diagnostico_repasse" && !idsDesconhecidosResumo.has(m.loteId));
   const totalPrenhas = contarPrenhas(diagnosticosValidos) + contarPrenhas(diagnosticosRepasseValidos);
   const prenhasPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
     label: `${cat}s`,
@@ -6443,7 +6490,23 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   return (
     <div>
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
-      <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
+        <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
+        {fazendaAtiva && (
+          <>
+            <select value={filtroRetiroId} onChange={(e) => setFiltroRetiroId(e.target.value)}
+              style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
+              <option value="">Todos os retiros</option>
+              {retiros.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
+            </select>
+            <select value={filtroLoteId} onChange={(e) => setFiltroLoteId(e.target.value)}
+              style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
+              <option value="">Todos os lotes</option>
+              {lotesDoRetiroFiltro.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+            </select>
+          </>
+        )}
+      </div>
       {!fazendaAtiva ? (
         <EmptyState text="Selecione uma fazenda ativa para ver os relatórios." />
       ) : (
@@ -6460,7 +6523,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
                     }}>{op.label}</button>
                 ))}
               </div>
-              <div style={{ flex: 1, display: "flex", gap: 36, justifyContent: "center", alignItems: "center", flexWrap: "wrap", overflow: "hidden" }}>
+              <div style={{ flex: 1, display: "flex", gap: 36, justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap", overflow: "hidden" }}>
                 {OPCOES_ROSCA_RESUMO[visaoResumo].grupos.map((g) => (
                   <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
                 ))}
@@ -6508,6 +6571,35 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
             </div>
           </div>
 
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por mês de parição</div>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por mês de parição do lote.</p>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <BarrasConcepcao dados={porMesParicao} compacto />
+              </div>
+            </div>
+
+            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column", gridColumn: "span 2" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por Touro</div>
+              {racasTouroDisponiveis.length > 0 && (
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
+                  {["todas", ...racasTouroDisponiveis].map((raca) => (
+                    <button key={raca} onClick={() => setVisaoRacaTouro(raca)}
+                      style={{
+                        padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                        background: visaoRacaTouro === raca ? "#166336" : "transparent", color: visaoRacaTouro === raca ? "#FFFFFF" : "#6B685E",
+                      }}>{raca === "todas" ? "Todas as raças" : raca}</button>
+                  ))}
+                </div>
+              )}
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor.</p>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc compacto />
+              </div>
+            </div>
+          </div>
+
           <div style={{ ...cardStyle, marginBottom: 20, height: 320, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
@@ -6524,25 +6616,6 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
             <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 12px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
             <div style={{ flex: 1, overflow: "hidden" }}>
               <LinhaConcepcao dados={porData} agruparPorMes={visaoData === "dia"} />
-            </div>
-          </div>
-
-          <div style={{ ...cardStyle, marginBottom: 20 }}>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por Touro</div>
-            {racasTouroDisponiveis.length > 0 && (
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content", flexWrap: "wrap" }}>
-                {["todas", ...racasTouroDisponiveis].map((raca) => (
-                  <button key={raca} onClick={() => setVisaoRacaTouro(raca)}
-                    style={{
-                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                      background: visaoRacaTouro === raca ? "#166336" : "transparent", color: visaoRacaTouro === raca ? "#FFFFFF" : "#6B685E",
-                    }}>{raca === "todas" ? "Todas as raças" : raca}</button>
-                ))}
-              </div>
-            )}
-            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 16px" }}>Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor.</p>
-            <div style={{ height: 200 }}>
-              <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc />
             </div>
           </div>
 
@@ -6591,7 +6664,7 @@ function GraficoRosca({ titulo, total, itens }) {
   let acumulado = 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 130 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 150, flexShrink: 0 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#166336", textTransform: "uppercase" }}>{titulo}</div>
       <svg width={88} height={88} viewBox="0 0 88 88">
         <circle cx={centro} cy={centro} r={raio} fill="none" stroke="#DDDDDD" strokeWidth={espessura} />
@@ -6613,8 +6686,8 @@ function GraficoRosca({ titulo, total, itens }) {
         {itens.map((item, i) => (
           <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5 }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_ROSCA[i % CORES_ROSCA.length], flexShrink: 0 }} />
-            <span style={{ color: "#4A473E" }}>{item.label}</span>
-            <span style={{ marginLeft: "auto", fontWeight: 700, color: "#232520" }}>{item.valor.toLocaleString("pt-BR")}</span>
+            <span style={{ color: "#4A473E", whiteSpace: "nowrap" }}>{item.label}</span>
+            <span style={{ marginLeft: "auto", fontWeight: 700, color: "#232520", whiteSpace: "nowrap" }}>{item.valor.toLocaleString("pt-BR")}</span>
           </div>
         ))}
       </div>
@@ -6632,8 +6705,8 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
     <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
       {lista.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
-          <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa}%</div>
-          <div style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", width: "100%" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
+            <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa}%</div>
             <div style={{ width: compacto ? 28 : 44, height: `${Math.max((d.taxa / maiorTaxa) * 100, 3)}%`, background: "#166336", borderRadius: "4px 4px 0 0" }} />
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
@@ -6662,10 +6735,10 @@ function LinhaConcepcao({ dados, agruparPorMes }) {
   if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const alturaUtil = 130;
   const margemTopo = 24;
-  const margemBaixo = agruparPorMes ? 54 : 40; // uma linha a mais embaixo pro rótulo do mês, quando agrupado
+  const margemBaixo = agruparPorMes ? 40 : 26; // rótulo do dia (girado, ocupa pouca altura) + rótulo do mês, quando agrupado
   const alturaTotal = alturaUtil + margemTopo + margemBaixo;
-  // com o eixo mostrando só o dia (não a data inteira), os pontos podem ficar mais próximos
-  const largura = Math.max(dados.length * (agruparPorMes ? 36 : 70), 260);
+  // com o eixo mostrando só o dia (girado na vertical, sem o "n" embaixo), os pontos podem ficar bem mais próximos
+  const largura = Math.max(dados.length * (agruparPorMes ? 26 : 60), 260);
   const maiorTaxa = Math.max(...dados.map((d) => d.taxa || 0), 10);
   const passoX = dados.length > 1 ? largura / (dados.length - 1) : 0;
   const pontos = dados.map((d, i) => ({
@@ -6698,14 +6771,16 @@ function LinhaConcepcao({ dados, agruparPorMes }) {
           <g key={`${p.label}-${i}`}>
             <circle cx={p.x} cy={p.y} r="4" fill="#166336" vectorEffect="non-scaling-stroke" />
             <text x={p.x} y={p.y - 10} fontSize="11.5" fontWeight="700" fill="#232520" textAnchor="middle">{p.taxa}%</text>
-            <text x={p.x} y={margemTopo + alturaUtil + 18} fontSize="10.5" fill="#6B685E" textAnchor="middle">{p.label}</text>
-            <text x={p.x} y={margemTopo + alturaUtil + 32} fontSize="10" fill="#B0AA98" textAnchor="middle">n={p.n}</text>
+            {/* rótulo do dia girado na vertical — ocupa bem menos espaço horizontal do que o texto deitado,
+                permitindo os pontos ficarem mais próximos entre si */}
+            <text x={p.x} y={margemTopo + alturaUtil + 12} fontSize="10" fill="#6B685E" textAnchor="end"
+              transform={`rotate(-90 ${p.x} ${margemTopo + alturaUtil + 12})`}>{p.label}</text>
           </g>
         ))}
         {agruparPorMes && gruposMes.map((g, i) => {
           const xMedio = (g.pontos[0].x + g.pontos[g.pontos.length - 1].x) / 2;
           return (
-            <text key={i} x={xMedio} y={margemTopo + alturaUtil + 48} fontSize="10.5" fontWeight="700" fill="#166336" textAnchor="middle">
+            <text key={i} x={xMedio} y={margemTopo + alturaUtil + 36} fontSize="10.5" fontWeight="700" fill="#166336" textAnchor="middle">
               {fmtMes(g.mes)}
             </text>
           );

@@ -58,3 +58,9 @@ th {
   color: #9B9686;
   font-weight: 700;
 }
+
+/* mesmo cinza dos cabeçalhos — sobrescreve qualquer cor de link automática que o
+   navegador tente aplicar em cima de datas/números (ver format-detection no index.html) */
+td, td a {
+  color: #9B9686;
+}
