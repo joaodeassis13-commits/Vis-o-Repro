@@ -526,7 +526,7 @@ function EmptyState({ text }) {
    LOGIN
 ========================================================= */
 
-function Login({ users, onLoginLocal, onEntrarReal }) {
+function Login({ users, onLoginLocal, onEntrarReal, avisoCarregamento }) {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
@@ -561,6 +561,13 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
           </div>
         </div>
         <div style={{ height: 1, background: "#EEEEEE", margin: "20px 0" }} />
+
+        {avisoCarregamento && (
+          <div style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10, margin: "0 0 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <span>⚠ Não foi possível abrir os dados salvos neste aparelho — o login funciona normalmente, mas registros feitos agora podem não salvar localmente até isso ser resolvido.</span>
+            <button onClick={avisoCarregamento.onTentar} style={{ background: "none", border: "1px solid #166336", color: "#166336", borderRadius: 6, padding: "4px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>Tentar de novo</button>
+          </div>
+        )}
 
         {supabaseConfigurado ? (
           <>
@@ -614,7 +621,8 @@ export default function App() {
   const [sessaoAuthCarregada, setSessaoAuthCarregada] = useState(!supabaseConfigurado);
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [pendencias, setPendencias] = useState(0);
-  const [carregadoDoBanco, setCarregadoDoBanco] = useState(false);
+  const [carregadoDoBanco, setCarregadoDoBanco] = useState(false); // true assim que a TENTATIVA termina (sucesso ou falha) — libera a tela pra seguir
+  const [podeGravar, setPodeGravar] = useState(false); // true SÓ quando a leitura teve sucesso de verdade — único gate da gravação automática
   const [erroCarregamentoBanco, setErroCarregamentoBanco] = useState(false);
   const [ultimaSincronizacao, setUltimaSincronizacao] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
@@ -654,10 +662,16 @@ export default function App() {
       // com o estado ainda vazio (por causa de uma falha de leitura), apagaria os dados reais que
       // ainda estavam salvos no aparelho, só não tinham sido lidos ainda.
       setErroCarregamentoBanco(false);
+      setPodeGravar(true);
       setCarregadoDoBanco(true);
     }).catch((e) => {
       console.error("Falha ao carregar banco local:", e);
-      setErroCarregamentoBanco(true); // NUNCA marcar carregadoDoBanco aqui — ver comentário acima
+      // mesmo em erro, libera a tela pra seguir (login/uso normal) — isso é comum em certos
+      // navegadores/contextos (modo anônimo no celular, restrições de armazenamento em PWA, etc.)
+      // e não deve travar o app inteiro. Só "podeGravar" continua false, protegendo dados reais
+      // que possam existir mas não puderam ser lidos agora.
+      setErroCarregamentoBanco(true);
+      setCarregadoDoBanco(true);
     });
   };
 
@@ -725,15 +739,15 @@ export default function App() {
   // ---------- grava cada coleção no IndexedDB sempre que ela muda ----------
   // Só começa a gravar DEPOIS do carregamento inicial (senão sobrescreveria os
   // dados salvos com os dados de exemplo antes de eles serem lidos).
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("usuarios", users); }, [carregadoDoBanco, users]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("fazendas", fazendas); }, [carregadoDoBanco, fazendas]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("retiros", retiros); }, [carregadoDoBanco, retiros]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("safras", safras); }, [carregadoDoBanco, safras]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("lotes", lotes); }, [carregadoDoBanco, lotes]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("insumos", insumos); }, [carregadoDoBanco, insumos]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("manejos", manejos); }, [carregadoDoBanco, manejos]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("movimentos", movimentos); }, [carregadoDoBanco, movimentos]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("agendamentos", agendamentos); }, [carregadoDoBanco, agendamentos]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("usuarios", users); }, [podeGravar, users]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("fazendas", fazendas); }, [podeGravar, fazendas]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("retiros", retiros); }, [podeGravar, retiros]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("safras", safras); }, [podeGravar, safras]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("lotes", lotes); }, [podeGravar, lotes]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("insumos", insumos); }, [podeGravar, insumos]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("manejos", manejos); }, [podeGravar, manejos]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("movimentos", movimentos); }, [podeGravar, movimentos]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("agendamentos", agendamentos); }, [podeGravar, agendamentos]);
 
   // ---------- detecta volta da internet automaticamente e sincroniza ----------
   React.useEffect(() => {
@@ -1051,11 +1065,11 @@ export default function App() {
     if (supabaseConfigurado && u.email && u.senha) {
       const r = await criarUsuario(u.email, u.senha);
       if (!r.ok) return { ok: false, erro: r.erro };
-      setUsers((a) => [...a, { id: r.authUserId, nome: u.nome, login: derivarLogin(u.nome, u.email), email: u.email, perfil: u.perfil, criadoPor: currentUser?.id || null, fazendasAutorizadas: [] }]);
+      setUsers((a) => [...a, { id: r.authUserId, nome: u.nome, login: derivarLogin(u.nome, u.email), email: u.email, perfil: u.perfil, criadoPor: currentUser?.id || null, criadoEm: new Date().toISOString(), fazendasAutorizadas: [] }]);
       marcaPendencia();
       return { ok: true, precisaConfirmarEmail: r.precisaConfirmarEmail };
     }
-    setUsers((a) => [...a, { ...u, id: uid("u"), login: derivarLogin(u.nome, u.email), criadoPor: currentUser?.id || null, fazendasAutorizadas: u.fazendasAutorizadas || [] }]);
+    setUsers((a) => [...a, { ...u, id: uid("u"), login: derivarLogin(u.nome, u.email), criadoPor: currentUser?.id || null, criadoEm: new Date().toISOString(), fazendasAutorizadas: u.fazendasAutorizadas || [] }]);
     marcaPendencia();
     return { ok: true };
   };
@@ -1136,7 +1150,7 @@ export default function App() {
      ficam aguardando confirmação na aba Ressinc (dentro de D0) ---------- */
 
   const [sugestoesRessinc, setSugestoesRessinc] = useState([]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("sugestoesRessinc", sugestoesRessinc); }, [carregadoDoBanco, sugestoesRessinc]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("sugestoesRessinc", sugestoesRessinc); }, [podeGravar, sugestoesRessinc]);
   const sugestoesRessincAtivas = useMemo(
     () => sugestoesRessinc.filter((s) => s.fazendaId === fazendaAtivaId && (safraAtivaId ? s.safraId === safraAtivaId : true) && s.status === "pendente"),
     [sugestoesRessinc, fazendaAtivaId, safraAtivaId]
@@ -1161,7 +1175,7 @@ export default function App() {
      "Destino para vazias" = Repasse; ficam aguardando confirmação na aba Repasse ---------- */
 
   const [sugestoesRepasse, setSugestoesRepasse] = useState([]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("sugestoesRepasse", sugestoesRepasse); }, [carregadoDoBanco, sugestoesRepasse]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("sugestoesRepasse", sugestoesRepasse); }, [podeGravar, sugestoesRepasse]);
   const sugestoesRepasseAtivas = useMemo(
     () => sugestoesRepasse.filter((s) => s.fazendaId === fazendaAtivaId && (safraAtivaId ? s.safraId === safraAtivaId : true) && s.status === "pendente"),
     [sugestoesRepasse, fazendaAtivaId, safraAtivaId]
@@ -1187,7 +1201,7 @@ export default function App() {
      selecionar o mesmo nome preenche tudo de novo automaticamente (mas continua editável). ---------- */
 
   const [protocolosPadrao, setProtocolosPadrao] = useState([]);
-  React.useEffect(() => { if (carregadoDoBanco) gravarColecao("protocolosPadrao", protocolosPadrao); }, [carregadoDoBanco, protocolosPadrao]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("protocolosPadrao", protocolosPadrao); }, [podeGravar, protocolosPadrao]);
   const protocolosPadraoDaFazenda = (manejo) => protocolosPadrao.filter((p) => p.fazendaId === fazendaAtivaId && p.manejo === manejo);
   // só cria um cadastro novo se ainda não existir um com esse nome (para aquele manejo/fazenda) —
   // combinações já existentes não são sobrescritas automaticamente.
@@ -1204,7 +1218,7 @@ export default function App() {
      Diagnóstico Final) e continuar depois, mesmo trocando de aba ou de fazenda/safra ---------- */
 
   const [rascunhos, setRascunhos] = useState({});
-  React.useEffect(() => { if (carregadoDoBanco) gravarRascunhos(rascunhos); }, [carregadoDoBanco, rascunhos]);
+  React.useEffect(() => { if (podeGravar) gravarRascunhos(rascunhos); }, [podeGravar, rascunhos]);
   const salvarRascunho = (chave, dados) => {
     setRascunhos((a) => ({ ...a, [chave]: { ...dados, salvoEm: new Date().toISOString() } }));
     marcaPendencia();
@@ -1471,26 +1485,13 @@ export default function App() {
   // fecha o menu automaticamente ao trocar de seção/aba (celular)
   React.useEffect(() => { setMenuAberto(false); }, [section, sub]);
 
-  // se o IndexedDB local não pôde ser lido (erro de versão, navegador, etc.), interrompe aqui em
-  // vez de deixar o app seguir com dados vazios — é isso que evita a gravação automática apagar
-  // dados reais que só não puderam ser lidos ainda (ver comentário em tentarCarregarBanco).
-  if (erroCarregamentoBanco) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
-        <div style={{ textAlign: "center", maxWidth: 420 }}>
-          <p style={{ color: "#A32D2D", fontWeight: 700, marginBottom: 10, fontSize: 15 }}>Não foi possível abrir os dados salvos neste aparelho.</p>
-          <p style={{ fontSize: 13, color: "#4A473E", marginBottom: 18, lineHeight: 1.6 }}>
-            Isso costuma ser um problema temporário do navegador. Seus dados <strong>não foram apagados</strong> —
-            por segurança, o app parou antes de continuar, para não arriscar sobrescrever nada enquanto não
-            conseguir ler o que já estava salvo. Tente de novo; se persistir, feche e reabra o app.
-          </p>
-          <BtnPrimary onClick={tentarCarregarBanco}>Tentar novamente</BtnPrimary>
-        </div>
-      </div>
-    );
-  }
+  // se o IndexedDB local não pôde ser lido (erro de versão, navegador, modo anônimo etc.), a tela
+  // segue normalmente (login, uso do app) — só a gravação automática fica desligada (via
+  // "podeGravar", ver tentarCarregarBanco) até uma nova tentativa funcionar, pra nunca arriscar
+  // sobrescrever dados reais que só não puderam ser lidos ainda. Um aviso não-bloqueante aparece
+  // na tela de login em vez de travar o app inteiro.
   if (!sessaoAuthCarregada) return null; // evita piscar a tela de login antes de checar sessão salva
-  if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} />;
+  if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} avisoCarregamento={erroCarregamentoBanco ? { onTentar: tentarCarregarBanco } : null} />;
   if (currentUser._aguardandoPerfil) {
     return (
       <div style={{ minHeight: "100vh", background: "#F7F7F7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#6B685E", fontSize: 13, padding: 20 }}>

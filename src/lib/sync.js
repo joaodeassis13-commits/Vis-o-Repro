@@ -70,6 +70,9 @@ async function enviarColecao(colecao, itens) {
   if (colecao === "usuarios") {
     validos = itens.filter((u) => REGEX_UUID.test(u.id));
     invalidos = itens.filter((u) => !REGEX_UUID.test(u.id));
+    // "criado_em" é obrigatório na tabela; usuários criados antes desse campo existir no app
+    // ficariam sem ele — preenche na hora do envio em vez de bloquear a sincronização inteira.
+    validos = validos.map((u) => (u.criadoEm ? u : { ...u, criadoEm: new Date().toISOString() }));
   }
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
