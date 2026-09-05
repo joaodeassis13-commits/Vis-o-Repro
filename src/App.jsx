@@ -901,13 +901,15 @@ export default function App() {
         const porBrinco = new Map((existente.detalhes || []).map((d) => [d.brinco, d]));
         detalhesNovos.forEach((d) => porBrinco.set(d.brinco, d));
         const detalhesFinal = [...porBrinco.values()];
-        manejosAtuais = manejosAtuais.map((m) => m.id === existente.id ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco) } : m);
+        manejosAtuais = manejosAtuais.map((m) => m.id === existente.id
+          ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador }
+          : m);
         manejosAtualizados++;
       } else {
         manejosAtuais = [...manejosAtuais, {
           id: uid("man"), tipo, fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
           loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
-          data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos,
+          data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos, inseminador: grupo.inseminador || null,
           operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
         }];
         manejosCriados++;
@@ -927,8 +929,8 @@ export default function App() {
       }
       const grupo = gruposLote.get(chave);
       if (linha.brinco && !grupo.animais.includes(linha.brinco.trim())) grupo.animais.push(linha.brinco.trim());
-      const ordemLinha = linha.ordem?.trim();
-      if (ordemLinha && ORDENS_IATF.includes(ordemLinha)) {
+      const ordemLinha = normalizarOrdemIATF(linha.ordem);
+      if (ordemLinha) {
         const indiceAtual = ORDENS_IATF.indexOf(ordemLinha);
         const indiceGrupo = grupo.ordemMaisAvancada ? ORDENS_IATF.indexOf(grupo.ordemMaisAvancada) : -1;
         if (indiceAtual > indiceGrupo) grupo.ordemMaisAvancada = ordemLinha;
@@ -976,10 +978,15 @@ export default function App() {
       const chaveL = `${linha.safra.trim().toLowerCase()}|${linha.retiro.trim().toLowerCase()}|${linha.lote.trim().toLowerCase()}`;
       const infoLote = chaveLote.get(chaveL);
       if (!infoLote) return;
-      const ordem = (linha.ordem?.trim() && ORDENS_IATF.includes(linha.ordem.trim())) ? linha.ordem.trim() : ORDENS_IATF[0];
+      const ordem = normalizarOrdemIATF(linha.ordem) || ORDENS_IATF[0];
       const chave = `${infoLote.loteId}|${ordem}|${linha.dataInseminacao}`;
-      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, animais: [] });
-      gruposInsem.get(chave).animais.push({ brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro), touroInformado: linha.touro?.trim() || null });
+      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, inseminador: null, animais: [] });
+      const grupoInsem = gruposInsem.get(chave);
+      if (!grupoInsem.inseminador && linha.inseminador?.trim()) grupoInsem.inseminador = linha.inseminador.trim();
+      grupoInsem.animais.push({
+        brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro), touroInformado: linha.touro?.trim() || null,
+        racaTouro: linha.racaTouro?.trim() || null, ecc: linha.ecc?.trim() || null,
+      });
     });
     gruposInsem.forEach((grupo) => criarOuAtualizarManejo("inseminacao", grupo, grupo.animais));
 
@@ -990,7 +997,7 @@ export default function App() {
       const chaveL = `${linha.safra.trim().toLowerCase()}|${linha.retiro.trim().toLowerCase()}|${linha.lote.trim().toLowerCase()}`;
       const infoLote = chaveLote.get(chaveL);
       if (!infoLote) return;
-      const ordem = (linha.ordem?.trim() && ORDENS_IATF.includes(linha.ordem.trim())) ? linha.ordem.trim() : ORDENS_IATF[0];
+      const ordem = normalizarOrdemIATF(linha.ordem) || ORDENS_IATF[0];
       const chave = `${infoLote.loteId}|${ordem}|${linha.dataDiagnostico}`;
       const resultadoNormalizado = linha.resultado.trim().toUpperCase().startsWith("P") ? "Prenha" : "Vazia";
       if (!gruposDiag.has(chave)) gruposDiag.set(chave, { infoLote, ordem, data: linha.dataDiagnostico, animais: [] });
@@ -1967,11 +1974,22 @@ const MAPA_COLUNAS_IMPORTACAO = {
   ordem: "ordem",
   datainseminacao: "dataInseminacao", datadeinseminacao: "dataInseminacao",
   touro: "touro",
+  racadotouro: "racaTouro", racatouro: "racaTouro",
+  eccnainseminacao: "ecc", ecc: "ecc",
+  inseminador: "inseminador",
   datadiagnostico: "dataDiagnostico", datadodiagnostico: "dataDiagnostico",
   resultado: "resultado", resultadodiagnostico: "resultado", diagnostico: "resultado",
   tempodegestacaoinformado: "tempoGestacaoInformado", tempodegestacao: "tempoGestacaoInformado",
 };
 const normalizarCabecalho = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+// aceita a Ordem em qualquer formato razoável ("1", "1º", "1º IATF", "01", "1a"...) — antes exigia
+// bater exatamente com o texto "1º IATF" e qualquer variação caía silenciosamente em "1º IATF".
+const normalizarOrdemIATF = (valor) => {
+  if (!valor) return null;
+  const digito = String(valor).match(/[123]/);
+  if (!digito) return null;
+  return ORDENS_IATF[Number(digito[0]) - 1] || null;
+};
 // aceita data já como objeto Date (célula formatada como data no Excel), como texto
 // dd/mm/aaaa (comum no Brasil) ou já em aaaa-mm-dd — devolve sempre em aaaa-mm-dd.
 const paraDataISO = (valor) => {
@@ -1999,8 +2017,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
 
   const baixarModelo = () => {
     const dadosModelo = [
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1º IATF", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1º IATF", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,00", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,25", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
     ];
     const ws = XLSX.utils.json_to_sheet(dadosModelo);
     const wb = XLSX.utils.book_new();
@@ -2082,8 +2100,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
               Safras, retiros e lotes que ainda não existem são criados automaticamente; se um lote já existir (mesmo nome, safra e retiro), os animais novos são adicionados a ele.
             </p>
             <p style={{ fontSize: 12.5, color: "#4A473E", lineHeight: 1.6, margin: "0 0 14px" }}>
-              Para trazer também o <strong>histórico de manejo</strong>, preencha ainda: <strong>Ordem</strong> (1º/2º/3º IATF — se vazio, assume 1º IATF),
-              <strong> Data Inseminação</strong> e <strong>Touro</strong> (cria um manejo de Inseminação), e <strong>Data Diagnóstico</strong>, <strong>Resultado</strong> (P ou V) e
+              Para trazer também o <strong>histórico de manejo</strong>, preencha ainda: <strong>Ordem</strong> (aceita "1", "1º", "1º IATF" — qualquer formato com o número; se vazio, assume 1º IATF),
+              <strong> Data Inseminação</strong> e <strong>Touro</strong> (cria um manejo de Inseminação — <strong>Raça do touro</strong>, <strong>ECC na Inseminação</strong> e <strong>Inseminador</strong> são opcionais e enriquecem esse manejo), e <strong>Data Diagnóstico</strong>, <strong>Resultado</strong> (P ou V) e
               <strong> Tempo de gestação informado</strong> (cria um manejo de Diagnóstico). Animais da mesma safra/lote/ordem/data são agrupados num único manejo, igual ao que
               aconteceria se tivessem sido lidos juntos na hora. Se o Touro informado já existir cadastrado no estoque de sêmen, o manejo já fica vinculado a ele.
             </p>
@@ -6269,6 +6287,11 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
     if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.touro) return insumo.touro; }
     return touroInformado || null;
   };
+  const racaDoTouro = (semenId, racaTouroInformada) => {
+    if (racaTouroInformada) return racaTouroInformada;
+    if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.raca) return insumo.raca; }
+    return null;
+  };
 
   const registros = [];
   inseminacoes.forEach((insem) => {
@@ -6285,6 +6308,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
         categoria: insem.categoria || null, retiroId: insem.retiroId || null,
         ecc: detIns.ecc || null, inseminador: insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
+        racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
       });
     });
   });
@@ -6326,8 +6350,16 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   const porInseminador = agruparConcepcao(registros, (r) => r.inseminador);
   const porData = agruparConcepcao(registros, (r) => visaoData === "mes" ? r.dataInseminacao?.slice(0, 7) : r.dataInseminacao)
     .sort((a, b) => (a.label < b.label ? -1 : 1))
-    .map((d) => ({ ...d, label: visaoData === "mes" ? fmtMes(d.label) : fmtDate(d.label) }));
-  const porTouro = agruparConcepcao(registros, (r) => r.touro);
+    .map((d) => visaoData === "mes"
+      ? { ...d, label: fmtMes(d.label) }
+      : { ...d, mesGrupo: d.label.slice(0, 7), label: d.label.slice(8, 10) } // "aaaa-mm-dd" -> só "dd" no eixo, mês vira rótulo de grupo
+    );
+  const [visaoRacaTouro, setVisaoRacaTouro] = useState("todas");
+  const racasTouroDisponiveis = [...new Set(registros.map((r) => r.racaTouro).filter(Boolean))];
+  const porTouro = agruparConcepcao(
+    visaoRacaTouro === "todas" ? registros : registros.filter((r) => r.racaTouro === visaoRacaTouro),
+    (r) => r.touro
+  );
 
   const OPCOES_BARRA_CONCEPCAO = {
     ordem: { label: "Ordem", dados: porOrdem, descricao: "Taxa de concepção em cada ordem de IATF." },
@@ -6417,9 +6449,9 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
       ) : (
         <>
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20, alignItems: "stretch" }}>
-            <div style={{ ...cardStyle, height: 460, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...cardStyle, height: 276, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Resumo</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 22, width: "fit-content" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
                 {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoResumo(key)}
                     style={{
@@ -6435,22 +6467,20 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
               </div>
             </div>
 
-            <div style={{ ...cardStyle, height: 460, display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
-                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>
-                  {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
-                </div>
-                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-                  {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
-                    <button key={key} onClick={() => setVisaoGeral(key)}
-                      style={{
-                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                        background: visaoGeral === key ? "#166336" : "transparent", color: visaoGeral === key ? "#FFFFFF" : "#6B685E",
-                      }}>{label}</button>
-                  ))}
-                </div>
+            <div style={{ ...cardStyle, height: 276, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
+                {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
               </div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 16px" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
+                {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
+                  <button key={key} onClick={() => setVisaoGeral(key)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                      background: visaoGeral === key ? "#166336" : "transparent", color: visaoGeral === key ? "#FFFFFF" : "#6B685E",
+                    }}>{label}</button>
+                ))}
+              </div>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>
                 {visaoGeral === "concepcao"
                   ? "Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados."
                   : "Percentual de Prenhas sobre o total de animais submetidos."}
@@ -6460,27 +6490,25 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
               </div>
             </div>
 
-            <div style={{ ...cardStyle, height: 460, display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
-                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por {OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}</div>
-                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
-                  {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
-                    <button key={key} onClick={() => setVisaoBarra(key)}
-                      style={{
-                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                        background: visaoBarra === key ? "#166336" : "transparent", color: visaoBarra === key ? "#FFFFFF" : "#6B685E",
-                      }}>{op.label}</button>
-                  ))}
-                </div>
+            <div style={{ ...cardStyle, height: 276, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Concepção por {OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}</div>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%" }}>
+                {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
+                  <button key={key} onClick={() => setVisaoBarra(key)}
+                    style={{
+                      padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600,
+                      whiteSpace: "nowrap", background: visaoBarra === key ? "#166336" : "transparent", color: visaoBarra === key ? "#FFFFFF" : "#6B685E",
+                    }}>{op.label}</button>
+                ))}
               </div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 16px" }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].descricao}</p>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].descricao}</p>
               <div style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
                 <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} compacto />
               </div>
             </div>
           </div>
 
-          <div style={{ ...cardStyle, marginBottom: 20 }}>
+          <div style={{ ...cardStyle, marginBottom: 20, height: 320, display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
@@ -6493,11 +6521,30 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
                 ))}
               </div>
             </div>
-            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
-            <LinhaConcepcao dados={porData} />
+            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 12px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <LinhaConcepcao dados={porData} agruparPorMes={visaoData === "dia"} />
+            </div>
           </div>
 
-          <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
+          <div style={{ ...cardStyle, marginBottom: 20 }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por Touro</div>
+            {racasTouroDisponiveis.length > 0 && (
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content", flexWrap: "wrap" }}>
+                {["todas", ...racasTouroDisponiveis].map((raca) => (
+                  <button key={raca} onClick={() => setVisaoRacaTouro(raca)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                      background: visaoRacaTouro === raca ? "#166336" : "transparent", color: visaoRacaTouro === raca ? "#FFFFFF" : "#6B685E",
+                    }}>{raca === "todas" ? "Todas as raças" : raca}</button>
+                ))}
+              </div>
+            )}
+            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 16px" }}>Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor.</p>
+            <div style={{ height: 200 }}>
+              <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc />
+            </div>
+          </div>
 
           <p style={{ fontSize: 11, color: "#9B9686" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
         </>
@@ -6539,14 +6586,14 @@ function CardResumo({ titulo, total, colunas, icon: Icon }) {
 const CORES_ROSCA = ["#166336", "#4D9169", "#8FBBA0", "#C7DED0", "#0B4020"];
 function GraficoRosca({ titulo, total, itens }) {
   const somaTotal = itens.reduce((s, i) => s + i.valor, 0);
-  const raio = 52, centro = 62, espessura = 20;
+  const raio = 36, centro = 44, espessura = 14;
   const circunferencia = 2 * Math.PI * raio;
   let acumulado = 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, minWidth: 170 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#166336", textTransform: "uppercase" }}>{titulo}</div>
-      <svg width={124} height={124} viewBox="0 0 124 124">
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 130 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#166336", textTransform: "uppercase" }}>{titulo}</div>
+      <svg width={88} height={88} viewBox="0 0 88 88">
         <circle cx={centro} cy={centro} r={raio} fill="none" stroke="#DDDDDD" strokeWidth={espessura} />
         {somaTotal > 0 && itens.map((item, i) => {
           if (item.valor <= 0) return null;
@@ -6559,13 +6606,13 @@ function GraficoRosca({ titulo, total, itens }) {
               strokeDashoffset={offset} transform={`rotate(-90 ${centro} ${centro})`} />
           );
         })}
-        <text x={centro} y={centro - 3} textAnchor="middle" fontSize="19" fontWeight="700" fill="#232520">{total.toLocaleString("pt-BR")}</text>
-        <text x={centro} y={centro + 14} textAnchor="middle" fontSize="9.5" fill="#6B685E">total</text>
+        <text x={centro} y={centro - 2} textAnchor="middle" fontSize="14" fontWeight="700" fill="#232520">{total.toLocaleString("pt-BR")}</text>
+        <text x={centro} y={centro + 10} textAnchor="middle" fontSize="7.5" fill="#6B685E">total</text>
       </svg>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5, width: "100%" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, width: "100%" }}>
         {itens.map((item, i) => (
-          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5 }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: CORES_ROSCA[i % CORES_ROSCA.length], flexShrink: 0 }} />
+          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_ROSCA[i % CORES_ROSCA.length], flexShrink: 0 }} />
             <span style={{ color: "#4A473E" }}>{item.label}</span>
             <span style={{ marginLeft: "auto", fontWeight: 700, color: "#232520" }}>{item.valor.toLocaleString("pt-BR")}</span>
           </div>
@@ -6581,15 +6628,16 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   const lista = ordenarPorTaxaDesc ? [...dados].sort((a, b) => b.taxa - a.taxa) : dados;
   if (lista.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorTaxa = Math.max(...lista.map((d) => d.taxa || 0), 10);
-  const alturaMax = compacto ? 90 : 140;
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "flex-end", gap: compacto ? 10 : 16, height: compacto ? 140 : 200, paddingTop: 10, overflowX: "auto" }}>
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
       {lista.map((d, i) => (
-        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: compacto ? 48 : 64, flexShrink: 0 }}>
-          <div style={{ fontSize: compacto ? 12 : 13, fontWeight: 700, color: "#232520", marginBottom: 6 }}>{d.taxa}%</div>
-          <div style={{ width: compacto ? 32 : 44, height: `${Math.max((d.taxa / maiorTaxa) * alturaMax, 4)}px`, background: "#166336", borderRadius: "4px 4px 0 0" }} />
-          <div style={{ fontSize: compacto ? 10.5 : 11.5, color: "#6B685E", marginTop: 8, textAlign: "center", maxWidth: compacto ? 64 : 84, wordBreak: "break-word" }}>{d.label}</div>
-          <div style={{ fontSize: compacto ? 9.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
+          <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa}%</div>
+          <div style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", width: "100%" }}>
+            <div style={{ width: compacto ? 28 : 44, height: `${Math.max((d.taxa / maiorTaxa) * 100, 3)}%`, background: "#166336", borderRadius: "4px 4px 0 0" }} />
+          </div>
+          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
+          <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>
         </div>
       ))}
     </div>
@@ -6601,19 +6649,23 @@ function GraficoColunas({ titulo, descricao, dados, ordenarPorTaxaDesc, compacto
     <div style={{ ...cardStyle, marginBottom: compacto ? 0 : 20 }}>
       <div style={{ fontFamily: "'Fraunces', serif", fontSize: compacto ? 15 : 17, fontWeight: 600, color: "#232520", marginBottom: 4 }}>{titulo}</div>
       <p style={{ fontSize: compacto ? 11.5 : 12, color: "#9B9686", margin: "0 0 16px" }}>{descricao}</p>
-      <BarrasConcepcao dados={dados} ordenarPorTaxaDesc={ordenarPorTaxaDesc} compacto={compacto} />
+      <div style={{ height: compacto ? 130 : 200 }}>
+        <BarrasConcepcao dados={dados} ordenarPorTaxaDesc={ordenarPorTaxaDesc} compacto={compacto} />
+      </div>
     </div>
   );
 }
 
 // gráfico de LINHA (SVG simples, sem biblioteca) para a Concepção por data de inseminação —
 // um ponto por data/mês, ligados por uma linha, com a taxa acima do ponto e "n" abaixo do eixo.
-function LinhaConcepcao({ dados }) {
+function LinhaConcepcao({ dados, agruparPorMes }) {
   if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const alturaUtil = 130;
   const margemTopo = 24;
-  const alturaTotal = alturaUtil + margemTopo + 40;
-  const largura = Math.max(dados.length * 70, 260);
+  const margemBaixo = agruparPorMes ? 54 : 40; // uma linha a mais embaixo pro rótulo do mês, quando agrupado
+  const alturaTotal = alturaUtil + margemTopo + margemBaixo;
+  // com o eixo mostrando só o dia (não a data inteira), os pontos podem ficar mais próximos
+  const largura = Math.max(dados.length * (agruparPorMes ? 36 : 70), 260);
   const maiorTaxa = Math.max(...dados.map((d) => d.taxa || 0), 10);
   const passoX = dados.length > 1 ? largura / (dados.length - 1) : 0;
   const pontos = dados.map((d, i) => ({
@@ -6623,18 +6675,41 @@ function LinhaConcepcao({ dados }) {
   }));
   const linha = pontos.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
 
+  // agrupa pontos consecutivos do mesmo mês pra desenhar o rótulo do mês uma única vez,
+  // centralizado embaixo daquele trecho — em vez de repetir a data inteira em cada ponto.
+  const gruposMes = [];
+  if (agruparPorMes) {
+    pontos.forEach((p) => {
+      const ultimo = gruposMes[gruposMes.length - 1];
+      if (ultimo && ultimo.mes === p.mesGrupo) ultimo.pontos.push(p);
+      else gruposMes.push({ mes: p.mesGrupo, pontos: [p] });
+    });
+  }
+
   return (
-    <div className="rola-horizontal" style={{ overflowX: "auto" }}>
-      <svg width={largura + 20} height={alturaTotal} viewBox={`-10 0 ${largura + 20} ${alturaTotal}`}>
-        <path d={linha} fill="none" stroke="#166336" strokeWidth="2" />
+    <div className="rola-horizontal" style={{ height: "100%", width: "100%", overflowX: "auto" }}>
+      {/* preserveAspectRatio="none" + width/height 100%: se o card for mais largo que o conteúdo
+          mínimo, o gráfico estica pra preencher (sem sobrar espaço); se for mais estreito (muitos
+          pontos), o minWidth força a rolagem horizontal em vez de espremer os pontos. */}
+      <svg viewBox={`-10 0 ${largura + 20} ${alturaTotal}`} preserveAspectRatio="none"
+        style={{ width: "100%", minWidth: largura + 20, height: "100%", display: "block" }}>
+        <path d={linha} fill="none" stroke="#166336" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         {pontos.map((p, i) => (
           <g key={`${p.label}-${i}`}>
-            <circle cx={p.x} cy={p.y} r="4" fill="#166336" />
+            <circle cx={p.x} cy={p.y} r="4" fill="#166336" vectorEffect="non-scaling-stroke" />
             <text x={p.x} y={p.y - 10} fontSize="11.5" fontWeight="700" fill="#232520" textAnchor="middle">{p.taxa}%</text>
             <text x={p.x} y={margemTopo + alturaUtil + 18} fontSize="10.5" fill="#6B685E" textAnchor="middle">{p.label}</text>
             <text x={p.x} y={margemTopo + alturaUtil + 32} fontSize="10" fill="#B0AA98" textAnchor="middle">n={p.n}</text>
           </g>
         ))}
+        {agruparPorMes && gruposMes.map((g, i) => {
+          const xMedio = (g.pontos[0].x + g.pontos[g.pontos.length - 1].x) / 2;
+          return (
+            <text key={i} x={xMedio} y={margemTopo + alturaUtil + 48} fontSize="10.5" fontWeight="700" fill="#166336" textAnchor="middle">
+              {fmtMes(g.mes)}
+            </text>
+          );
+        })}
       </svg>
     </div>
   );
