@@ -6311,6 +6311,8 @@ const CATEGORIAS_RESUMO = ["Nulípara", "Primípara", "Multípara"];
 
 function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimentos, perfil }) {
   const [visaoData, setVisaoData] = useState("dia"); // "dia" | "mes"
+  const [visaoBarra, setVisaoBarra] = useState("ordem"); // "ordem" | "categoria" | "retiro" | "ecc" | "inseminador"
+  const [visaoResumo, setVisaoResumo] = useState("animais"); // "animais" | "inseminacoes" | "prenhas"
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || null;
 
   const registros = useMemo(() => construirRegistrosConcepcao(manejos, lotes, insumos), [manejos, lotes, insumos]);
@@ -6325,6 +6327,14 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     .sort((a, b) => (a.label < b.label ? -1 : 1))
     .map((d) => ({ ...d, label: visaoData === "mes" ? fmtMes(d.label) : fmtDate(d.label) }));
   const porTouro = agruparConcepcao(registros, (r) => r.touro);
+
+  const OPCOES_BARRA_CONCEPCAO = {
+    ordem: { label: "Ordem", dados: porOrdem, descricao: "Taxa de concepção em cada ordem de IATF." },
+    categoria: { label: "Categoria", dados: porCategoria, descricao: "Taxa de concepção por categoria do lote no momento da Inseminação." },
+    retiro: { label: "Retiro", dados: porRetiro, descricao: "Taxa de concepção por retiro." },
+    ecc: { label: "ECC", dados: porEcc, descricao: "Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." },
+    inseminador: { label: "Inseminador", dados: porInseminador, descricao: "Taxa de concepção por quem realizou a Inseminação." },
+  };
 
   // ---------- resumo do topo: Total de animais / Inseminações / Prenhas ----------
   // mesma regra do resto do relatório: lote "Desconhecidos" nunca entra na conta.
@@ -6360,6 +6370,20 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     { label: "Repasse", valor: contarPrenhas(diagnosticosRepasseValidos) },
   ];
 
+  const OPCOES_ROSCA_RESUMO = {
+    animais: { label: "Animais submetidos", grupos: [
+      { titulo: "Por categoria", total: totalAnimais, itens: animaisPorCategoria },
+    ] },
+    inseminacoes: { label: "Inseminações", grupos: [
+      { titulo: "Por categoria", total: totalInseminacoes, itens: inseminacoesPorCategoria },
+      { titulo: "Por ordem", total: totalInseminacoes, itens: inseminacoesPorOrdem },
+    ] },
+    prenhas: { label: "Prenhas", grupos: [
+      { titulo: "Por categoria", total: totalPrenhas, itens: prenhasPorCategoria },
+      { titulo: "Por ordem", total: totalPrenhas, itens: prenhasPorOrdem },
+    ] },
+  };
+
   return (
     <div>
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
@@ -6368,23 +6392,44 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
         <EmptyState text="Selecione uma fazenda ativa para ver os relatórios." />
       ) : (
         <>
-          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
-            <CardResumo titulo="Total de animais" total={totalAnimais} colunas={[animaisPorCategoria]} icon={CabecaBovinaIcon} />
-            <CardResumo titulo="Total de Inseminações" total={totalInseminacoes} colunas={[inseminacoesPorCategoria, inseminacoesPorOrdem]} icon={SpermIcon} />
-            <CardResumo titulo="Total de Prenhas" total={totalPrenhas} colunas={[prenhasPorCategoria, prenhasPorOrdem]} icon={UltrasoundIcon} />
+          <div style={{ ...cardStyle, marginBottom: 20 }}>
+            <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 22, width: "fit-content" }}>
+              {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
+                <button key={key} onClick={() => setVisaoResumo(key)}
+                  style={{
+                    padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                    background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
+                  }}>{op.label}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 36, justifyContent: "center", flexWrap: "wrap" }}>
+              {OPCOES_ROSCA_RESUMO[visaoResumo].grupos.map((g) => (
+                <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
+              ))}
+            </div>
           </div>
 
           {registros.length === 0 ? (
             <EmptyState text="Ainda não há Inseminações com Diagnóstico correspondente para calcular a taxa de concepção. Os gráficos aparecem aqui assim que houver dados (animais do lote Desconhecidos não entram na conta)." />
           ) : (
             <>
-              <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 4 }}>
-                <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} compacto />
-                <GraficoColunas titulo="Concepção por ordem" descricao="Taxa de concepção em cada ordem de IATF." dados={porOrdem} compacto />
-                <GraficoColunas titulo="Concepção por categoria" descricao="Taxa de concepção por categoria do lote no momento da Inseminação." dados={porCategoria} compacto />
-                <GraficoColunas titulo="Concepção por retiro" descricao="Taxa de concepção por retiro." dados={porRetiro} compacto />
-                <GraficoColunas titulo="Concepção por ECC na Inseminação" descricao="Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." dados={porEcc} compacto />
-                <GraficoColunas titulo="Concepção por Inseminador" descricao="Taxa de concepção por quem realizou a Inseminação." dados={porInseminador} compacto />
+              <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} compacto />
+
+              <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por {OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}</div>
+                  <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
+                    {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
+                      <button key={key} onClick={() => setVisaoBarra(key)}
+                        style={{
+                          padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                          background: visaoBarra === key ? "#166336" : "transparent", color: visaoBarra === key ? "#FFFFFF" : "#6B685E",
+                        }}>{op.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].descricao}</p>
+                <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} />
               </div>
 
               <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
@@ -6439,6 +6484,47 @@ function CardResumo({ titulo, total, colunas, icon: Icon }) {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+// gráfico de rosca (SVG simples, sem biblioteca) — usado no resumo do topo dos Relatórios
+// (Animais submetidos / Inseminações / Prenhas). "itens": [{ label, valor }].
+const CORES_ROSCA = ["#166336", "#4D9169", "#8FBBA0", "#C7DED0", "#0B4020"];
+function GraficoRosca({ titulo, total, itens }) {
+  const somaTotal = itens.reduce((s, i) => s + i.valor, 0);
+  const raio = 52, centro = 62, espessura = 20;
+  const circunferencia = 2 * Math.PI * raio;
+  let acumulado = 0;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, minWidth: 170 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#166336", textTransform: "uppercase" }}>{titulo}</div>
+      <svg width={124} height={124} viewBox="0 0 124 124">
+        <circle cx={centro} cy={centro} r={raio} fill="none" stroke="#DDDDDD" strokeWidth={espessura} />
+        {somaTotal > 0 && itens.map((item, i) => {
+          if (item.valor <= 0) return null;
+          const tamanho = (item.valor / somaTotal) * circunferencia;
+          const offset = circunferencia - acumulado;
+          acumulado += tamanho;
+          return (
+            <circle key={item.label} cx={centro} cy={centro} r={raio} fill="none" stroke={CORES_ROSCA[i % CORES_ROSCA.length]}
+              strokeWidth={espessura} strokeDasharray={`${tamanho} ${circunferencia - tamanho}`}
+              strokeDashoffset={offset} transform={`rotate(-90 ${centro} ${centro})`} />
+          );
+        })}
+        <text x={centro} y={centro - 3} textAnchor="middle" fontSize="19" fontWeight="700" fill="#232520">{total.toLocaleString("pt-BR")}</text>
+        <text x={centro} y={centro + 14} textAnchor="middle" fontSize="9.5" fill="#6B685E">total</text>
+      </svg>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5, width: "100%" }}>
+        {itens.map((item, i) => (
+          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5 }}>
+            <span style={{ width: 10, height: 10, borderRadius: "50%", background: CORES_ROSCA[i % CORES_ROSCA.length], flexShrink: 0 }} />
+            <span style={{ color: "#4A473E" }}>{item.label}</span>
+            <span style={{ marginLeft: "auto", fontWeight: 700, color: "#232520" }}>{item.valor.toLocaleString("pt-BR")}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
