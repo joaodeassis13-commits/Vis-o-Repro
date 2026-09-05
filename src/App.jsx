@@ -199,6 +199,22 @@ function UltrasoundIcon({ size = 24, ...props }) {
   );
 }
 
+// cabeça de bovino (silhueta) — usada só no resumo do topo dos Relatórios ("Total de animais")
+function CabecaBovinaIcon({ size = 24, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      {/* chifres */}
+      <path d="M9.6 6.2 C8.4 4.2 8.9 2.1 10.3 2.4 C11.1 3.4 11.1 5.1 10.3 6.7" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14.4 6.2 C15.6 4.2 15.1 2.1 13.7 2.4 C12.9 3.4 12.9 5.1 13.7 6.7" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      {/* orelhas (preenchidas) */}
+      <path d="M8.6 8 C6 6.9 3.9 7.9 4.2 9.5 C4.5 11 6.8 11.3 8.9 10" fill="currentColor" stroke="none" />
+      <path d="M15.4 8 C18 6.9 20.1 7.9 19.8 9.5 C19.5 11 17.2 11.3 15.1 10" fill="currentColor" stroke="none" />
+      {/* cabeça (preenchida) */}
+      <path d="M12 6.8 C14.6 6.8 16.1 8.9 15.7 11.3 C15.4 13.1 14.5 14.1 13.8 15.6 C13.3 16.7 13.3 18 12 18 C10.7 18 10.7 16.7 10.2 15.6 C9.5 14.1 8.6 13.1 8.3 11.3 C7.9 8.9 9.4 6.8 12 6.8 Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /* ---------- badge estilo brinco de gado (elemento assinatura) ---------- */
 
 function EarTag({ children, size = "md" }) {
@@ -6353,9 +6369,9 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
       ) : (
         <>
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
-            <CardResumo titulo="Total de animais" total={totalAnimais} colunas={[animaisPorCategoria]} />
-            <CardResumo titulo="Total de Inseminações" total={totalInseminacoes} colunas={[inseminacoesPorCategoria, inseminacoesPorOrdem]} />
-            <CardResumo titulo="Total de Prenhas" total={totalPrenhas} colunas={[prenhasPorCategoria, prenhasPorOrdem]} />
+            <CardResumo titulo="Total de animais" total={totalAnimais} colunas={[animaisPorCategoria]} icon={CabecaBovinaIcon} />
+            <CardResumo titulo="Total de Inseminações" total={totalInseminacoes} colunas={[inseminacoesPorCategoria, inseminacoesPorOrdem]} icon={SpermIcon} />
+            <CardResumo titulo="Total de Prenhas" total={totalPrenhas} colunas={[prenhasPorCategoria, prenhasPorOrdem]} icon={UltrasoundIcon} />
           </div>
 
           {registros.length === 0 ? (
@@ -6401,27 +6417,28 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
 
 // card de resumo do topo do relatório (Total de animais / Inseminações / Prenhas) — "colunas" é uma
 // lista de grupos lado a lado (ex.: [porCategoria, porOrdem]); cada grupo é uma lista de {label, valor}.
-function CardResumo({ titulo, total, colunas }) {
+function CardResumo({ titulo, total, colunas, icon: Icon }) {
   return (
-    <div style={cardStyle}>
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 700, color: "#232520" }}>{titulo}</div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: "#166336", marginTop: 2 }}>{total.toLocaleString("pt-BR")}</div>
+    <div style={{ background: "transparent", border: "1.5px solid #166336", borderRadius: 16, padding: "18px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {Icon && <Icon size={28} color="#166336" />}
+          <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 700, color: "#232520" }}>{titulo}</div>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#166336" }}>{total.toLocaleString("pt-BR")}</div>
       </div>
-      <div style={{ display: "flex", gap: 28, justifyContent: "center", flexWrap: "wrap" }}>
-        {colunas.map((coluna, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 150 }}>
-            {coluna.map((item) => (
-              <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: "#166336" }}>{item.label}</span>
-                <span style={{ background: "#166336", color: "#FFFFFF", fontSize: 13, fontWeight: 700, borderRadius: 8, padding: "5px 14px", minWidth: 56, textAlign: "center" }}>
-                  {item.valor.toLocaleString("pt-BR")}
-                </span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      {colunas.map((linha, i) => (
+        <div key={i} style={{ display: "flex", gap: 24, justifyContent: "center", flexWrap: "wrap", marginBottom: i < colunas.length - 1 ? 16 : 0 }}>
+          {linha.map((item) => (
+            <div key={item.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 88 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "#166336" }}>{item.label}</span>
+              <span style={{ background: "#166336", color: "#FFFFFF", fontSize: 13, fontWeight: 700, borderRadius: 8, padding: "6px 16px", minWidth: 64, textAlign: "center" }}>
+                {item.valor.toLocaleString("pt-BR")}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
