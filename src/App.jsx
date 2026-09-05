@@ -6291,6 +6291,8 @@ function agruparConcepcao(registros, chaveFn) {
   return [...grupos.entries()].map(([label, v]) => ({ label, n: v.n, taxa: Math.round((v.prenhas / v.n) * 1000) / 10 }));
 }
 
+const CATEGORIAS_RESUMO = ["Nulípara", "Primípara", "Multípara"];
+
 function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimentos, perfil }) {
   const [visaoData, setVisaoData] = useState("dia"); // "dia" | "mes"
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || null;
@@ -6308,47 +6310,118 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     .map((d) => ({ ...d, label: visaoData === "mes" ? fmtMes(d.label) : fmtDate(d.label) }));
   const porTouro = agruparConcepcao(registros, (r) => r.touro);
 
+  // ---------- resumo do topo: Total de animais / Inseminações / Prenhas ----------
+  // mesma regra do resto do relatório: lote "Desconhecidos" nunca entra na conta.
+  const idsDesconhecidosResumo = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  const lotesValidos = lotes.filter((l) => !idsDesconhecidosResumo.has(l.id));
+  const categoriaDoLote = (loteId) => lotes.find((l) => l.id === loteId)?.categoria;
+
+  const totalAnimais = lotesValidos.reduce((s, l) => s + (l.animais || []).length, 0);
+  const animaisPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
+    label: `${cat}s`, valor: lotesValidos.filter((l) => l.categoria === cat).reduce((s, l) => s + (l.animais || []).length, 0),
+  }));
+
+  const inseminacoesValidas = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidosResumo.has(m.loteId));
+  const totalInseminacoes = inseminacoesValidas.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+  const inseminacoesPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
+    label: `${cat}s`, valor: inseminacoesValidas.filter((m) => categoriaDoLote(m.loteId) === cat).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
+  }));
+  const inseminacoesPorOrdem = ORDENS_IATF.map((ordem) => ({
+    label: ordem, valor: inseminacoesValidas.filter((m) => m.ordem === ordem).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
+  }));
+
+  const contarPrenhas = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length, 0);
+  const diagnosticosValidos = manejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidosResumo.has(m.loteId));
+  const diagnosticosRepasseValidos = manejos.filter((m) => m.tipo === "diagnostico_repasse" && !idsDesconhecidosResumo.has(m.loteId));
+  const totalPrenhas = contarPrenhas(diagnosticosValidos) + contarPrenhas(diagnosticosRepasseValidos);
+  const prenhasPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
+    label: `${cat}s`,
+    valor: contarPrenhas(diagnosticosValidos.filter((m) => categoriaDoLote(m.loteId) === cat))
+      + contarPrenhas(diagnosticosRepasseValidos.filter((m) => categoriaDoLote(m.loteId) === cat)),
+  }));
+  const prenhasPorOrdem = [
+    ...ORDENS_IATF.map((ordem) => ({ label: ordem, valor: contarPrenhas(diagnosticosValidos.filter((m) => m.ordem === ordem)) })),
+    { label: "Repasse", valor: contarPrenhas(diagnosticosRepasseValidos) },
+  ];
+
   return (
     <div>
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
       <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
       {!fazendaAtiva ? (
         <EmptyState text="Selecione uma fazenda ativa para ver os relatórios." />
-      ) : registros.length === 0 ? (
-        <EmptyState text="Ainda não há Inseminações com Diagnóstico correspondente para calcular a taxa de concepção. Os gráficos aparecem aqui assim que houver dados (animais do lote Desconhecidos não entram na conta)." />
       ) : (
         <>
-          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 4 }}>
-            <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} compacto />
-            <GraficoColunas titulo="Concepção por ordem" descricao="Taxa de concepção em cada ordem de IATF." dados={porOrdem} compacto />
-            <GraficoColunas titulo="Concepção por categoria" descricao="Taxa de concepção por categoria do lote no momento da Inseminação." dados={porCategoria} compacto />
-            <GraficoColunas titulo="Concepção por retiro" descricao="Taxa de concepção por retiro." dados={porRetiro} compacto />
-            <GraficoColunas titulo="Concepção por ECC na Inseminação" descricao="Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." dados={porEcc} compacto />
-            <GraficoColunas titulo="Concepção por Inseminador" descricao="Taxa de concepção por quem realizou a Inseminação." dados={porInseminador} compacto />
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+            <CardResumo titulo="Total de animais" total={totalAnimais} colunas={[animaisPorCategoria]} />
+            <CardResumo titulo="Total de Inseminações" total={totalInseminacoes} colunas={[inseminacoesPorCategoria, inseminacoesPorOrdem]} />
+            <CardResumo titulo="Total de Prenhas" total={totalPrenhas} colunas={[prenhasPorCategoria, prenhasPorOrdem]} />
           </div>
 
-          <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-                {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
-                  <button key={key} onClick={() => setVisaoData(key)}
-                    style={{
-                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                      background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
-                    }}>{label}</button>
-                ))}
+          {registros.length === 0 ? (
+            <EmptyState text="Ainda não há Inseminações com Diagnóstico correspondente para calcular a taxa de concepção. Os gráficos aparecem aqui assim que houver dados (animais do lote Desconhecidos não entram na conta)." />
+          ) : (
+            <>
+              <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 4 }}>
+                <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} compacto />
+                <GraficoColunas titulo="Concepção por ordem" descricao="Taxa de concepção em cada ordem de IATF." dados={porOrdem} compacto />
+                <GraficoColunas titulo="Concepção por categoria" descricao="Taxa de concepção por categoria do lote no momento da Inseminação." dados={porCategoria} compacto />
+                <GraficoColunas titulo="Concepção por retiro" descricao="Taxa de concepção por retiro." dados={porRetiro} compacto />
+                <GraficoColunas titulo="Concepção por ECC na Inseminação" descricao="Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." dados={porEcc} compacto />
+                <GraficoColunas titulo="Concepção por Inseminador" descricao="Taxa de concepção por quem realizou a Inseminação." dados={porInseminador} compacto />
               </div>
-            </div>
-            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
-            <LinhaConcepcao dados={porData} />
-          </div>
 
-          <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
+              <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
+                  <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+                    {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
+                      <button key={key} onClick={() => setVisaoData(key)}
+                        style={{
+                          padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                          background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
+                        }}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+                <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
+                <LinhaConcepcao dados={porData} />
+              </div>
 
-          <p style={{ fontSize: 11, color: "#9B9686" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
+              <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
+
+              <p style={{ fontSize: 11, color: "#9B9686" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
+            </>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+// card de resumo do topo do relatório (Total de animais / Inseminações / Prenhas) — "colunas" é uma
+// lista de grupos lado a lado (ex.: [porCategoria, porOrdem]); cada grupo é uma lista de {label, valor}.
+function CardResumo({ titulo, total, colunas }) {
+  return (
+    <div style={cardStyle}>
+      <div style={{ textAlign: "center", marginBottom: 16 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 700, color: "#232520" }}>{titulo}</div>
+        <div style={{ fontSize: 24, fontWeight: 700, color: "#166336", marginTop: 2 }}>{total.toLocaleString("pt-BR")}</div>
+      </div>
+      <div style={{ display: "flex", gap: 28, justifyContent: "center", flexWrap: "wrap" }}>
+        {colunas.map((coluna, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 150 }}>
+            {coluna.map((item) => (
+              <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: "#166336" }}>{item.label}</span>
+                <span style={{ background: "#166336", color: "#FFFFFF", fontSize: 13, fontWeight: 700, borderRadius: 8, padding: "5px 14px", minWidth: 56, textAlign: "center" }}>
+                  {item.valor.toLocaleString("pt-BR")}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
