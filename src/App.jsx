@@ -6372,7 +6372,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   ];
 
   const OPCOES_ROSCA_RESUMO = {
-    animais: { label: "Animais submetidos", grupos: [
+    animais: { label: "Matrizes", grupos: [
       { titulo: "Por categoria", total: totalAnimais, itens: animaisPorCategoria },
     ] },
     inseminacoes: { label: "Inseminações", grupos: [
@@ -6385,10 +6385,28 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     ] },
   };
 
+  // adiciona, ao lado da coluna "Geral", uma coluna por categoria (Nulíparas/Primíparas/Multíparas)
+  // — usado tanto na Taxa de concepção quanto na Taxa de fertilidade.
+  const comColunasPorCategoria = (baseGeral, calcularCategoria) => [
+    ...baseGeral,
+    ...CATEGORIAS_RESUMO.map((cat) => calcularCategoria(cat) || { label: `${cat}s`, n: 0, taxa: 0 }),
+  ];
+
+  const geralComCategoria = comColunasPorCategoria(geral, (cat) =>
+    agruparConcepcao(registros.filter((r) => r.categoria === cat), () => `${cat}s`)[0]
+  );
+
   // Taxa de fertilidade = total de Prenhas / total de animais submetidos (diferente da Taxa de
   // concepção, que só considera quem já tem Inseminação + Diagnóstico cruzados).
   const taxaFertilidade = totalAnimais > 0 ? Math.round((totalPrenhas / totalAnimais) * 1000) / 10 : null;
-  const fertilidadeDados = [{ label: "Geral", n: totalAnimais, taxa: taxaFertilidade }];
+  const fertilidadeComCategoria = comColunasPorCategoria(
+    [{ label: "Geral", n: totalAnimais, taxa: taxaFertilidade }],
+    (cat) => {
+      const totalCat = animaisPorCategoria.find((a) => a.label === `${cat}s`)?.valor || 0;
+      const prenhasCat = prenhasPorCategoria.find((p) => p.label === `${cat}s`)?.valor || 0;
+      return { label: `${cat}s`, n: totalCat, taxa: totalCat > 0 ? Math.round((prenhasCat / totalCat) * 1000) / 10 : 0 };
+    }
+  );
 
   return (
     <div>
@@ -6398,8 +6416,26 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
         <EmptyState text="Selecione uma fazenda ativa para ver os relatórios." />
       ) : (
         <>
-          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20, alignItems: "start" }}>
-            <div style={cardStyle}>
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20, alignItems: "stretch" }}>
+            <div style={{ ...cardStyle, height: 460, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Resumo</div>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 22, width: "fit-content" }}>
+                {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
+                  <button key={key} onClick={() => setVisaoResumo(key)}
+                    style={{
+                      padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
+                    }}>{op.label}</button>
+                ))}
+              </div>
+              <div style={{ flex: 1, display: "flex", gap: 36, justifyContent: "center", alignItems: "center", flexWrap: "wrap", overflow: "hidden" }}>
+                {OPCOES_ROSCA_RESUMO[visaoResumo].grupos.map((g) => (
+                  <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
+                ))}
+              </div>
+            </div>
+
+            <div style={{ ...cardStyle, height: 460, display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>
                   {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
@@ -6419,27 +6455,12 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
                   ? "Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados."
                   : "Percentual de Prenhas sobre o total de animais submetidos."}
               </p>
-              <BarrasConcepcao dados={visaoGeral === "concepcao" ? geral : fertilidadeDados} compacto />
-            </div>
-
-            <div style={cardStyle}>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 22, width: "fit-content" }}>
-                {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
-                  <button key={key} onClick={() => setVisaoResumo(key)}
-                    style={{
-                      padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                      background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
-                    }}>{op.label}</button>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 36, justifyContent: "center", flexWrap: "wrap" }}>
-                {OPCOES_ROSCA_RESUMO[visaoResumo].grupos.map((g) => (
-                  <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
-                ))}
+              <div style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
+                <BarrasConcepcao dados={visaoGeral === "concepcao" ? geralComCategoria : fertilidadeComCategoria} compacto />
               </div>
             </div>
 
-            <div style={cardStyle}>
+            <div style={{ ...cardStyle, height: 460, display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por {OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}</div>
                 <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
@@ -6453,7 +6474,9 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
                 </div>
               </div>
               <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 16px" }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].descricao}</p>
-              <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} compacto />
+              <div style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
+                <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} compacto />
+              </div>
             </div>
           </div>
 
