@@ -18,8 +18,8 @@ export default defineConfig({
         description: "Controle de inseminação artificial de bovinos (IATF)",
         start_url: "/",
         display: "standalone",
-        background_color: "#F5F5F5",
-        theme_color: "#3B5D45",
+        background_color: "#F7F7F7",
+        theme_color: "#166336",
         orientation: "portrait-primary",
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

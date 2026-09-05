@@ -13,7 +13,7 @@ html, body {
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #F5F5F5;
+  background: #F7F7F7;
   -webkit-user-select: none;
   user-select: none; /* evita selecionar texto sem querer ao arrastar/tocar, como num app nativo */
 }

@@ -233,7 +233,7 @@ function SectionTitle({ icon: Icon, title, subtitle }) {
     <div style={{ marginBottom: 22 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ width: 34, height: 34, borderRadius: 8, background: "#EEE8D8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Icon size={18} color="#3B5D45" />
+          <Icon size={18} color="#166336" />
         </div>
         <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: "#232520", margin: 0 }}>{title}</h2>
       </div>
@@ -254,8 +254,8 @@ const inputStyle = {
   outline: "none",
   boxSizing: "border-box",
 };
-const labelStyle = { fontSize: 12, fontWeight: 600, color: "#6B685E", marginBottom: 5, display: "block", textTransform: "uppercase", letterSpacing: "0.4px" };
-const cardStyle = { background: "#F5F5F5", border: "1px solid #E5DFCC", borderRadius: 12, padding: "18px 20px" };
+const labelStyle = { fontSize: 12, fontWeight: 600, color: "#0B4D2A", marginBottom: 5, display: "block", textTransform: "uppercase", letterSpacing: "0.4px" };
+const cardStyle = { background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 12, padding: "18px 20px" };
 
 function Field({ label, children }) {
   return (
@@ -287,7 +287,7 @@ function BtnPrimary({ children, onClick, style, type = "button", disabled }) {
       disabled={disabled}
       style={{
         display: "inline-flex", alignItems: "center", gap: 6,
-        background: disabled ? "#C7B9A0" : "#3B7D2E", color: "#FFF6E9",
+        background: disabled ? "#C7B9A0" : "#166336", color: "#FFF6E9",
         border: "none", borderRadius: 8, padding: "9px 16px",
         fontSize: 13.5, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
         fontFamily: "'Work Sans', sans-serif",
@@ -305,8 +305,8 @@ function BtnGhost({ children, onClick, style, danger }) {
       onClick={onClick}
       style={{
         display: "inline-flex", alignItems: "center", gap: 6,
-        background: "transparent", color: danger ? "#A32D2D" : "#3B5D45",
-        border: `1px solid ${danger ? "#E3B8B8" : "#C7D6C1"}`, borderRadius: 8,
+        background: "transparent", color: danger ? "#A32D2D" : "#166336",
+        border: `1px solid ${danger ? "#E3B8B8" : "#C5D8C9"}`, borderRadius: 8,
         padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
         fontFamily: "'Work Sans', sans-serif",
         ...style,
@@ -319,7 +319,7 @@ function BtnGhost({ children, onClick, style, danger }) {
 
 function FazendaAtivaBanner({ fazendaAtiva }) {
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "#3B5D45", background: "#E4EEE0", border: "1px solid #C7D6C1", borderRadius: 20, padding: "5px 12px", marginBottom: 18 }}>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "#166336", background: "#E6EFE5", border: "1px solid #C5D8C9", borderRadius: 20, padding: "5px 12px", marginBottom: 18 }}>
       <Home size={13} /> {fazendaAtiva ? fazendaAtiva.nome : "Nenhuma fazenda ativa"}
     </div>
   );
@@ -349,8 +349,8 @@ function SeletorLocalEstoque({ local, setLocal, style }) {
           style={{
             padding: "7px 14px", borderRadius: 6, border: "none", cursor: "pointer",
             fontSize: 12.5, fontWeight: 600,
-            background: local === key ? "#3B5D45" : "transparent",
-            color: local === key ? "#F5F5F5" : "#6B685E",
+            background: local === key ? "#166336" : "transparent",
+            color: local === key ? "#F5EFDD" : "#6B685E",
           }}>{label}</button>
       ))}
     </div>
@@ -412,14 +412,14 @@ function ScannerCodigoBarras({ aberto, onFechar, onDetectado }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,15,12,0.92)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ color: "#F5F5F5", fontSize: 14, fontWeight: 600 }}>Aponte para o código de barras / QR do brinco</span>
-          <button onClick={onFechar} style={{ background: "none", border: "none", color: "#F5F5F5", cursor: "pointer", padding: 4 }} aria-label="Fechar leitor">
+          <span style={{ color: "#F5EFDD", fontSize: 14, fontWeight: 600 }}>Aponte para o código de barras / QR do brinco</span>
+          <button onClick={onFechar} style={{ background: "none", border: "none", color: "#F5EFDD", cursor: "pointer", padding: 4 }} aria-label="Fechar leitor">
             <X size={22} />
           </button>
         </div>
         <div id={divId} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#000" }} />
         {erro && <p style={{ color: "#E3A45C", fontSize: 12.5, marginTop: 10 }}>{erro}</p>}
-        <button onClick={onFechar} style={{ marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid #4C6E56", background: "transparent", color: "#F5F5F5", fontSize: 13, cursor: "pointer" }}>
+        <button onClick={onFechar} style={{ marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid #4C6E56", background: "transparent", color: "#F5EFDD", fontSize: 13, cursor: "pointer" }}>
           Cancelar e digitar manualmente
         </button>
       </div>
@@ -532,8 +532,8 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F5F5F5", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
-      <div style={{ width: 380, maxWidth: "100%", background: "#F5F5F5", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
+    <div style={{ minHeight: "100vh", background: "#F7F7F7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
+      <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <img src={logoImg} alt="VArepro" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover" }} />
           <div>
@@ -561,7 +561,7 @@ function Login({ users, onLoginLocal, onEntrarReal }) {
           </>
         ) : (
           <>
-            <p style={{ fontSize: 12, color: "#3B7D2E", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
+            <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
               ⚠ Modo de teste local — o Supabase ainda não está configurado neste ambiente, então não há verificação real de senha. Configure o Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) para login seguro de verdade.
             </p>
             <Field label="Usuário">
@@ -1421,7 +1421,7 @@ export default function App() {
   if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} />;
   if (currentUser._aguardandoPerfil) {
     return (
-      <div style={{ minHeight: "100vh", background: "#F5F5F5", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#6B685E", fontSize: 13, padding: 20 }}>
+      <div style={{ minHeight: "100vh", background: "#F7F7F7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", color: "#6B685E", fontSize: 13, padding: 20 }}>
         <div style={{ textAlign: "center", maxWidth: 380 }}>
           {!erroPerfil ? (
             "Carregando seu perfil…"
@@ -1443,7 +1443,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ fontFamily: "'Work Sans', sans-serif", minHeight: "100vh", background: "#F5F5F5", display: "flex" }}>
+    <div style={{ fontFamily: "'Work Sans', sans-serif", minHeight: "100vh", background: "#F7F7F7", display: "flex" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
         * { box-sizing: border-box; }
@@ -1474,7 +1474,7 @@ export default function App() {
       {/* SIDEBAR — fixa na lateral em telas largas; menu retrátil (fora da tela até abrir) no celular */}
       <aside style={{
         width: isMobile ? "82vw" : 224, maxWidth: isMobile ? 300 : "none",
-        background: "#2F4A38", color: "#F5F5F5", display: "flex", flexDirection: "column", flexShrink: 0,
+        background: "#083C26", color: "#F5EFDD", display: "flex", flexDirection: "column", flexShrink: 0,
         ...(isMobile ? {
           position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50,
           transform: menuAberto ? "translateX(0)" : "translateX(-100%)",
@@ -1486,7 +1486,7 @@ export default function App() {
           <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 18 }}>VArepro</div>
           {isMobile && (
             <button onClick={() => setMenuAberto(false)} aria-label="Fechar menu"
-              style={{ marginLeft: "auto", background: "none", border: "none", color: "#F5F5F5", cursor: "pointer", padding: 4 }}>
+              style={{ marginLeft: "auto", background: "none", border: "none", color: "#F5EFDD", cursor: "pointer", padding: 4 }}>
               <X size={20} />
             </button>
           )}
@@ -1502,7 +1502,7 @@ export default function App() {
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 10,
                   padding: "10px 12px", marginBottom: 3, borderRadius: 8, border: "none",
-                  background: active ? "#3B5D45" : "transparent", color: active ? "#F5F5F5" : "#C9CBB9",
+                  background: active ? "#166336" : "transparent", color: active ? "#F5EFDD" : "#C9CBB9",
                   fontSize: 13.5, fontWeight: 500, cursor: "pointer", textAlign: "left",
                 }}>
                 <Icon size={16} />
@@ -1524,7 +1524,7 @@ export default function App() {
                   value={fazendaAtivaId}
                   onChange={(e) => setFazendaAtivaId(e.target.value)}
                   style={{
-                    width: "100%", background: "#3B5D45", color: "#F5F5F5", border: "1px solid #4C6E56",
+                    width: "100%", background: "#166336", color: "#F5EFDD", border: "1px solid #4C6E56",
                     borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                   }}>
                   {fazendasVisiveis.length === 0 && <option value="">Nenhuma fazenda</option>}
@@ -1537,7 +1537,7 @@ export default function App() {
                   value={safraAtivaId}
                   onChange={(e) => setSafraAtivaId(e.target.value)}
                   style={{
-                    width: "100%", background: "#3B5D45", color: "#F5F5F5", border: "1px solid #4C6E56",
+                    width: "100%", background: "#166336", color: "#F5EFDD", border: "1px solid #4C6E56",
                     borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                   }}>
                   {safrasAtivas.length === 0 && <option value="">Nenhuma safra</option>}
@@ -1586,9 +1586,9 @@ export default function App() {
       {/* CONTEÚDO */}
       <main style={{ flex: 1, minWidth: 0 }}>
         {isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#2F4A38", color: "#F5F5F5", position: "sticky", top: 0, zIndex: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#083C26", color: "#F5EFDD", position: "sticky", top: 0, zIndex: 20 }}>
             <button onClick={() => setMenuAberto(true)} aria-label="Abrir menu"
-              style={{ background: "none", border: "none", color: "#F5F5F5", cursor: "pointer", padding: 4, display: "flex" }}>
+              style={{ background: "none", border: "none", color: "#F5EFDD", cursor: "pointer", padding: 4, display: "flex" }}>
               <Menu size={22} />
             </button>
             <img src={logoImg} alt="VArepro" style={{ width: 26, height: 26, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} />
@@ -1605,14 +1605,14 @@ export default function App() {
                 <button key={t.key} onClick={() => setSub(t.key)}
                   style={{
                     display: "flex", alignItems: "center", gap: 6, padding: "9px 14px",
-                    border: "none", borderBottom: active ? "2px solid #3B7D2E" : "2px solid transparent",
-                    background: "transparent", color: active ? "#3B7D2E" : "#6B685E",
+                    border: "none", borderBottom: active ? "2px solid #166336" : "2px solid transparent",
+                    background: "transparent", color: active ? "#166336" : "#6B685E",
                     fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: -1,
                   }}>
                   <Icon size={14} />
                   {t.label}
                   {pendentesSubtab > 0 && (
-                    <span style={{ background: "#3B7D2E", color: "#FFF6E9", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentesSubtab}</span>
+                    <span style={{ background: "#166336", color: "#FFF6E9", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentesSubtab}</span>
                   )}
                 </button>
               );
@@ -1851,7 +1851,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontWeight: 700 }}>{f.nome}</span>
-                          {ativa && <span style={{ fontSize: 10, fontWeight: 700, color: "#2A4531", background: "#E4EEE0", borderRadius: 20, padding: "2px 8px" }}>ATIVA</span>}
+                          {ativa && <span style={{ fontSize: 10, fontWeight: 700, color: "#2A4531", background: "#E6EFE5", borderRadius: 20, padding: "2px 8px" }}>ATIVA</span>}
                         </div>
                       </td>
                       <td>{f.municipio || "—"}</td>
@@ -2082,14 +2082,14 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
             {linhasValidas.length > 0 && (
               <div style={{ marginTop: 16, background: "#FBF9F3", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
                 <p style={{ fontSize: 12.5, color: "#4A473E", margin: "0 0 6px" }}><strong>{arquivoNome}</strong></p>
-                <p style={{ fontSize: 12.5, color: "#3B5D45", margin: "0 0 4px" }}>✓ {linhasValidas.length} animal(is) lido(s), em {lotesDistintos} lote(s) distinto(s).</p>
-                <p style={{ fontSize: 12.5, color: "#3B5D45", margin: "0 0 4px" }}>
+                <p style={{ fontSize: 12.5, color: "#166336", margin: "0 0 4px" }}>✓ {linhasValidas.length} animal(is) lido(s), em {lotesDistintos} lote(s) distinto(s).</p>
+                <p style={{ fontSize: 12.5, color: "#166336", margin: "0 0 4px" }}>
                   {comInseminacao > 0 ? `✓ ${comInseminacao} linha(s) com Inseminação` : "— nenhuma linha com Inseminação"}
                   {" · "}
                   {comDiagnostico > 0 ? `✓ ${comDiagnostico} linha(s) com Diagnóstico` : "nenhuma linha com Diagnóstico"}
                 </p>
                 {linhasComErro.length > 0 && (
-                  <p style={{ fontSize: 12.5, color: "#3B7D2E", margin: "4px 0 0" }}>
+                  <p style={{ fontSize: 12.5, color: "#166336", margin: "4px 0 0" }}>
                     ⚠ {linhasComErro.length} linha(s) ignorada(s) por faltar Safra, Retiro, Lote ou Brinco (linha(s) {linhasComErro.slice(0, 10).join(", ")}{linhasComErro.length > 10 ? "…" : ""} da planilha).
                   </p>
                 )}
@@ -2100,7 +2100,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
             )}
 
             {resultado && (
-              <div style={{ marginTop: 16, background: "#E4EEE0", border: "1px solid #B7D4AC", borderRadius: 8, padding: 14 }}>
+              <div style={{ marginTop: 16, background: "#E6EFE5", border: "1px solid #B7D4AC", borderRadius: 8, padding: 14 }}>
                 <p style={{ fontSize: 12.5, color: "#2A4531", margin: 0, lineHeight: 1.6 }}>
                   ✓ Importação concluída: {resultado.safrasCriadas} safra(s) nova(s), {resultado.retirosCriados} retiro(s) novo(s), {resultado.lotesCriados} lote(s) novo(s)
                   {resultado.lotesAtualizados > 0 ? `, ${resultado.lotesAtualizados} lote(s) já existente(s) atualizado(s)` : ""}
@@ -2240,10 +2240,10 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {produtos.length === 0 && (
-              <p style={{ fontSize: 12, color: "#3B7D2E", marginTop: -8, marginBottom: 14 }}>Nenhuma progesterona injetável cadastrada neste local de estoque.</p>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Nenhuma progesterona injetável cadastrada neste local de estoque.</p>
             )}
             {nomeDuplicado && (
-              <p style={{ fontSize: 12, color: "#3B7D2E", marginTop: -8, marginBottom: 14 }}>Já existe um lote com este nome neste retiro. Use um nome diferente.</p>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Já existe um lote com este nome neste retiro. Use um nome diferente.</p>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
               <Field label="Lote (nome)"><input style={inputStyle} value={novoNome} onChange={(e) => { limparMsgSeSucesso(); setNovoNome(e.target.value); }} placeholder="Ex: Lote 01" /></Field>
@@ -2282,7 +2282,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
-              {comLeitura ? <CheckCircle2 size={18} color="#3B5D45" /> : <Circle size={18} color="#B0AA98" />}
+              {comLeitura ? <CheckCircle2 size={18} color="#166336" /> : <Circle size={18} color="#B0AA98" />}
               <span style={{ fontSize: 13, color: "#4A473E" }}>Registrar leitura individual dos animais (opcional)</span>
             </div>
 
@@ -2300,7 +2300,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                     return (
                       <span key={b} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                         <EarTag size="sm">{b}</EarTag>
-                        {loteExistente && <span style={{ fontSize: 10.5, color: "#3B5D45" }}>({loteExistente.nome})</span>}
+                        {loteExistente && <span style={{ fontSize: 10.5, color: "#166336" }}>({loteExistente.nome})</span>}
                       </span>
                     );
                   })}
@@ -2311,7 +2311,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#3B5D45" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> Registrar {TITULOS_MANEJO[tipo].toLowerCase()}</BtnPrimary>
           </div>
 
@@ -2367,7 +2367,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#3B5D45" }}><Check size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#166336" }}><Check size={14} /></button>
                             <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
                           </div>
                         ) : (
@@ -2701,17 +2701,17 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <button onClick={() => setAbaInterna("d0")}
               style={{
                 padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                background: abaInterna === "d0" ? "#3B5D45" : "transparent", color: abaInterna === "d0" ? "#F5F5F5" : "#6B685E",
+                background: abaInterna === "d0" ? "#166336" : "transparent", color: abaInterna === "d0" ? "#F5EFDD" : "#6B685E",
               }}>D0</button>
             <button onClick={() => setAbaInterna("ressinc")}
               style={{
                 padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
                 display: "inline-flex", alignItems: "center", gap: 6,
-                background: abaInterna === "ressinc" ? "#3B5D45" : "transparent", color: abaInterna === "ressinc" ? "#F5F5F5" : "#6B685E",
+                background: abaInterna === "ressinc" ? "#166336" : "transparent", color: abaInterna === "ressinc" ? "#F5EFDD" : "#6B685E",
               }}>
               Ressinc
               {sugestoesRessinc.length > 0 && (
-                <span style={{ background: "#3B7D2E", color: "#FFF6E9", borderRadius: 20, fontSize: 10.5, fontWeight: 700, padding: "1.5px 6px" }}>{sugestoesRessinc.length}</span>
+                <span style={{ background: "#166336", color: "#FFF6E9", borderRadius: 20, fontSize: 10.5, fontWeight: 700, padding: "1.5px 6px" }}>{sugestoesRessinc.length}</span>
               )}
             </button>
           </div>
@@ -2727,15 +2727,15 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {(implantes.length === 0 || benzoatos.length === 0 || prostaglandinas.length === 0) && (
-              <p style={{ fontSize: 12, color: "#3B7D2E", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
             )}
             {nomeDuplicado && (
-              <p style={{ fontSize: 12, color: "#3B7D2E", marginTop: -8, marginBottom: 14 }}>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>
                 Já existe um lote com este nome com D0 já registrado. Use um nome diferente, ou registre um Ressinc a partir do Diagnóstico para dar sequência ao mesmo lote.
               </p>
             )}
             {loteDaInducaoSemD0 && (
-              <p style={{ fontSize: 12, color: "#3B5D45", marginTop: -8, marginBottom: 14 }}>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>
                 Já existe um lote "{loteDaInducaoSemD0.nome}" registrado na Indução, ainda sem D0. Este registro vai completar os dados desse mesmo lote.
               </p>
             )}
@@ -2827,7 +2827,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
-              {comLeitura ? <CheckCircle2 size={18} color="#3B5D45" /> : <Circle size={18} color="#B0AA98" />}
+              {comLeitura ? <CheckCircle2 size={18} color="#166336" /> : <Circle size={18} color="#B0AA98" />}
               <span style={{ fontSize: 13, color: "#4A473E" }}>Registrar leitura individual dos animais (opcional)</span>
             </div>
 
@@ -2868,7 +2868,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#3B5D45" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> Registrar D0</BtnPrimary>
           </div>
 
@@ -2943,7 +2943,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#3B5D45" }}><Check size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#166336" }}><Check size={14} /></button>
                             <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
                           </div>
                         ) : (
@@ -2996,7 +2996,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 <div style={{ ...cardStyle, marginBottom: 24, border: "1.5px solid #E3B8A0" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <ImplantIcon size={16} color="#3B7D2E" />
+                      <ImplantIcon size={16} color="#166336" />
                       <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#232520" }}>Ressinc — {loteDaSugestao?.nome}</span>
                     </div>
                     <BtnGhost onClick={() => setSugestaoAbertaId(null)}>← Voltar à lista</BtnGhost>
@@ -3015,7 +3015,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                             borderRadius: 20, padding: "4px 10px", fontSize: 12.5,
                             background: selecionado ? "#EEE8D8" : "#EEE8D8", opacity: selecionado ? 1 : 0.55,
                           }}>
-                          {selecionado ? <CheckCircle2 size={13} color="#3B7D2E" /> : <Circle size={13} color="#9B9686" />}
+                          {selecionado ? <CheckCircle2 size={13} color="#166336" /> : <Circle size={13} color="#9B9686" />}
                           <EarTag size="sm">{b}</EarTag>
                         </button>
                       );
@@ -3029,7 +3029,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
                       <SeletorLocalEstoque local={localEstoqueR} setLocal={setLocalEstoqueR} />
                       {(implantesR.length === 0 || benzoatosR.length === 0 || prostaglandinasR.length === 0) && (
-                        <p style={{ fontSize: 12, color: "#3B7D2E", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
+                        <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
                       )}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
                         <Field label="Categoria">
@@ -3088,7 +3088,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           Já existe um D0/Ressinc registrado para este lote na {ordemR}. Não é possível registrar de novo para a mesma ordem.
                         </p>
                       )}
-                      {msgR && <p style={{ fontSize: 12.5, color: msgR.includes("registrad") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msgR}</p>}
+                      {msgR && <p style={{ fontSize: 12.5, color: msgR.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msgR}</p>}
                       <BtnPrimary disabled={!canSaveRessinc} onClick={salvarRessinc} style={{ marginTop: msgR ? 0 : 12 }}>
                         <Plus size={15} /> Registrar Ressinc ({ressincSelecionados.length})
                       </BtnPrimary>
@@ -3163,7 +3163,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                               </div>
                             ) : editandoRessincId === m.id ? (
                               <div style={{ display: "flex", gap: 6 }}>
-                                <button onClick={salvarEdicaoRessinc} style={{ background: "none", border: "none", cursor: "pointer", color: "#3B5D45" }}><Check size={14} /></button>
+                                <button onClick={salvarEdicaoRessinc} style={{ background: "none", border: "none", cursor: "pointer", color: "#166336" }}><Check size={14} /></button>
                                 <button onClick={cancelarEdicaoRessinc} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
                               </div>
                             ) : (
@@ -3381,7 +3381,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {(prostaglandinas.length === 0 || cipionatos.length === 0 || ecgHcg.length === 0) && (
-              <p style={{ fontSize: 12, color: "#3B7D2E", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (prostaglandina, cipionato ou ECG/HCG).</p>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (prostaglandina, cipionato ou ECG/HCG).</p>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
               <Field label="Lote">
@@ -3450,7 +3450,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             )}
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
-              {comLeitura ? <CheckCircle2 size={18} color="#3B5D45" /> : <Circle size={18} color="#B0AA98" />}
+              {comLeitura ? <CheckCircle2 size={18} color="#166336" /> : <Circle size={18} color="#B0AA98" />}
               <span style={{ fontSize: 13, color: "#4A473E" }}>Registrar leitura individual dos animais (opcional)</span>
             </div>
 
@@ -3492,11 +3492,11 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
             {excedeQuantidade && (
-              <p style={{ fontSize: 12.5, color: "#3B7D2E", marginTop: 12 }}>
+              <p style={{ fontSize: 12.5, color: "#166336", marginTop: 12 }}>
                 ⚠ O nº de animais informado ({numBR(numeroAnimais)}) é maior que o registrado no D0 mais recente deste lote na {loteAtual.ordem} ({d0MaisRecente.numeroAnimais}).
               </p>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg || excedeQuantidade ? 0 : 12 }}>
               <BtnPrimary disabled={!canSaveBase} onClick={() => salvar(false)}><Plus size={15} /> Registrar retirada</BtnPrimary>
               {excedeQuantidade && canSaveBase && (
@@ -3553,7 +3553,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#3B5D45" }}><Check size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#166336" }}><Check size={14} /></button>
                             <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
                           </div>
                         ) : (
@@ -3885,7 +3885,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E4EEE0" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E6EFE5" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
                     }}>
                     {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
                     {l.nome} <span style={{ opacity: 0.7 }}>· {l.ordem || "—"}</span>
@@ -3919,7 +3919,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {semens.length === 0 && (
-              <p style={{ fontSize: 12, color: "#3B7D2E", marginTop: -8, marginBottom: 14 }}>Nenhum sêmen cadastrado neste local de estoque.</p>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Nenhum sêmen cadastrado neste local de estoque.</p>
             )}
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Leitura dos animais (obrigatória)</div>
             <p style={{ fontSize: 11.5, color: "#9B9686", margin: "-4px 0 12px" }}>
@@ -4023,7 +4023,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary disabled={jaRegistradoNestaOrdem} onClick={finalizar}>Finalizar inseminação ({registros.length})</BtnPrimary>
@@ -4100,7 +4100,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           </div>
                         ) : editandoId === m.id ? (
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#3B5D45" }}><Check size={14} /></button>
+                            <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#166336" }}><Check size={14} /></button>
                             <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
                           </div>
                         ) : (
@@ -4363,7 +4363,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E4EEE0" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E6EFE5" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
                     }}>
                     {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
                     {l.nome} <span style={{ opacity: 0.7 }}>— {l.categoria} · {l.ordem || "—"}</span>
@@ -4451,8 +4451,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                     {registros.map((r) => (
                       <tr key={r.brinco}>
                         <td><EarTag size="sm">{r.brinco}</EarTag></td>
-                        <td style={{ color: r.resultado === "Prenha" ? "#3B5D45" : "#3B7D2E", fontWeight: 600 }}>
-                          {r.resultado}{r.resultado === "Vazia" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#3B7D2E" }}>· gera sugestão de Ressinc</span>}
+                        <td style={{ color: r.resultado === "Prenha" ? "#166336" : "#166336", fontWeight: 600 }}>
+                          {r.resultado}{r.resultado === "Vazia" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#166336" }}>· gera sugestão de Ressinc</span>}
                         </td>
                         <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
                         <td>{r.observacao || "—"}</td>
@@ -4473,7 +4473,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 Já existe um Diagnóstico registrado para este lote na {loteAtual.ordem}. Não é possível registrar de novo para a mesma ordem.
               </p>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary disabled={jaRegistradoNestaOrdem} onClick={finalizar}>Finalizar diagnóstico ({registros.length})</BtnPrimary>
@@ -4526,7 +4526,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                             </div>
                           ) : editandoId === m.id ? (
                             <div style={{ display: "flex", gap: 6 }}>
-                              <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#3B5D45" }}><Check size={14} /></button>
+                              <button onClick={salvarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#166336" }}><Check size={14} /></button>
                               <button onClick={cancelarEdicaoHistorico} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
                             </div>
                           ) : (
@@ -4675,7 +4675,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                       borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E4EEE0" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
+                      background: selecionado ? "#E6EFE5" : "#EEE8D8", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
                     }}>
                     {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
                     {l.nome}
@@ -4714,7 +4714,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                 <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente.</p>
               </div>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("salvo") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("salvo") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary onClick={finalizar}>Finalizar Diagnóstico de Repasse ({registros.length})</BtnPrimary>
@@ -4730,7 +4730,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                     <tr key={r.brinco}>
                       <td><EarTag size="sm">{r.brinco}</EarTag></td>
                       <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
-                      <td style={{ color: r.resultado === "Prenha" ? "#3B5D45" : "#3B7D2E", fontWeight: 600 }}>{r.resultado}</td>
+                      <td style={{ color: r.resultado === "Prenha" ? "#166336" : "#166336", fontWeight: 600 }}>{r.resultado}</td>
                       <td>{r.tempoGestacaoInformado != null ? `${r.tempoGestacaoInformado} dia(s)` : "—"}</td>
                       <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                     </tr>
@@ -4782,12 +4782,12 @@ function AbaDiagnostico(props) {
         <button onClick={() => setAbaInterna("inseminacao")}
           style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "inseminacao" ? "#3B5D45" : "transparent", color: abaInterna === "inseminacao" ? "#F5F5F5" : "#6B685E",
+            background: abaInterna === "inseminacao" ? "#166336" : "transparent", color: abaInterna === "inseminacao" ? "#F5EFDD" : "#6B685E",
           }}>Diagnóstico de Inseminação</button>
         <button onClick={() => setAbaInterna("repasse")}
           style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "repasse" ? "#3B5D45" : "transparent", color: abaInterna === "repasse" ? "#F5F5F5" : "#6B685E",
+            background: abaInterna === "repasse" ? "#166336" : "transparent", color: abaInterna === "repasse" ? "#F5EFDD" : "#6B685E",
           }}>Diagnóstico de Repasse</button>
       </div>
       <div style={{ display: abaInterna === "inseminacao" ? "block" : "none" }}>
@@ -4917,7 +4917,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
               <Field label="Fim"><input style={inputStyle} type="date" value={dataFim} onChange={(e) => { limparMsgSeSucesso(); setDataFim(e.target.value); }} /></Field>
             </div>
             <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Ao registrar, um pré-agendamento de "Diagnóstico - repasse" é criado automaticamente na Agenda, 30 dias após o Fim do período.</p>
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: msg ? 0 : 12 }}><Plus size={15} /> Registrar Repasse</BtnPrimary>
           </div>
           )}
@@ -4945,7 +4945,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
                       <td style={{ display: "flex", gap: 6 }}>
                         {editandoId === m.id ? (
                           <>
-                            <button onClick={salvarEdicao} style={{ background: "none", border: "none", cursor: "pointer", color: "#3B5D45" }}><Check size={14} /></button>
+                            <button onClick={salvarEdicao} style={{ background: "none", border: "none", cursor: "pointer", color: "#166336" }}><Check size={14} /></button>
                             <button onClick={() => setEditandoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
                           </>
                         ) : confirmarExclusaoId === m.id ? (
@@ -5123,7 +5123,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   {consultaAtual.porOrdem.map((o, i) => (
                     <React.Fragment key={i}>
                       <div><strong>Data {ORDENS_IATF[i]}:</strong> {o.data}</div>
-                      <div><strong>DG {ORDENS_IATF[i]}:</strong> <span style={{ color: o.dg === "Prenha" ? "#3B5D45" : o.dg === "Vazia" ? "#3B7D2E" : "#6B685E", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</span></div>
+                      <div><strong>DG {ORDENS_IATF[i]}:</strong> <span style={{ color: o.dg === "Prenha" ? "#166336" : o.dg === "Vazia" ? "#166336" : "#6B685E", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</span></div>
                     </React.Fragment>
                   ))}
                   <div><strong>Tempo de gestação calculado:</strong> {consultaAtual.tempoCalculado != null ? `${consultaAtual.tempoCalculado} dia(s)` : "—"}</div>
@@ -5132,7 +5132,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("salvo") ? "#3B5D45" : "#A32D2D", marginTop: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("salvo") ? "#166336" : "#A32D2D", marginTop: 10 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               {consultaAtual && <BtnPrimary onClick={registrar}>Registrar</BtnPrimary>}
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
@@ -5175,14 +5175,14 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                       {r.porOrdem.map((o, i) => (
                         <React.Fragment key={i}>
                           <td>{o.data}</td>
-                          <td style={{ color: o.dg === "Prenha" ? "#3B5D45" : o.dg === "Vazia" ? "#3B7D2E" : "#6B685E", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</td>
+                          <td style={{ color: o.dg === "Prenha" ? "#166336" : o.dg === "Vazia" ? "#166336" : "#6B685E", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</td>
                         </React.Fragment>
                       ))}
-                      <td style={{ color: r.dgFinal === "Prenha" ? "#3B5D45" : r.dgFinal === "Vazia" ? "#3B7D2E" : "#6B685E", fontWeight: r.dgFinal !== "—" ? 600 : 400 }}>{r.dgFinal}</td>
+                      <td style={{ color: r.dgFinal === "Prenha" ? "#166336" : r.dgFinal === "Vazia" ? "#166336" : "#6B685E", fontWeight: r.dgFinal !== "—" ? 600 : 400 }}>{r.dgFinal}</td>
                       <td>{r.tempoCalculado != null ? `${r.tempoCalculado} dia(s)` : "—"}</td>
                       <td>{r.touroDaPrenhez || "—"}</td>
                       <td>{r.tempoInformado != null ? `${r.tempoInformado} dia(s)` : "—"}</td>
-                      <td style={{ fontWeight: r.origem !== "—" ? 600 : 400, color: r.origem === "Repasse" ? "#3B7D2E" : r.origem === "Inseminação" ? "#3B5D45" : "#6B685E" }}>{r.origem}</td>
+                      <td style={{ fontWeight: r.origem !== "—" ? 600 : 400, color: r.origem === "Repasse" ? "#166336" : r.origem === "Inseminação" ? "#166336" : "#6B685E" }}>{r.origem}</td>
                       <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
@@ -5290,8 +5290,8 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                 style={{
                   padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: 600,
-                  background: categoriaTab === c ? "#3B5D45" : "transparent",
-                  color: categoriaTab === c ? "#F5F5F5" : "#6B685E",
+                  background: categoriaTab === c ? "#166336" : "transparent",
+                  color: categoriaTab === c ? "#F5EFDD" : "#6B685E",
                 }}>{c}</button>
             ))}
           </div>
@@ -5380,7 +5380,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#3B5D45" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: 12 }}>
               <Plus size={15} /> Registrar entrada
             </BtnPrimary>
@@ -5503,7 +5503,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
           <div key={categoria} style={{ marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase" }}>{titulo}</div>
-              {itens.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3B5D45" }}>Total: {fmtMoeda(valorTotalGrupo)}</div>}
+              {itens.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#166336" }}>Total: {fmtMoeda(valorTotalGrupo)}</div>}
             </div>
             {itens.length === 0 ? (
               <EmptyState text={`Nenhum item de ${titulo.toLowerCase()} cadastrado.`} />
@@ -5597,7 +5597,7 @@ const isSameDay = (a, b) => ymd(a) === ymd(b);
 
 const CORES_TIPO = {
   "Indução": "#3B7D4F", "D0": "#C98F2B", "Retirada": "#8A5A1F", "PGF 5": "#B25D8C",
-  "Inseminação": "#4A6FA5", "Diagnóstico": "#7A5C9E", "Diagnóstico - repasse": "#3B7D2E", "Outro": "#6B685E",
+  "Inseminação": "#4A6FA5", "Diagnóstico": "#7A5C9E", "Diagnóstico - repasse": "#166336", "Outro": "#6B685E",
 };
 
 function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento }) {
@@ -5725,7 +5725,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
   const StatusBadge = ({ status }) => {
     const cfg = {
       pendente: { bg: "#EEE8D8", color: "#8A3E15", label: "Aguardando confirmação" },
-      confirmado: { bg: "#E4EEE0", color: "#2A4531", label: "Confirmado" },
+      confirmado: { bg: "#E6EFE5", color: "#2A4531", label: "Confirmado" },
     }[status] || { bg: "#EEE8D8", color: "#6B685E", label: status };
     return <span style={{ fontSize: 10.5, fontWeight: 700, background: cfg.bg, color: cfg.color, borderRadius: 20, padding: "2px 9px", whiteSpace: "nowrap" }}>{cfg.label}</span>;
   };
@@ -5735,7 +5735,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
   const ItemAgendamento = ({ a }) => {
     if (editingId === a.id && editForm) {
       return (
-        <div style={{ ...cardStyle, padding: "12px 14px", border: "1.5px solid #3B5D45" }}>
+        <div style={{ ...cardStyle, padding: "12px 14px", border: "1.5px solid #166336" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: editForm.tipo === "D0" ? 10 : 0 }}>
             <Field label="Retiro">
               <select style={inputStyle} value={editForm.retiroId} onChange={setEdit("retiroId")}>
@@ -5835,7 +5835,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                       style={{
                         display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                         borderRadius: 20, padding: "5px 12px", fontSize: 12.5,
-                        background: selecionada ? "#E4EEE0" : "#EEE8D8", color: selecionada ? "#2A4531" : "#6B685E",
+                        background: selecionada ? "#E6EFE5" : "#EEE8D8", color: selecionada ? "#2A4531" : "#6B685E",
                       }}>
                       {selecionada ? <CheckCircle2 size={13} /> : <Circle size={13} />} {f.nome}
                     </button>
@@ -5962,8 +5962,8 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                     style={{
                       padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer",
                       fontSize: 12.5, fontWeight: 600,
-                      background: viewMode === key ? "#3B5D45" : "transparent",
-                      color: viewMode === key ? "#F5F5F5" : "#6B685E",
+                      background: viewMode === key ? "#166336" : "transparent",
+                      color: viewMode === key ? "#F5EFDD" : "#6B685E",
                     }}>{label}</button>
                 ))}
               </div>
@@ -6007,7 +6007,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                             position: "absolute", top: 2, right: 3,
                             display: "inline-flex", alignItems: "center", justifyContent: "center",
                             minWidth: 15, height: 15, borderRadius: "50%", fontSize: 9.5, fontWeight: 700,
-                            background: hoje ? "#3B7D2E" : "transparent", color: hoje ? "#FFF6E9" : "#9B9686",
+                            background: hoje ? "#166336" : "transparent", color: hoje ? "#FFF6E9" : "#9B9686",
                           }}>{d.getDate()}</span>
                           <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 14 }}>
                             {visiveis.map((a) => {
@@ -6038,7 +6038,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                         <span style={{
                           display: "inline-flex", alignItems: "center", justifyContent: "center",
                           width: 20, height: 20, borderRadius: "50%", fontSize: 11.5, fontWeight: 700,
-                          background: hoje ? "#3B7D2E" : "transparent", color: hoje ? "#FFF6E9" : "#4A473E",
+                          background: hoje ? "#166336" : "transparent", color: hoje ? "#FFF6E9" : "#4A473E",
                         }}>{d.getDate()}</span>
                         <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
                           {itens.slice(0, 2).map((a) => {
@@ -6069,11 +6069,11 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                   const hoje = isSameDay(d, new Date());
                   return (
                     <div key={iso} onClick={() => setSelecionado(iso)}
-                      style={{ ...cardStyle, padding: "10px", cursor: "pointer", minHeight: 140, border: iso === selecionado ? "1.5px solid #3B5D45" : cardStyle.border }}>
+                      style={{ ...cardStyle, padding: "10px", cursor: "pointer", minHeight: 140, border: iso === selecionado ? "1.5px solid #166336" : cardStyle.border }}>
                       <div style={{ fontSize: 10.5, fontWeight: 700, color: "#9B9686", textTransform: "uppercase" }}>{DIAS_SEMANA[d.getDay()]}</div>
                       <div style={{
                         display: "inline-flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: "50%",
-                        fontSize: 12, fontWeight: 700, background: hoje ? "#3B7D2E" : "transparent", color: hoje ? "#FFF6E9" : "#232520", marginTop: 2,
+                        fontSize: 12, fontWeight: 700, background: hoje ? "#166336" : "transparent", color: hoje ? "#FFF6E9" : "#232520", marginTop: 2,
                       }}>{d.getDate()}</div>
                       <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
                         {itens.map((a) => {
@@ -6147,7 +6147,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
   const corPerfil = (perfil) => ({
     Administrador: { bg: "#E4D6EE", color: "#5A2A8A" },
     Supervisor: { bg: "#F0E4D6", color: "#8A5A1F" },
-    Inseminador: { bg: "#E4EEE0", color: "#2A4531" },
+    Inseminador: { bg: "#E6EFE5", color: "#2A4531" },
   }[perfil] || { bg: "#EEE8D8", color: "#6B685E" });
 
   return (
@@ -6157,7 +6157,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
       <div style={{ ...cardStyle, marginBottom: 24 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Adicionar usuário</div>
         {!supabaseConfigurado && (
-          <p style={{ fontSize: 12, color: "#3B7D2E", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
+          <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10, margin: "0 0 14px" }}>
             ⚠ Supabase não configurado — este usuário será só local, sem senha real (modo de teste).
           </p>
         )}
@@ -6176,7 +6176,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
             </select>
           </Field>
         </div>
-        {msg && <p style={{ fontSize: 12.5, color: msg.includes("sucesso") || msg.includes("criado") ? "#3B5D45" : "#A32D2D", margin: "10px 0 0" }}>{msg}</p>}
+        {msg && <p style={{ fontSize: 12.5, color: msg.includes("sucesso") || msg.includes("criado") ? "#166336" : "#A32D2D", margin: "10px 0 0" }}>{msg}</p>}
         <BtnPrimary disabled={!canSave || salvando} onClick={salvar} style={{ marginTop: 12 }}><Plus size={15} /> {salvando ? "Salvando…" : "Salvar usuário"}</BtnPrimary>
       </div>
 
@@ -6214,7 +6214,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda }) 
                                   style={{
                                     display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
                                     borderRadius: 20, padding: "5px 12px", fontSize: 12.5,
-                                    background: autorizada ? "#E4EEE0" : "#EEE8D8", color: autorizada ? "#2A4531" : "#6B685E",
+                                    background: autorizada ? "#E6EFE5" : "#EEE8D8", color: autorizada ? "#2A4531" : "#6B685E",
                                   }}>
                                   {autorizada ? <CheckCircle2 size={13} /> : <Circle size={13} />} {f.nome}
                                 </button>
@@ -6335,7 +6335,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
                   <button key={key} onClick={() => setVisaoData(key)}
                     style={{
                       padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                      background: visaoData === key ? "#3B5D45" : "transparent", color: visaoData === key ? "#F5F5F5" : "#6B685E",
+                      background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#F5EFDD" : "#6B685E",
                     }}>{label}</button>
                 ))}
               </div>
@@ -6365,7 +6365,7 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
       {lista.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: compacto ? 48 : 64, flexShrink: 0 }}>
           <div style={{ fontSize: compacto ? 12 : 13, fontWeight: 700, color: "#232520", marginBottom: 6 }}>{d.taxa}%</div>
-          <div style={{ width: compacto ? 32 : 44, height: `${Math.max((d.taxa / maiorTaxa) * alturaMax, 4)}px`, background: "#3B5D45", borderRadius: "4px 4px 0 0" }} />
+          <div style={{ width: compacto ? 32 : 44, height: `${Math.max((d.taxa / maiorTaxa) * alturaMax, 4)}px`, background: "#166336", borderRadius: "4px 4px 0 0" }} />
           <div style={{ fontSize: compacto ? 10.5 : 11.5, color: "#6B685E", marginTop: 8, textAlign: "center", maxWidth: compacto ? 64 : 84, wordBreak: "break-word" }}>{d.label}</div>
           <div style={{ fontSize: compacto ? 9.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>
         </div>
@@ -6404,10 +6404,10 @@ function LinhaConcepcao({ dados }) {
   return (
     <div className="rola-horizontal" style={{ overflowX: "auto" }}>
       <svg width={largura + 20} height={alturaTotal} viewBox={`-10 0 ${largura + 20} ${alturaTotal}`}>
-        <path d={linha} fill="none" stroke="#3B5D45" strokeWidth="2" />
+        <path d={linha} fill="none" stroke="#166336" strokeWidth="2" />
         {pontos.map((p, i) => (
           <g key={`${p.label}-${i}`}>
-            <circle cx={p.x} cy={p.y} r="4" fill="#3B5D45" />
+            <circle cx={p.x} cy={p.y} r="4" fill="#166336" />
             <text x={p.x} y={p.y - 10} fontSize="11.5" fontWeight="700" fill="#232520" textAnchor="middle">{p.taxa}%</text>
             <text x={p.x} y={margemTopo + alturaUtil + 18} fontSize="10.5" fill="#6B685E" textAnchor="middle">{p.label}</text>
             <text x={p.x} y={margemTopo + alturaUtil + 32} fontSize="10" fill="#B0AA98" textAnchor="middle">n={p.n}</text>
@@ -6471,7 +6471,7 @@ function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, av
   const barras = [
     { label: "Sua Fazenda", valor: suaFazenda, cor: "#159FDB" },
     { label: "Média Geral", valor: stats?.mediaGeral ?? null, cor: "#1F5C7A" },
-    { label: "25% Melhores", valor: stats?.mediaTop25 ?? null, cor: "#3B7D2E" },
+    { label: "25% Melhores", valor: stats?.mediaTop25 ?? null, cor: "#166336" },
     { label: "25% Piores", valor: stats?.mediaBottom25 ?? null, cor: "#C0392B" },
   ];
   const maiorValor = Math.max(...barras.map((b) => b.valor || 0), 10);
@@ -6484,7 +6484,7 @@ function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, av
       {carregando ? (
         <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
       ) : aviso ? (
-        <p style={{ fontSize: 12, color: "#3B7D2E", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {aviso}</p>
+        <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {aviso}</p>
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 20, height: 220, paddingTop: 10 }}>
@@ -6564,7 +6564,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, safraAt
               <button key={key} onClick={() => setEscopo(key)}
                 style={{
                   padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                  background: escopo === key ? "#3B5D45" : "transparent", color: escopo === key ? "#F5F5F5" : "#6B685E",
+                  background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#F5EFDD" : "#6B685E",
                 }}>{label}</button>
             ))}
           </div>
