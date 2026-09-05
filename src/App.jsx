@@ -6313,6 +6313,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   const [visaoData, setVisaoData] = useState("dia"); // "dia" | "mes"
   const [visaoBarra, setVisaoBarra] = useState("ordem"); // "ordem" | "categoria" | "retiro" | "ecc" | "inseminador"
   const [visaoResumo, setVisaoResumo] = useState("animais"); // "animais" | "inseminacoes" | "prenhas"
+  const [visaoGeral, setVisaoGeral] = useState("concepcao"); // "concepcao" | "fertilidade"
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || null;
 
   const registros = useMemo(() => construirRegistrosConcepcao(manejos, lotes, insumos), [manejos, lotes, insumos]);
@@ -6384,6 +6385,11 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
     ] },
   };
 
+  // Taxa de fertilidade = total de Prenhas / total de animais submetidos (diferente da Taxa de
+  // concepção, que só considera quem já tem Inseminação + Diagnóstico cruzados).
+  const taxaFertilidade = totalAnimais > 0 ? Math.round((totalPrenhas / totalAnimais) * 1000) / 10 : null;
+  const fertilidadeDados = [{ label: "Geral", n: totalAnimais, taxa: taxaFertilidade }];
+
   return (
     <div>
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
@@ -6392,68 +6398,85 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
         <EmptyState text="Selecione uma fazenda ativa para ver os relatórios." />
       ) : (
         <>
-          <div style={{ ...cardStyle, marginBottom: 20 }}>
-            <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 22, width: "fit-content" }}>
-              {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
-                <button key={key} onClick={() => setVisaoResumo(key)}
-                  style={{
-                    padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                    background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
-                  }}>{op.label}</button>
-              ))}
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20, alignItems: "start" }}>
+            <div style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>
+                  {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
+                </div>
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+                  {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
+                    <button key={key} onClick={() => setVisaoGeral(key)}
+                      style={{
+                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                        background: visaoGeral === key ? "#166336" : "transparent", color: visaoGeral === key ? "#FFFFFF" : "#6B685E",
+                      }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 16px" }}>
+                {visaoGeral === "concepcao"
+                  ? "Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados."
+                  : "Percentual de Prenhas sobre o total de animais submetidos."}
+              </p>
+              <BarrasConcepcao dados={visaoGeral === "concepcao" ? geral : fertilidadeDados} compacto />
             </div>
-            <div style={{ display: "flex", gap: 36, justifyContent: "center", flexWrap: "wrap" }}>
-              {OPCOES_ROSCA_RESUMO[visaoResumo].grupos.map((g) => (
-                <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
-              ))}
+
+            <div style={cardStyle}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 22, width: "fit-content" }}>
+                {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
+                  <button key={key} onClick={() => setVisaoResumo(key)}
+                    style={{
+                      padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
+                    }}>{op.label}</button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 36, justifyContent: "center", flexWrap: "wrap" }}>
+                {OPCOES_ROSCA_RESUMO[visaoResumo].grupos.map((g) => (
+                  <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
+                ))}
+              </div>
+            </div>
+
+            <div style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por {OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}</div>
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
+                  {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
+                    <button key={key} onClick={() => setVisaoBarra(key)}
+                      style={{
+                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                        background: visaoBarra === key ? "#166336" : "transparent", color: visaoBarra === key ? "#FFFFFF" : "#6B685E",
+                      }}>{op.label}</button>
+                  ))}
+                </div>
+              </div>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 16px" }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].descricao}</p>
+              <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} compacto />
             </div>
           </div>
 
-          {registros.length === 0 ? (
-            <EmptyState text="Ainda não há Inseminações com Diagnóstico correspondente para calcular a taxa de concepção. Os gráficos aparecem aqui assim que houver dados (animais do lote Desconhecidos não entram na conta)." />
-          ) : (
-            <>
-              <GraficoColunas titulo="Concepção geral" descricao="Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados." dados={geral} compacto />
-
-              <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por {OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}</div>
-                  <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
-                    {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
-                      <button key={key} onClick={() => setVisaoBarra(key)}
-                        style={{
-                          padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                          background: visaoBarra === key ? "#166336" : "transparent", color: visaoBarra === key ? "#FFFFFF" : "#6B685E",
-                        }}>{op.label}</button>
-                    ))}
-                  </div>
-                </div>
-                <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].descricao}</p>
-                <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} />
+          <div style={{ ...cardStyle, marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+                {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
+                  <button key={key} onClick={() => setVisaoData(key)}
+                    style={{
+                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                      background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
+                    }}>{label}</button>
+                ))}
               </div>
+            </div>
+            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
+            <LinhaConcepcao dados={porData} />
+          </div>
 
-              <div style={{ ...cardStyle, marginBottom: 20, marginTop: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
-                  <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-                    {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
-                      <button key={key} onClick={() => setVisaoData(key)}
-                        style={{
-                          padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                          background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
-                        }}>{label}</button>
-                    ))}
-                  </div>
-                </div>
-                <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 20px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
-                <LinhaConcepcao dados={porData} />
-              </div>
+          <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
 
-              <GraficoColunas titulo="Concepção por Touro" descricao="Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor." dados={porTouro} ordenarPorTaxaDesc />
-
-              <p style={{ fontSize: 11, color: "#9B9686" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
-            </>
-          )}
+          <p style={{ fontSize: 11, color: "#9B9686" }}>Animais do lote "Desconhecidos" não entram em nenhum desses gráficos. "n" é o total de animais considerados em cada estatística.</p>
         </>
       )}
     </div>
