@@ -142,6 +142,20 @@ async function buscarAutorizacoes() {
 
 // ---------- ponto de entrada usado pelo App: envia tudo, depois busca tudo ----------
 // `estado` = { usuarios, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc }
+// mescla o que veio do servidor com o que já existia localmente: o servidor manda pra quem
+// já existe nos dois lados (é a versão mais atual), mas qualquer registro que exista SÓ
+// localmente (porque o envio dele falhou nesta ou em alguma sincronização anterior) é
+// mantido — nunca é apagado só porque ainda não chegou ao servidor. Sem isso, uma falha de
+// envio (de qualquer motivo) faria a busca seguinte, da mesma sincronização, sobrescrever
+// os dados locais com uma lista incompleta, apagando localmente o que nunca tinha ido pro ar.
+function mesclarComLocal(local, doServidor) {
+  if (!doServidor) return local || [];
+  if (!local || local.length === 0) return doServidor;
+  const idsDoServidor = new Set(doServidor.map((item) => item.id));
+  const somenteLocais = local.filter((item) => item.id && !idsDoServidor.has(item.id));
+  return [...doServidor, ...somenteLocais];
+}
+
 export async function sincronizar(estado) {
   if (!supabaseConfigurado) {
     return { ok: false, motivo: "Supabase não configurado. Veja src/lib/supabaseClient.js." };
@@ -162,16 +176,16 @@ export async function sincronizar(estado) {
   const atualizado = {};
   for (const colecao of Object.keys(TABELAS)) {
     const resultado = await buscarColecao(colecao);
-    if (resultado.ok) atualizado[colecao] = resultado.itens;
+    if (resultado.ok) atualizado[colecao] = mesclarComLocal(estado[colecao], resultado.itens);
     else erros.push(`${colecao}: ${resultado.erro}`);
   }
 
-  // aplica as autorizações atualizadas em cima dos usuários já buscados —
-  // é assim que "fazendasAutorizadas" volta a existir nos dados locais.
+  // aplica as autorizações atualizadas em cima dos usuários já buscados (e já mesclados
+  // com os locais) — é assim que "fazendasAutorizadas" volta a existir nos dados locais.
   const resultadoAutorizBusca = await buscarAutorizacoes();
   if (resultadoAutorizBusca.ok) {
     if (atualizado.usuarios) {
-      atualizado.usuarios = atualizado.usuarios.map((u) => ({ ...u, fazendasAutorizadas: resultadoAutorizBusca.mapa[u.id] || [] }));
+      atualizado.usuarios = atualizado.usuarios.map((u) => ({ ...u, fazendasAutorizadas: resultadoAutorizBusca.mapa[u.id] || u.fazendasAutorizadas || [] }));
     }
   } else {
     erros.push(`autorizações: ${resultadoAutorizBusca.erro}`);
