@@ -1030,7 +1030,8 @@ export default function App() {
         detalhesNovos.forEach((d) => porBrinco.set(d.brinco, d));
         const detalhesFinal = [...porBrinco.values()];
         manejosAtuais = manejosAtuais.map((m) => m.id === existente.id
-          ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador }
+          ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador,
+              numeroManejos: grupo.numeroManejos || m.numeroManejos || null, duracaoProtocolo: grupo.duracaoProtocolo || m.duracaoProtocolo || null }
           : m);
         manejosAtualizados++;
       } else {
@@ -1038,6 +1039,7 @@ export default function App() {
           id: uid("man"), tipo, fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
           loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
           data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos, inseminador: grupo.inseminador || null,
+          numeroManejos: grupo.numeroManejos || null, duracaoProtocolo: grupo.duracaoProtocolo || null,
           operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
         }];
         manejosCriados++;
@@ -1108,9 +1110,11 @@ export default function App() {
       if (!infoLote) return;
       const ordem = normalizarOrdemIATF(linha.ordem) || ORDENS_IATF[0];
       const chave = `${infoLote.loteId}|${ordem}|${linha.dataInseminacao}`;
-      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, inseminador: null, animais: [] });
+      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, inseminador: null, numeroManejos: null, duracaoProtocolo: null, animais: [] });
       const grupoInsem = gruposInsem.get(chave);
       if (!grupoInsem.inseminador && linha.inseminador?.trim()) grupoInsem.inseminador = linha.inseminador.trim();
+      if (!grupoInsem.numeroManejos && linha.numeroManejos?.trim()) grupoInsem.numeroManejos = linha.numeroManejos.trim();
+      if (!grupoInsem.duracaoProtocolo && linha.duracaoProtocolo?.trim()) grupoInsem.duracaoProtocolo = linha.duracaoProtocolo.trim();
       grupoInsem.animais.push({
         brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro), touroInformado: linha.touro?.trim() || null,
         racaTouro: linha.racaTouro?.trim() || null, ecc: linha.ecc?.trim() || null,
@@ -1176,9 +1180,14 @@ export default function App() {
   // remove um usuário só localmente (do estado do app) — não apaga a conta de login real no
   // Supabase Auth, caso exista uma. Pensada principalmente para limpar registros quebrados
   // (ex.: usuários com id inválido que nunca chegaram a sincronizar de verdade).
-  const removerUsuario = (userId) => {
+  const removerUsuario = async (userId) => {
     setUsers((a) => a.filter((u) => u.id !== userId));
     marcaPendencia();
+    // sem isso, o usuário continuava existindo no Supabase e voltava na sincronização
+    // seguinte (a autorização dele em usuario_fazendas é apagada junto, automaticamente,
+    // por causa do "on delete cascade" da chave estrangeira).
+    const r = await excluirRegistro("usuarios", userId);
+    if (!r.ok) console.error("Falha ao excluir usuário no Supabase:", r.erro);
   };
   const toggleAutorizacaoFazenda = (userId, fazendaId) => {
     setUsers((a) => {
@@ -1374,12 +1383,14 @@ export default function App() {
     setMovimentos((a) => [{ id: uid("mov"), tipo: "saida", insumoId, quantidade, data: todayISO(), manejoId, tipoManejo, local: item?.local || "fazenda", fazendaId: fazendaAtivaId, criadoEm: new Date().toISOString() }, ...a]);
   };
 
-  const removerEntradaEstoque = (movimentoId) => {
+  const removerEntradaEstoque = async (movimentoId) => {
     const mov = movimentos.find((m) => m.id === movimentoId);
     if (!mov || mov.tipo !== "entrada") return;
     setInsumos((a) => a.map((i) => i.id === mov.insumoId ? { ...i, estoque: Math.max(0, i.estoque - mov.quantidade) } : i));
     setMovimentos((a) => a.filter((m) => m.id !== movimentoId));
     marcaPendencia();
+    const r = await excluirRegistro("movimentos", movimentoId);
+    if (!r.ok) console.error("Falha ao excluir movimento no Supabase:", r.erro);
   };
 
   const registrarManejo = (manejo) => {
@@ -1399,7 +1410,7 @@ export default function App() {
   };
 
   // remove um manejo e devolve ao estoque tudo que havia sido descontado por ele
-  const removerManejo = (id) => {
+  const removerManejo = async (id) => {
     const saidasDoManejo = movimentos.filter((mv) => mv.tipo === "saida" && mv.manejoId === id);
     if (saidasDoManejo.length > 0) {
       setInsumos((a) => a.map((i) => {
@@ -1410,6 +1421,10 @@ export default function App() {
     }
     setManejos((a) => a.filter((m) => m.id !== id));
     marcaPendencia();
+    // sem isso, o manejo continuava existindo no Supabase e a sincronização seguinte trazia
+    // ele de volta — a exclusão local sozinha nunca é o suficiente pra nada que já sincronizou.
+    const r = await excluirRegistro("manejos", id);
+    if (!r.ok) console.error("Falha ao excluir manejo no Supabase:", r.erro);
   };
 
   /* ---------- pré-agendamentos automáticos, de acordo com o manejo (ou agendamento) de origem ---------- */
@@ -1488,10 +1503,14 @@ export default function App() {
 
   const descartarAgendamento = (id) => {
     setAgendamentos((a) => a.map((ag) => ag.id === id ? { ...ag, status: "descartado" } : ag));
+    marcaPendencia();
   };
 
-  const removerAgendamento = (id) => {
+  const removerAgendamento = async (id) => {
     setAgendamentos((a) => a.filter((ag) => ag.id !== id));
+    marcaPendencia();
+    const r = await excluirRegistro("agendamentos", id);
+    if (!r.ok) console.error("Falha ao excluir agendamento no Supabase:", r.erro);
   };
 
   const atualizarAgendamento = (id, campos) => {
@@ -2166,6 +2185,8 @@ const MAPA_COLUNAS_IMPORTACAO = {
   raca: "raca",
   mesdeparicao: "mesParicao", mesparicao: "mesParicao",
   ordem: "ordem",
+  numerodemanejos: "numeroManejos", numerodemanejo: "numeroManejos", numeromanejos: "numeroManejos",
+  duracaodoprotocolo: "duracaoProtocolo", duracaodeprotocolo: "duracaoProtocolo", duracaoprotocolo: "duracaoProtocolo",
   datainseminacao: "dataInseminacao", datadeinseminacao: "dataInseminacao",
   touro: "touro",
   racadotouro: "racaTouro", racatouro: "racaTouro",
@@ -2211,8 +2232,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
 
   const baixarModelo = () => {
     const dadosModelo = [
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,00", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,25", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,00", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,25", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
     ];
     const ws = XLSX.utils.json_to_sheet(dadosModelo);
     const wb = XLSX.utils.book_new();
@@ -6546,9 +6567,9 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
-        protocoloPadrao: d0MaisRecente?.protocoloPadrao || null,
-        numeroManejos: d0MaisRecente?.tipoManejo || null,
-        duracaoProtocolo: d0MaisRecente?.protocolo || null,
+        protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
+        numeroManejos: insem.numeroManejos || d0MaisRecente?.tipoManejo || null,
+        duracaoProtocolo: insem.duracaoProtocolo || d0MaisRecente?.protocolo || null,
       });
     });
   });
@@ -7222,7 +7243,7 @@ function CardBenchProtocolo({ registrosGrupo, escopo, fazendaAtivaId }) {
 
   return (
     <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 8 }}>Concepção por número de manejos/duração do protocolo</div>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 8 }}>{modo === "manejos" ? "Concepção por número de manejos" : "Concepção por duração do protocolo"}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
         <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
           {[["manejos", "Manejos"], ["duracao", "Duração"]].map(([key, label]) => (

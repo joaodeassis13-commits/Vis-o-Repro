@@ -375,7 +375,15 @@ create policy "fazendas: exclusao do proprio grupo" on fazendas
   for delete using (fazenda_autorizada(id));
 drop policy if exists "fazendas: administrador pode criar" on fazendas;
 create policy "fazendas: administrador pode criar" on fazendas
-  for insert with check (eh_administrador());
+  for insert with check (
+    eh_administrador()
+    -- sem isso, qualquer usuário autorizado (não-Administrador, ex.: Inseminador) que
+    -- simplesmente sincronizasse a fazenda dele (sem mudar nada) cairia nesse "upsert" (ON
+    -- CONFLICT DO UPDATE) e falharia — o Postgres exige que a política de INSERT também
+    -- passe nesse tipo de comando, mesmo quando o resultado final é só uma atualização de
+    -- uma linha que já existe e já é autorizada pra essa pessoa.
+    or fazenda_autorizada(id)
+  );
 
 drop policy if exists "retiros: acesso autorizado" on retiros;
 create policy "retiros: acesso autorizado" on retiros
@@ -441,6 +449,16 @@ create policy "usuarios: atualizacao" on usuarios
   for update using (
     id = auth.uid()
     or criado_por = auth.uid()
+    or (eh_administrador() and mesmo_grupo_de_fazendas(id))
+  );
+
+-- faltava por completo: sem uma política de exclusão, apagar um usuário (removerUsuario em
+-- App.jsx) sempre falhava por RLS — a exclusão local sozinha nunca bastava, o usuário
+-- continuava existindo no Supabase e voltava na sincronização seguinte.
+drop policy if exists "usuarios: exclusao" on usuarios;
+create policy "usuarios: exclusao" on usuarios
+  for delete using (
+    criado_por = auth.uid()
     or (eh_administrador() and mesmo_grupo_de_fazendas(id))
   );
 
