@@ -1919,13 +1919,16 @@ export default function App() {
             <AbaUsuarios users={users} fazendas={fazendasVisiveis} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} removerUsuario={removerUsuario} currentUser={currentUser} />
           </div>
           <div style={{ display: section === "relatorios" ? "block" : "none" }}>
-            <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil} />
+            <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil}
+              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} movimentosTodos={movimentos} />
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
-            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras} />
+            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
+              perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveis} />
           </div>
           <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
-            <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} />
+            <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} perfil={currentUser.perfil}
+              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} />
           </div>
         </div>
       </main>
@@ -6594,7 +6597,43 @@ function agruparConcepcao(registros, chaveFn) {
 
 const CATEGORIAS_RESUMO = ["Nulípara", "Primípara", "Multípara"];
 
-function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimentos, perfil }) {
+// filtro de Fazenda + Safra visível só pra Administrador (que pode ter mais de uma fazenda) —
+// deixa ver Relatórios/Benchmarking/Exportações de uma fazenda/safra diferente da "ativa" no
+// momento, sem precisar trocar a fazenda ativa geral (usada pra lançamentos) na barra lateral.
+function FiltroFazendaSafraAdmin({ perfil, fazendasVisiveis, safras, fazendaId, setFazendaId, safraId, setSafraId }) {
+  if (perfil !== "Administrador") return null;
+  const safrasDaFazenda = safras.filter((s) => s.fazendaId === fazendaId);
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+      <Field label="Fazenda">
+        <select style={inputStyle} value={fazendaId} onChange={(e) => { setFazendaId(e.target.value); setSafraId(""); }}>
+          {fazendasVisiveis.length === 0 && <option value="">Nenhuma fazenda</option>}
+          {fazendasVisiveis.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+        </select>
+      </Field>
+      <Field label="Safra">
+        <select style={inputStyle} value={safraId} onChange={(e) => setSafraId(e.target.value)}>
+          <option value="">Todas as safras</option>
+          {safrasDaFazenda.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+        </select>
+      </Field>
+    </div>
+  );
+}
+
+function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosAtivosProp, insumos: insumosAtivosProp, manejos: manejosAtivosProp, movimentos: movimentosAtivosProp, perfil, fazendasVisiveis, safras, lotesTodos, retirosTodos, insumosTodos, manejosTodos, movimentosTodos }) {
+  // Administrador pode escolher ver uma fazenda/safra diferente da ativa (ele pode ter mais
+  // de uma fazenda); os demais perfis sempre veem só a fazenda/safra ativa, como antes.
+  const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtiva?.id || "");
+  const [filtroSafraId, setFiltroSafraId] = useState("");
+  const usaFiltroAdmin = perfil === "Administrador";
+  const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
+  const lotes = usaFiltroAdmin ? lotesTodos.filter((l) => l.fazendaId === filtroFazendaId && (filtroSafraId ? l.safraId === filtroSafraId : true)) : lotesAtivosProp;
+  const retiros = usaFiltroAdmin ? retirosTodos.filter((r) => r.fazendaId === filtroFazendaId) : retirosAtivosProp;
+  const insumos = usaFiltroAdmin ? insumosTodos.filter((i) => i.fazendaId === filtroFazendaId) : insumosAtivosProp;
+  const manejos = usaFiltroAdmin ? manejosTodos.filter((m) => m.fazendaId === filtroFazendaId && (filtroSafraId ? m.safraId === filtroSafraId : true)) : manejosAtivosProp;
+  const movimentos = usaFiltroAdmin ? movimentosTodos.filter((m) => m.fazendaId === filtroFazendaId) : movimentosAtivosProp;
+
   const [visaoData, setVisaoData] = useState("dia"); // "dia" | "mes"
   const [visaoBarra, setVisaoBarra] = useState("ordem"); // "ordem" | "categoria" | "retiro" | "ecc" | "inseminador" | "paricao"
   const [visaoProtocolo, setVisaoProtocolo] = useState("protocolo"); // "protocolo" | "manejos" | "duracao"
@@ -6735,9 +6774,11 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
   return (
     <div>
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
+      <FiltroFazendaSafraAdmin perfil={perfil} fazendasVisiveis={fazendasVisiveis} safras={safras}
+        fazendaId={filtroFazendaId} setFazendaId={setFiltroFazendaId} safraId={filtroSafraId} setSafraId={setFiltroSafraId} />
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
-        <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
-        {fazendaAtiva && (
+        <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />
+        {fazendaExibida && (
           <>
             <select value={filtroRetiroId} onChange={(e) => setFiltroRetiroId(e.target.value)}
               style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
@@ -6757,7 +6798,7 @@ function AbaRelatorios({ fazendaAtiva, lotes, retiros, insumos, manejos, movimen
           </>
         )}
       </div>
-      {!fazendaAtiva ? (
+      {!fazendaExibida ? (
         <EmptyState text="Selecione uma fazenda ativa para ver os relatórios." />
       ) : (
         <>
@@ -7351,7 +7392,14 @@ function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, av
   );
 }
 
-function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDoGrupo, safraAtiva, safras }) {
+function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDoGrupo, safraAtiva, safras, perfil, fazendasVisiveis }) {
+  const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtivaId || "");
+  const [filtroSafraId, setFiltroSafraId] = useState("");
+  const usaFiltroAdmin = perfil === "Administrador";
+  const fazendaIdAtual = usaFiltroAdmin ? filtroFazendaId : fazendaAtivaId;
+  const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
+  const safraAtual = usaFiltroAdmin ? (safras.find((s) => s.id === filtroSafraId) || null) : safraAtiva;
+
   const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
   const [visaoMetrica, setVisaoMetrica] = useState("concepcao"); // "concepcao" | "fertilidade"
   const [visaoResumo, setVisaoResumo] = useState("matrizes"); // "matrizes" | "inseminacoes" | "prenhas"
@@ -7366,24 +7414,24 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
     if (escopo !== "sistema" || !supabaseConfigurado) return;
     setErroSistema(""); setCarregandoSistema(true);
     const buscar = visaoMetrica === "concepcao" ? buscarBenchmarkTaxaPrenhezSistema : buscarBenchmarkTaxaFertilidadeSistema;
-    buscar(safraAtiva?.nome || null).then((r) => {
+    buscar(safraAtual?.nome || null).then((r) => {
       if (r.ok) (visaoMetrica === "concepcao" ? setSistemaConcepcao : setSistemaFertilidade)(r);
       else setErroSistema(r.motivo);
       setCarregandoSistema(false);
     });
-  }, [escopo, safraAtiva?.nome, visaoMetrica]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [escopo, safraAtual?.nome, visaoMetrica]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // filtra pela safra ativa comparando pelo NOME da safra (ex.: "2024/2025") — cada
   // fazenda tem seus próprios ids de safra, mas o nome é o que permite comparar a
   // "mesma safra" entre fazendas diferentes do grupo. Sem safra ativa selecionada,
   // usa o histórico completo (sem filtro).
   const filtrarPelaSafra = (lista, campoSafraId) => {
-    if (!safraAtiva) return lista;
-    const idsDaMesmaSafra = new Set(safras.filter((s) => s.nome === safraAtiva.nome).map((s) => s.id));
+    if (!safraAtual) return lista;
+    const idsDaMesmaSafra = new Set(safras.filter((s) => s.nome === safraAtual.nome).map((s) => s.id));
     return lista.filter((item) => idsDaMesmaSafra.has(item[campoSafraId]));
   };
-  const manejosDaSafra = useMemo(() => filtrarPelaSafra(manejosDoGrupo, "safraId"), [manejosDoGrupo, safras, safraAtiva]);
-  const lotesDaSafra = useMemo(() => filtrarPelaSafra(lotesDoGrupo, "safraId"), [lotesDoGrupo, safras, safraAtiva]);
+  const manejosDaSafra = useMemo(() => filtrarPelaSafra(manejosDoGrupo, "safraId"), [manejosDoGrupo, safras, safraAtual]);
+  const lotesDaSafra = useMemo(() => filtrarPelaSafra(lotesDoGrupo, "safraId"), [lotesDoGrupo, safras, safraAtual]);
   // registros por animal (Inseminação + Diagnóstico + D0/Ressinc cruzados) de todo o grupo — usado
   // pelo card "Concepção por número de manejos/duração do protocolo". Sem insumos aqui porque essa
   // função só precisa desses dados quando resolve touro/raça, que este card não usa.
@@ -7395,7 +7443,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
   const statsGrupoFertilidade = useMemo(() => calcularEstatisticasBenchmark(taxasGrupoFertilidade.map((f) => f.taxa)), [taxasGrupoFertilidade]);
 
   const taxasGrupoAtual = visaoMetrica === "concepcao" ? taxasGrupoConcepcao : taxasGrupoFertilidade;
-  const suaFazenda = taxasGrupoAtual.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
+  const suaFazenda = taxasGrupoAtual.find((f) => f.fazendaId === fazendaIdAtual)?.taxa ?? null;
   const statsAtual = escopo === "grupo"
     ? (visaoMetrica === "concepcao" ? statsGrupoConcepcao : statsGrupoFertilidade)
     : (visaoMetrica === "concepcao" ? sistemaConcepcao : sistemaFertilidade);
@@ -7407,8 +7455,8 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
 
   // ---------- Resumo (mesmo modelo do Relatório) — totais só da fazenda ativa ----------
   const idsDesconhecidosBench = new Set(lotesDaSafra.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
-  const lotesFazenda = lotesDaSafra.filter((l) => l.fazendaId === fazendaAtivaId && !idsDesconhecidosBench.has(l.id));
-  const manejosFazenda = manejosDaSafra.filter((m) => m.fazendaId === fazendaAtivaId && !idsDesconhecidosBench.has(m.loteId));
+  const lotesFazenda = lotesDaSafra.filter((l) => l.fazendaId === fazendaIdAtual && !idsDesconhecidosBench.has(l.id));
+  const manejosFazenda = manejosDaSafra.filter((m) => m.fazendaId === fazendaIdAtual && !idsDesconhecidosBench.has(m.loteId));
   const categoriaDoLoteBench = (loteId) => lotesDaSafra.find((l) => l.id === loteId)?.categoria;
 
   const totalMatrizes = lotesFazenda.reduce((s, l) => s + (l.animais || []).length, 0);
@@ -7454,8 +7502,10 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
   return (
     <div>
       <SectionTitle icon={TrendingUp} title="Benchmarking" subtitle="Compare a fazenda ativa com outras fazendas — escolha o grupo de comparação abaixo." />
-      <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
-      {!fazendaAtiva ? (
+      <FiltroFazendaSafraAdmin perfil={perfil} fazendasVisiveis={fazendasVisiveis} safras={safras}
+        fazendaId={filtroFazendaId} setFazendaId={setFiltroFazendaId} safraId={filtroSafraId} setSafraId={setFiltroSafraId} />
+      <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />
+      {!fazendaExibida ? (
         <EmptyState text="Selecione uma fazenda ativa para comparar." />
       ) : (
         <>
@@ -7469,7 +7519,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
             ))}
           </div>
           <p style={{ fontSize: 11.5, color: "#9B9686", marginBottom: 18 }}>
-            {safraAtiva ? `Mostrando dados da safra ${safraAtiva.nome}.` : "Nenhuma safra ativa selecionada — mostrando todo o histórico."}
+            {safraAtual ? `Mostrando dados da safra ${safraAtual.nome}.` : "Nenhuma safra ativa selecionada — mostrando todo o histórico."}
           </p>
 
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
@@ -7525,8 +7575,8 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
               calcularTaxasGrupo={(cat) => taxasDeFertilidadePorCategoriaPorFazenda(lotesDaSafra, manejosDaSafra, cat)}
               buscarTaxasSistema={buscarBenchmarkFertilidadePorCategoriaSistema}
-              safraAtiva={safraAtiva}
-              fazendaAtivaId={fazendaAtivaId}
+              safraAtiva={safraAtual}
+              fazendaAtivaId={fazendaIdAtual}
               escopo={escopo}
             />
             <CardBenchComparacao
@@ -7534,8 +7584,8 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
               calcularTaxasGrupo={(cat) => taxasDePrenhezPorCategoriaPorFazenda(manejosDaSafra, lotesDaSafra, cat)}
               buscarTaxasSistema={buscarBenchmarkConcepcaoPorCategoriaSistema}
-              safraAtiva={safraAtiva}
-              fazendaAtivaId={fazendaAtivaId}
+              safraAtiva={safraAtual}
+              fazendaAtivaId={fazendaIdAtual}
               escopo={escopo}
             />
             <CardBenchComparacao
@@ -7543,11 +7593,11 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               opcoes={[...ORDENS_IATF.map((o) => ({ key: o, label: o })), { key: "Repasse", label: "Repasse" }]}
               calcularTaxasGrupo={(ordem) => taxasDePrenhezPorOrdemPorFazenda(manejosDaSafra, ordem)}
               buscarTaxasSistema={buscarBenchmarkConcepcaoPorOrdemSistema}
-              safraAtiva={safraAtiva}
-              fazendaAtivaId={fazendaAtivaId}
+              safraAtiva={safraAtual}
+              fazendaAtivaId={fazendaIdAtual}
               escopo={escopo}
             />
-            <CardBenchProtocolo registrosGrupo={registrosGrupo} escopo={escopo} fazendaAtivaId={fazendaAtivaId} />
+            <CardBenchProtocolo registrosGrupo={registrosGrupo} escopo={escopo} fazendaAtivaId={fazendaIdAtual} />
           </div>
 
           <p style={{ fontSize: 11, color: "#9B9686" }}>
@@ -7564,7 +7614,17 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
    respeitando os filtros de Fazenda ativa e Safra ativa.
 ========================================================= */
 
-function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, manejos }) {
+function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: retirosProp, insumos: insumosProp, manejos: manejosProp, perfil, fazendasVisiveis, safras, lotesTodos, retirosTodos, insumosTodos, manejosTodos }) {
+  const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtiva?.id || "");
+  const [filtroSafraId, setFiltroSafraId] = useState("");
+  const usaFiltroAdmin = perfil === "Administrador";
+  const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
+  const safraExibida = usaFiltroAdmin ? (safras.find((s) => s.id === filtroSafraId) || null) : safraAtiva;
+  const lotes = usaFiltroAdmin ? lotesTodos.filter((l) => l.fazendaId === filtroFazendaId && (filtroSafraId ? l.safraId === filtroSafraId : true)) : lotesProp;
+  const retiros = usaFiltroAdmin ? retirosTodos.filter((r) => r.fazendaId === filtroFazendaId) : retirosProp;
+  const insumos = usaFiltroAdmin ? insumosTodos.filter((i) => i.fazendaId === filtroFazendaId) : insumosProp;
+  const manejos = usaFiltroAdmin ? manejosTodos.filter((m) => m.fazendaId === filtroFazendaId && (filtroSafraId ? m.safraId === filtroSafraId : true)) : manejosProp;
+
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || "—";
   const nomeInsumo = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "—";
 
@@ -7583,8 +7643,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, man
   };
 
   const sufixoArquivo = () => {
-    const faz = (fazendaAtiva?.nome || "fazenda").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const saf = (safraAtiva?.nome || "safra").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const faz = (fazendaExibida?.nome || "fazenda").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const saf = (safraExibida?.nome || "safra").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
     return `${faz}_${saf}_${todayISO()}`;
   };
 
@@ -7707,8 +7767,10 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, man
   return (
     <div>
       <SectionTitle icon={FileDown} title="Exportações" subtitle="Gere planilhas Excel com a fazenda e a safra selecionadas no menu lateral." />
-      <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
-      {!fazendaAtiva ? (
+      <FiltroFazendaSafraAdmin perfil={perfil} fazendasVisiveis={fazendasVisiveis} safras={safras}
+        fazendaId={filtroFazendaId} setFazendaId={setFiltroFazendaId} safraId={filtroSafraId} setSafraId={setFiltroSafraId} />
+      <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />
+      {!fazendaExibida ? (
         <EmptyState text="Selecione uma fazenda ativa para exportar planilhas." />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
