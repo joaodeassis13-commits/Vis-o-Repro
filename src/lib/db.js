@@ -79,6 +79,15 @@ export async function gravarRascunhos(rascunhos) {
   if (linhas.length > 0) await db.rascunhos.bulkAdd(linhas);
 }
 
+// ---------- apaga TODO o banco local (todas as coleções) ----------
+// Usado quando dados locais ficaram inconsistentes com o Supabase (ex.: registros órfãos
+// presos no aparelho depois de uma limpeza feita direto no banco) — dá pra recomeçar do
+// zero neste aparelho sem precisar mexer em configuração nenhuma do navegador. Não afeta o
+// Supabase nem outros aparelhos; a próxima sincronização volta a buscar tudo de lá.
+export async function apagarTudoLocal() {
+  await Promise.all(db.tables.map((tabela) => tabela.clear()));
+}
+
 export async function lerMeta(chave) {
   const row = await db.meta.get(chave);
   return row?.valor ?? null;

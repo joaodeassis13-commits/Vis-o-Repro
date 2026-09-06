@@ -7,7 +7,7 @@ import {
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
   Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload
 } from "lucide-react";
-import { carregarTudo, gravarColecao, gravarRascunhos } from "./lib/db.js";
+import { carregarTudo, gravarColecao, gravarRascunhos, apagarTudoLocal } from "./lib/db.js";
 import { sincronizar, buscarPerfilProprio, excluirRegistro } from "./lib/sync.js";
 import {
   buscarBenchmarkTaxaPrenhezSistema, buscarBenchmarkTaxaFertilidadeSistema,
@@ -624,6 +624,7 @@ export default function App() {
   const [carregadoDoBanco, setCarregadoDoBanco] = useState(false); // true assim que a TENTATIVA termina (sucesso ou falha) — libera a tela pra seguir
   const [podeGravar, setPodeGravar] = useState(false); // true SÓ quando a leitura teve sucesso de verdade — único gate da gravação automática
   const [erroCarregamentoBanco, setErroCarregamentoBanco] = useState(false);
+  const [confirmarLimparLocal, setConfirmarLimparLocal] = useState(false);
   const [ultimaSincronizacao, setUltimaSincronizacao] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -1654,6 +1655,21 @@ export default function App() {
             )}
             {erroSincronizacao && (
               <p style={{ fontSize: 10.5, color: "#E3A45C", margin: "6px 0 0", lineHeight: 1.4 }}>⚠ {erroSincronizacao}</p>
+            )}
+            {supabaseConfigurado && currentUser.perfil === "Administrador" && (
+              confirmarLimparLocal ? (
+                <div style={{ marginTop: 6, fontSize: 10.5, color: "#E3A45C", lineHeight: 1.4 }}>
+                  Apaga só os dados guardados NESTE aparelho (o Supabase não é afetado; a próxima sincronização busca tudo de lá de novo). Confirma?
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <button onClick={async () => { await apagarTudoLocal(); window.location.reload(); }} style={{ background: "none", border: "1px solid #E3A45C", color: "#E3A45C", borderRadius: 6, padding: "3px 8px", fontSize: 10.5, cursor: "pointer" }}>Sim, apagar</button>
+                    <button onClick={() => setConfirmarLimparLocal(false)} style={{ background: "none", border: "none", color: "#CCCCCC", cursor: "pointer", fontSize: 10.5 }}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmarLimparLocal(true)} style={{ background: "none", border: "none", color: "#6B7A6F", cursor: "pointer", fontSize: 10.5, marginTop: 6, textDecoration: "underline", padding: 0 }}>
+                  Limpar dados guardados neste aparelho
+                </button>
+              )
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
