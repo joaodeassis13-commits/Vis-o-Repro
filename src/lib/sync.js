@@ -96,6 +96,11 @@ async function enviarColecao(colecao, itens) {
       const { numeroManejos, duracaoProtocolo, ...resto } = item;
       return { ...resto, tipoManejo: resto.tipoManejo || numeroManejos || null, protocolo: resto.protocolo || duracaoProtocolo || null };
     });
+    // "detalhes" é obrigatório (not null) na tabela — manejos sem leitura individual (D0,
+    // Indução, Retirada sem leitura) nunca definem esse campo, ficando undefined. Enviado
+    // junto de outros manejos que TÊM detalhes, o lote inteiro falhava (a linha sem o campo
+    // era gravada como null, violando a coluna). Preenche com lista vazia por padrão.
+    validos = validos.map((item) => (item.detalhes ? item : { ...item, detalhes: [] }));
   }
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`

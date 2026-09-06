@@ -1662,11 +1662,15 @@ export default function App() {
         .grid-relatorios-3 { grid-template-columns: repeat(3, 1fr); }
         /* Benchmarking: Resumo (1/3) + Taxa de concepção/fertilidade (2/3) lado a lado, empilhados no celular */
         .grid-bench-2 { grid-template-columns: 1fr 2fr; }
+        /* Formulários (Fazendas, Estoque, etc.): 3 colunas no computador, no máximo 2 no celular
+           — evita amontoar campos numa tela estreita. */
+        .grid-form-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
         @media (max-width: 860px) {
           th { font-size: 10.5px; padding: 7px 8px; }
           td { padding: 8px 8px; font-size: 13px; }
           .grid-relatorios-3 { grid-template-columns: 1fr; }
           .grid-bench-2 { grid-template-columns: 1fr; }
+          .grid-form-3 { grid-template-columns: repeat(2, 1fr); }
         }
       `}</style>
 
@@ -1994,7 +1998,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
       <SectionTitle icon={Home} title="Fazendas" subtitle="Cadastre a propriedade e já informe os retiros (subdivisões) e as safras que ela possui. A fazenda ativa (menu lateral) é a que recebe lotes, insumos, manejos e estoque lançados no sistema." />
 
       <div style={{ ...cardStyle, marginBottom: 24 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+        <div className="grid-form-3">
           <Field label="Nome da fazenda"><input style={inputStyle} value={form.nome} onChange={set("nome")} placeholder="Ex: Fazenda Santa Fé" /></Field>
           <Field label="Município"><input style={inputStyle} value={form.municipio} onChange={set("municipio")} placeholder="Ex: Querência - MT" /></Field>
           <Field label="Área total (ha)"><input style={inputStyle} type="number" value={form.areaTotal} onChange={set("areaTotal")} placeholder="0" /></Field>
@@ -2449,7 +2453,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
 
     const manejoId = registrarManejo({
       tipo, loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, numeroAnimais: numBR(numeroAnimais), produtoId, quantidade: qtd, unidade: unidadeDose, medicamentos,
-      localEstoque, animaisLidos: comLeitura ? animaisLidos : [], data: dataManejo,
+      localEstoque, animaisLidos: comLeitura ? animaisLidos : [], detalhes: [], data: dataManejo,
     });
     registrarSaidaEstoque(produtoId, qtd, manejoId, tipo);
     medicamentos.forEach((m) => registrarSaidaEstoque(m.medicamentoId, m.dose, manejoId, tipo));
@@ -5100,7 +5104,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
     registrarManejo({
       tipo: "repasse", loteId, loteNome: loteAtual?.nome || "", categoria: loteAtual?.categoria || null,
       retiroId: loteAtual?.retiroId || null, numeroAnimais: numBR(numeroAnimais), data: dataInicio,
-      dataInicio, dataFim,
+      dataInicio, dataFim, detalhes: [],
     });
     if (sugestaoConfirmandoId) removerSugestaoRepasse(sugestaoConfirmandoId);
     setSugestaoConfirmandoId(null);
@@ -5563,7 +5567,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
 
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             {categoriaInterna === "Hormônio" && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, alignItems: "start" }}>
+              <div className="grid-form-3">
                 <Field label="Produto comercial"><input style={inputStyle} value={form.produtoComercial} onChange={set("produtoComercial")} placeholder="Ex: Sincrogest" /></Field>
                 <Field label="Hormônio">
                   <select style={inputStyle} value={form.hormonio} onChange={set("hormonio")}>
@@ -5586,7 +5590,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
             )}
 
             {categoriaInterna === "Sêmen" && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, alignItems: "start" }}>
+              <div className="grid-form-3">
                 <Field label="Touro"><input style={inputStyle} value={form.touro} onChange={set("touro")} placeholder="Ex: Touro Zeus FIV" /></Field>
                 <Field label="Raça"><input style={inputStyle} value={form.raca} onChange={set("raca")} placeholder="Ex: Nelore" /></Field>
                 <Field label="Partida"><input style={inputStyle} type="date" value={form.partida} onChange={set("partida")} /></Field>
@@ -5612,7 +5616,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
             )}
 
             {categoriaInterna === "Medicamento" && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, alignItems: "start" }}>
+              <div className="grid-form-3">
                 <Field label="Produto comercial"><input style={inputStyle} value={form.produtoComercial} onChange={set("produtoComercial")} placeholder="Ex: Ivermectina 1%" /></Field>
                 <Field label="Tipo">
                   <select style={inputStyle} value={form.tipoMedicamento || TIPOS_MEDICAMENTO[0]} onChange={set("tipoMedicamento")}>
@@ -5635,7 +5639,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
             )}
 
             {categoriaInterna === "Utensílio" && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, alignItems: "start" }}>
+              <div className="grid-form-3">
                 <Field label="Produto comercial"><input style={inputStyle} value={form.produtoComercial} onChange={set("produtoComercial")} placeholder="Ex: Luva de palpação" /></Field>
                 <Field label="Unidade"><input style={inputStyle} value={form.unidade} onChange={set("unidade")} placeholder="Ex: caixa, par, un" /></Field>
                 <Field label="Quantidade"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
@@ -7263,68 +7267,6 @@ function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSi
   );
 }
 
-// card específico de "Concepção por número de manejos/duração do protocolo" — diferente dos
-// outros, precisa de DOIS níveis de escolha: primeiro Manejos/Duração, depois o valor específico
-// (ex.: "3 manejos" ou uma duração concreta), já que os valores possíveis variam com os dados.
-function CardBenchProtocolo({ registrosGrupo, escopo, fazendaAtivaId }) {
-  const [modo, setModo] = useState("manejos"); // "manejos" | "duracao"
-  const campo = modo === "manejos" ? "numeroManejos" : "duracaoProtocolo";
-  const valoresDisponiveis = [...new Set(registrosGrupo.map((r) => r[campo]).filter(Boolean))];
-  const [valorAtual, setValorAtual] = useState(valoresDisponiveis[0] || null);
-
-  React.useEffect(() => {
-    const disponiveis = [...new Set(registrosGrupo.map((r) => r[campo]).filter(Boolean))];
-    if (!disponiveis.includes(valorAtual)) setValorAtual(disponiveis[0] || null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modo, registrosGrupo]);
-
-  const taxasGrupo = valorAtual ? taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, campo, valorAtual) : [];
-  const suaFazenda = taxasGrupo.find((f) => f.fazendaId === fazendaAtivaId)?.taxa ?? null;
-  const stats = calcularEstatisticasBenchmark(taxasGrupo.map((f) => f.taxa));
-
-  return (
-    <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 8 }}>{modo === "manejos" ? "Concepção por número de manejos" : "Concepção por duração do protocolo"}</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-        <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-          {[["manejos", "Manejos"], ["duracao", "Duração"]].map(([key, label]) => (
-            <button key={key} onClick={() => setModo(key)}
-              style={{
-                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
-                background: modo === key ? "#166336" : "transparent", color: modo === key ? "#FFFFFF" : "#6B685E",
-              }}>{label}</button>
-          ))}
-        </div>
-        {valoresDisponiveis.length > 0 && (
-          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, flexWrap: "wrap" }}>
-            {valoresDisponiveis.map((v) => (
-              <button key={v} onClick={() => setValorAtual(v)}
-                style={{
-                  padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
-                  background: valorAtual === v ? "#166336" : "transparent", color: valorAtual === v ? "#FFFFFF" : "#6B685E",
-                }}>{v}</button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div style={{ flex: 1, overflow: "hidden" }}>
-        {escopo === "sistema" ? (
-          <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ Essa comparação ainda não está disponível para “Geral do Sistema”.</p>
-        ) : valoresDisponiveis.length === 0 ? (
-          <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>
-        ) : (
-          <BarrasConcepcao dados={[
-            { label: "Sua Fazenda", n: null, taxa: suaFazenda, cor: "#159FDB" },
-            { label: "Geral", n: null, taxa: stats.mediaGeral, cor: "#1F5C7A" },
-            { label: "Melhores", n: null, taxa: stats.mediaTop25, cor: "#166336" },
-            { label: "Piores", n: null, taxa: stats.mediaBottom25, cor: "#C0392B" },
-          ]} />
-        )}
-      </div>
-    </div>
-  );
-}
-
 
 // "média das médias": tira a média simples entre as taxas já calculadas por
 // fazenda (ex.: (42% + 35% + 54%) / 3) — nunca soma os animais de todas as
@@ -7401,25 +7343,28 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
   const safraAtual = usaFiltroAdmin ? (safras.find((s) => s.id === filtroSafraId) || null) : safraAtiva;
 
   const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
-  const [visaoMetrica, setVisaoMetrica] = useState("concepcao"); // "concepcao" | "fertilidade"
   const [visaoResumo, setVisaoResumo] = useState("matrizes"); // "matrizes" | "inseminacoes" | "prenhas"
   const [sistemaConcepcao, setSistemaConcepcao] = useState(null);
   const [sistemaFertilidade, setSistemaFertilidade] = useState(null);
   const [carregandoSistema, setCarregandoSistema] = useState(false);
   const [erroSistema, setErroSistema] = useState("");
 
-  // recarrega "Geral do Sistema" sempre que trocar de escopo, de safra ativa OU de métrica —
-  // o filtro de safra precisa refletir no servidor também, não só no cálculo local.
+  // recarrega "Geral do Sistema" sempre que trocar de escopo ou de safra ativa — o filtro de
+  // safra precisa refletir no servidor também, não só no cálculo local. Como agora concepção e
+  // fertilidade são cards separados (sempre visíveis juntos, sem alternância), busca as duas
+  // métricas de uma vez.
   React.useEffect(() => {
     if (escopo !== "sistema" || !supabaseConfigurado) return;
     setErroSistema(""); setCarregandoSistema(true);
-    const buscar = visaoMetrica === "concepcao" ? buscarBenchmarkTaxaPrenhezSistema : buscarBenchmarkTaxaFertilidadeSistema;
-    buscar(safraAtual?.nome || null).then((r) => {
-      if (r.ok) (visaoMetrica === "concepcao" ? setSistemaConcepcao : setSistemaFertilidade)(r);
-      else setErroSistema(r.motivo);
+    Promise.all([
+      buscarBenchmarkTaxaPrenhezSistema(safraAtual?.nome || null),
+      buscarBenchmarkTaxaFertilidadeSistema(safraAtual?.nome || null),
+    ]).then(([rConcepcao, rFertilidade]) => {
+      if (rConcepcao.ok) setSistemaConcepcao(rConcepcao); else setErroSistema(rConcepcao.motivo);
+      if (rFertilidade.ok) setSistemaFertilidade(rFertilidade); else setErroSistema((atual) => atual || rFertilidade.motivo);
       setCarregandoSistema(false);
     });
-  }, [escopo, safraAtual?.nome, visaoMetrica]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [escopo, safraAtual?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // filtra pela safra ativa comparando pelo NOME da safra (ex.: "2024/2025") — cada
   // fazenda tem seus próprios ids de safra, mas o nome é o que permite comparar a
@@ -7442,11 +7387,10 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
   const taxasGrupoFertilidade = useMemo(() => taxasDeFertilidadePorFazenda(lotesDaSafra, manejosDaSafra), [lotesDaSafra, manejosDaSafra]);
   const statsGrupoFertilidade = useMemo(() => calcularEstatisticasBenchmark(taxasGrupoFertilidade.map((f) => f.taxa)), [taxasGrupoFertilidade]);
 
-  const taxasGrupoAtual = visaoMetrica === "concepcao" ? taxasGrupoConcepcao : taxasGrupoFertilidade;
-  const suaFazenda = taxasGrupoAtual.find((f) => f.fazendaId === fazendaIdAtual)?.taxa ?? null;
-  const statsAtual = escopo === "grupo"
-    ? (visaoMetrica === "concepcao" ? statsGrupoConcepcao : statsGrupoFertilidade)
-    : (visaoMetrica === "concepcao" ? sistemaConcepcao : sistemaFertilidade);
+  const suaFazendaConcepcao = taxasGrupoConcepcao.find((f) => f.fazendaId === fazendaIdAtual)?.taxa ?? null;
+  const suaFazendaFertilidade = taxasGrupoFertilidade.find((f) => f.fazendaId === fazendaIdAtual)?.taxa ?? null;
+  const statsConcepcaoAtual = escopo === "grupo" ? statsGrupoConcepcao : sistemaConcepcao;
+  const statsFertilidadeAtual = escopo === "grupo" ? statsGrupoFertilidade : sistemaFertilidade;
   const avisoSistema = escopo === "sistema" && !supabaseConfigurado
     ? 'A comparação "Geral do Sistema" precisa do Supabase configurado — ela olha fazendas de outros grupos, calculada no servidor sem expor nenhum dado bruto de ninguém, só as médias.'
     : escopo === "sistema" && erroSistema
@@ -7542,18 +7486,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
             </div>
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
-                {visaoMetrica === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
-              </div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
-                {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
-                  <button key={key} onClick={() => setVisaoMetrica(key)}
-                    style={{
-                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
-                      background: visaoMetrica === key ? "#166336" : "transparent", color: visaoMetrica === key ? "#FFFFFF" : "#6B685E",
-                    }}>{label}</button>
-                ))}
-              </div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de fertilidade</div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {carregandoSistema && escopo === "sistema" ? (
                   <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
@@ -7561,10 +7494,10 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
                   <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {avisoSistema}</p>
                 ) : (
                   <BarrasConcepcao dados={[
-                    { label: "Sua Fazenda", n: null, taxa: suaFazenda, cor: "#159FDB" },
-                    { label: "Geral", n: null, taxa: statsAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
-                    { label: "Melhores", n: null, taxa: statsAtual?.mediaTop25 ?? null, cor: "#166336" },
-                    { label: "Piores", n: null, taxa: statsAtual?.mediaBottom25 ?? null, cor: "#C0392B" },
+                    { label: "Sua Fazenda", n: null, taxa: suaFazendaFertilidade, cor: "#159FDB" },
+                    { label: "Geral", n: null, taxa: statsFertilidadeAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
+                    { label: "Melhores", n: null, taxa: statsFertilidadeAtual?.mediaTop25 ?? null, cor: "#166336" },
+                    { label: "Piores", n: null, taxa: statsFertilidadeAtual?.mediaBottom25 ?? null, cor: "#C0392B" },
                   ]} />
                 )}
               </div>
@@ -7579,6 +7512,25 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               fazendaAtivaId={fazendaIdAtual}
               escopo={escopo}
             />
+
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de concepção</div>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                {carregandoSistema && escopo === "sistema" ? (
+                  <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
+                ) : avisoSistema ? (
+                  <p style={{ fontSize: 12, color: "#166336", background: "#FBF3E4", border: "1px solid #E3B8A0", borderRadius: 8, padding: 10 }}>⚠ {avisoSistema}</p>
+                ) : (
+                  <BarrasConcepcao dados={[
+                    { label: "Sua Fazenda", n: null, taxa: suaFazendaConcepcao, cor: "#159FDB" },
+                    { label: "Geral", n: null, taxa: statsConcepcaoAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
+                    { label: "Melhores", n: null, taxa: statsConcepcaoAtual?.mediaTop25 ?? null, cor: "#166336" },
+                    { label: "Piores", n: null, taxa: statsConcepcaoAtual?.mediaBottom25 ?? null, cor: "#C0392B" },
+                  ]} />
+                )}
+              </div>
+            </div>
+
             <CardBenchComparacao
               titulo="Concepção por categoria"
               opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
@@ -7597,7 +7549,24 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               fazendaAtivaId={fazendaIdAtual}
               escopo={escopo}
             />
-            <CardBenchProtocolo registrosGrupo={registrosGrupo} escopo={escopo} fazendaAtivaId={fazendaIdAtual} />
+            <CardBenchComparacao
+              titulo="Concepção por número de manejos"
+              opcoes={TIPOS_MANEJO_IMPLANTACAO.map((v) => ({ key: v, label: v }))}
+              calcularTaxasGrupo={(v) => taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, "numeroManejos", v)}
+              buscarTaxasSistema={() => Promise.resolve({ ok: false, motivo: "Essa comparação ainda não está disponível para \u201cGeral do Sistema\u201d." })}
+              safraAtiva={safraAtual}
+              fazendaAtivaId={fazendaIdAtual}
+              escopo={escopo}
+            />
+            <CardBenchComparacao
+              titulo="Concepção por duração do protocolo"
+              opcoes={PROTOCOLOS_IMPLANTACAO.map((v) => ({ key: v, label: v }))}
+              calcularTaxasGrupo={(v) => taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, "duracaoProtocolo", v)}
+              buscarTaxasSistema={() => Promise.resolve({ ok: false, motivo: "Essa comparação ainda não está disponível para \u201cGeral do Sistema\u201d." })}
+              safraAtiva={safraAtual}
+              fazendaAtivaId={fazendaIdAtual}
+              escopo={escopo}
+            />
           </div>
 
           <p style={{ fontSize: 11, color: "#9B9686" }}>
