@@ -167,6 +167,7 @@ create table if not exists manejos (
 
 -- garante as colunas mais novas mesmo em bancos criados antes delas existirem
 alter table manejos add column if not exists inseminador text;
+alter table manejos add column if not exists protocolo_padrao text;
 alter table manejos add column if not exists perdas_implante numeric;
 alter table manejos add column if not exists horario_inicial text;
 alter table manejos add column if not exists horario_final text;

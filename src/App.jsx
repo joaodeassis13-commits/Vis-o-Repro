@@ -2420,6 +2420,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
   useAvisarSaidaComPendencia(animaisLidos.length > 0);
   const [brinco, setBrinco] = useState("");
   const brincoInputRef = React.useRef(null);
+  const [avisoImediato, setAvisoImediato] = useState(null); // { brinco, avisos: [] }
   const [medicamentos, setMedicamentos] = useState([]);
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
@@ -2429,8 +2430,19 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localEstoque, produtos.map((p) => p.id).join(",")]);
 
+  const conferirAoLer = () => {
+    const b = brinco.trim();
+    if (!b) return;
+    const avisos = [];
+    if (animaisLidos.includes(b)) avisos.push("Este animal já foi lido nesta lista.");
+    const loteExistente = lotes.find((l) => (l.animais || []).includes(b));
+    if (loteExistente) avisos.push(`Este animal já pertence ao lote "${loteExistente.nome}".`);
+    setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
+  };
+
   const lerAnimal = () => {
     if (!brinco.trim()) return;
+    conferirAoLer();
     if (!animaisLidos.includes(brinco.trim())) setAnimaisLidos((a) => [...a, brinco.trim()]);
     setBrinco("");
   };
@@ -2545,11 +2557,23 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
             {comLeitura && (
               <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
-                    onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lerAnimal()} />
-                  <BtnPrimary onClick={lerAnimal}>Registrar animal</BtnPrimary>
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
+                  <input ref={brincoInputRef} style={inputStyle} placeholder={novoNome.trim() ? "Ler brinco / QR e Enter" : "Preencha o nome do lote antes"} value={brinco} disabled={!novoNome.trim()}
+                    onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
+                    onKeyDown={(e) => e.key === "Enter" && lerAnimal()} />
+                  <BtnPrimary onClick={lerAnimal} disabled={!novoNome.trim()}>Registrar animal</BtnPrimary>
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={!novoNome.trim()} />
                 </div>
+                {avisoImediato && (
+                  <div style={{ marginBottom: 10, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                    </div>
+                    {avisoImediato.avisos.map((a, i) => (
+                      <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {animaisLidos.map((b) => {
                     const loteExistente = lotes.find((l) => (l.animais || []).includes(b));
@@ -2733,9 +2757,20 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localEstoque, implantes.map((p) => p.id).join(","), benzoatos.map((p) => p.id).join(","), prostaglandinas.map((p) => p.id).join(","), gnrh.map((p) => p.id).join(",")]);
 
+  const [avisoImediato, setAvisoImediato] = useState(null); // { brinco, avisos: [] }
+  const conferirAoLer = () => {
+    const b = brinco.trim();
+    if (!b) return;
+    const avisos = [];
+    if (animaisLidos.some((a) => a.brinco === b)) avisos.push("Este animal já foi lido nesta lista.");
+    const loteExistente = lotes.find((l) => (l.animais || []).includes(b) && l.nome.trim().toLowerCase() !== novoNome.trim().toLowerCase());
+    if (loteExistente) avisos.push(`Este animal já pertence ao lote "${loteExistente.nome}".`);
+    setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
+  };
   const adicionarAnimal = () => {
     if (!brinco.trim()) { setMsg("Leia o brinco do animal."); return; }
     if (animaisLidos.some((a) => a.brinco === brinco.trim())) { setMsg("Este animal já foi lido."); return; }
+    conferirAoLer();
     setAnimaisLidos((a) => [...a, { brinco: brinco.trim(), ecc, peso: peso.trim() || null }]);
     setBrinco(""); setPeso(""); setMsg("");
   };
@@ -3090,17 +3125,28 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             {comLeitura && (
               <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
-                  <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR ou digitar" value={brinco}
-                    onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
+                  <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder={novoNome.trim() ? "Ler brinco / QR ou digitar" : "Preencha o nome do lote antes"} value={brinco} disabled={!novoNome.trim()}
+                    onChange={(e) => { if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
                   <Field label="ECC">
                     <select style={inputStyle} value={ecc} onChange={(e) => setEcc(e.target.value)}>
                       {OPCOES_ECC.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </Field>
                   <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
-                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }}>Registrar animal</BtnPrimary>
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
+                  <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }} disabled={!novoNome.trim()}>Registrar animal</BtnPrimary>
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={!novoNome.trim()} />
                 </div>
+                {avisoImediato && (
+                  <div style={{ marginBottom: 10, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                    </div>
+                    {avisoImediato.avisos.map((a, i) => (
+                      <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                    ))}
+                  </div>
+                )}
                 {animaisLidos.length === 0 ? (
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
                 ) : (
@@ -3506,6 +3552,16 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
 
   const loteAtual = lotes.find((l) => l.id === loteId);
 
+  // Puxa o protocolo padrão usado no D0/Ressinc desse mesmo lote+ordem automaticamente — o
+  // Administrador não precisa escolher de novo na Retirada. Se esse nome já tiver um modelo de
+  // doses salvo (de uma Retirada anterior com o mesmo nome), as doses também vêm preenchidas.
+  React.useEffect(() => {
+    if (!loteAtual) return;
+    const d0DoLote = manejos.find((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && m.loteId === loteId && m.ordem === loteAtual.ordem);
+    if (d0DoLote?.protocoloPadrao) aplicarProtocoloPadrao(d0DoLote.protocoloPadrao);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loteId]);
+
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
 
@@ -3523,9 +3579,19 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lotesComD0.map((l) => l.id).join(",")]);
 
+  const [avisoImediato, setAvisoImediato] = useState(null); // { brinco, avisos: [] }
+  const conferirAoLer = () => {
+    const b = brinco.trim();
+    if (!b) return;
+    const avisos = [];
+    if (animaisLidos.some((a) => a.brinco === b)) avisos.push("Este animal já foi lido nesta lista.");
+    if (loteAtual && !(loteAtual.animais || []).includes(b)) avisos.push(`Este animal não pertence ao lote "${loteAtual.nome}".`);
+    setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
+  };
   const adicionarAnimal = () => {
     if (!brinco.trim()) { setMsg("Leia o brinco do animal."); return; }
     if (animaisLidos.some((a) => a.brinco === brinco.trim())) { setMsg("Este animal já foi lido."); return; }
+    conferirAoLer();
     setAnimaisLidos((a) => [...a, { brinco: brinco.trim(), ecc, peso: peso.trim() || null }]);
     setBrinco(""); setPeso(""); setMsg("");
   };
@@ -3714,7 +3780,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
               <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
                   <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder={loteId ? "Ler brinco / QR ou digitar" : "Selecione um lote antes"} value={brinco} disabled={!loteId}
-                    onChange={(e) => setBrinco(e.target.value)} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
+                    onChange={(e) => { if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
                   <Field label="ECC">
                     <select style={inputStyle} value={ecc} onChange={(e) => setEcc(e.target.value)}>
                       {OPCOES_ECC.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -3724,6 +3790,17 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                   <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }} disabled={!loteId}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={!loteId} />
                 </div>
+                {avisoImediato && (
+                  <div style={{ marginBottom: 10, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                    </div>
+                    {avisoImediato.avisos.map((a, i) => (
+                      <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                    ))}
+                  </div>
+                )}
                 {animaisLidos.length === 0 ? (
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
                 ) : (
