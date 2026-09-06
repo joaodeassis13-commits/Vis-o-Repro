@@ -85,6 +85,18 @@ async function enviarColecao(colecao, itens) {
   if (COLECOES_COM_CRIADO_EM.has(colecao)) {
     validos = validos.map((item) => (item.criadoEm ? item : { ...item, criadoEm: new Date().toISOString() }));
   }
+  // "manejos" já teve uma versão que gravava "numeroManejos"/"duracaoProtocolo" (nomes que
+  // nunca existiram como coluna no banco — o certo sempre foi "tipoManejo"/"protocolo",
+  // reaproveitando as colunas de D0/Ressinc). Registros importados antes dessa correção podem
+  // continuar com os nomes antigos localmente; converte na hora do envio pra nunca mais travar
+  // por causa disso, sem precisar que ninguém reimporte a planilha.
+  if (colecao === "manejos") {
+    validos = validos.map((item) => {
+      if (item.numeroManejos === undefined && item.duracaoProtocolo === undefined) return item;
+      const { numeroManejos, duracaoProtocolo, ...resto } = item;
+      return { ...resto, tipoManejo: resto.tipoManejo || numeroManejos || null, protocolo: resto.protocolo || duracaoProtocolo || null };
+    });
+  }
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
     : null;
