@@ -125,6 +125,12 @@ async function enviarAutorizacoes(usuarios) {
   const erros = [];
   for (const u of usuarios) {
     if (!u.id || !REGEX_UUID.test(u.id)) continue; // id inválido: nem tenta, já foi avisado em enviarColecao
+    // "fazendasAutorizadas" ausente (undefined) é diferente de "vazio de propósito" ([]) — o
+    // primeiro caso significa "o app não sabe essa lista ainda" (ex.: perfil recém-resolvido
+    // de um jeito incompleto) e NUNCA deve apagar a autorização real que já existe no
+    // servidor; só uma lista efetivamente vazia (o usuário genuinamente sem fazenda nenhuma)
+    // deve resultar em remover tudo.
+    if (u.fazendasAutorizadas === undefined) continue;
     const fazendas = u.fazendasAutorizadas || [];
     const { error: erroDelete } = await supabase.from("usuario_fazendas").delete().eq("usuario_id", u.id);
     if (erroDelete) { erros.push(`${u.nome || u.id}: ${erroDelete.message}`); continue; }
@@ -229,7 +235,13 @@ export async function buscarPerfilProprio(userId) {
     const { data, error } = await supabase.from("usuarios").select("*").eq("id", userId).maybeSingle();
     if (error) return { ok: false, erro: error.message };
     if (!data) return { ok: false, erro: "Nenhum registro encontrado na tabela usuarios para este login." };
-    return { ok: true, perfil: linhaDoSupabase(data) };
+    // busca também as fazendas autorizadas — sem isso, o perfil resolvido ficava sem esse
+    // campo (undefined), e a sincronização seguinte, ao enviar esse usuário de volta,
+    // apagava de verdade a autorização real que já existia no servidor (interpretando a
+    // ausência do campo como "esse usuário não tem fazenda nenhuma").
+    const { data: autorizacoes, error: erroAutoriz } = await supabase.from("usuario_fazendas").select("fazenda_id").eq("usuario_id", userId);
+    const fazendasAutorizadas = erroAutoriz ? undefined : (autorizacoes || []).map((r) => r.fazenda_id);
+    return { ok: true, perfil: { ...linhaDoSupabase(data), fazendasAutorizadas } };
   } catch (e) {
     return { ok: false, erro: e?.message || "Falha de rede ao buscar o perfil." };
   }
