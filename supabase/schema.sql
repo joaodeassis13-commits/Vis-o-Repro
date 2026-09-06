@@ -65,8 +65,11 @@ create table if not exists safras (
   id text primary key,
   fazenda_id text not null references fazendas (id) on delete cascade,
   nome text not null,  -- formato "2025/2026"
+  lancamentos_desabilitados boolean not null default false,  -- Administrador pode travar lançamentos (agendamentos, manejos, estoque) numa safra, pra evitar lançar na safra errada
   criado_em timestamptz not null default now()
 );
+
+alter table safras add column if not exists lancamentos_desabilitados boolean not null default false;
 
 -- garante a coluna mesmo em bancos criados antes dela existir nessas duas tabelas
 -- (todas as outras tabelas do sistema já tinham "criado_em" desde o início; essas duas

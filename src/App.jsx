@@ -5,7 +5,7 @@ import {
   ClipboardList, Stethoscope, Warehouse, ArrowDownToLine, ArrowUpFromLine,
   LogOut, Plus, Trash2, ScanLine, Wifi, WifiOff, Download, ChevronRight,
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
-  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload
+  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload, Lock, LockOpen
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos, apagarTudoLocal, lerMeta, gravarMeta } from "./lib/db.js";
 import { sincronizar, buscarPerfilProprio, excluirRegistro } from "./lib/sync.js";
@@ -291,7 +291,7 @@ function Field({ label, children }) {
 // (Indução, D0, Ressinc, Retirada, Inseminação).
 function CampoProdutoDose({ labelProduto, produto, labelDose, dose }) {
   return (
-    <div style={{ display: "flex", gap: 10, alignItems: "end" }}>
+    <div className="campo-produto-dose" style={{ display: "flex", gap: 10, alignItems: "end" }}>
       <div style={{ flex: 1.6, minWidth: 0 }}><Field label={labelProduto}>{produto}</Field></div>
       <div style={{ flex: 1, minWidth: 0 }}><Field label={labelDose}>{dose}</Field></div>
     </div>
@@ -900,6 +900,13 @@ export default function App() {
   const retirosAtivos = useMemo(() => retiros.filter((r) => r.fazendaId === fazendaAtivaId), [retiros, fazendaAtivaId]);
   const safrasAtivas = useMemo(() => safras.filter((s) => s.fazendaId === fazendaAtivaId), [safras, fazendaAtivaId]);
   const safraAtiva = safras.find((s) => s.id === safraAtivaId) || null;
+  // um Administrador pode travar lançamentos numa safra específica (ex.: uma já encerrada),
+  // pra evitar que alguém lance dado na safra errada por esquecimento. Vale pra TODO mundo,
+  // inclusive Administrador — o objetivo é proteger contra o erro, não restringir um perfil.
+  const safraAtivaBloqueada = !!safraAtiva?.lancamentosDesabilitados;
+  const avisarSafraBloqueada = () => {
+    alert(`Lançamentos estão desabilitados para a safra "${safraAtiva?.nome}". Troque para outra safra ou peça para um Administrador reabilitá-la em Fazendas.`);
+  };
   const lotesAtivos = useMemo(
     () => lotes.filter((l) => l.fazendaId === fazendaAtivaId && (safraAtivaId ? l.safraId === safraAtivaId : true)),
     [lotes, fazendaAtivaId, safraAtivaId]
@@ -967,6 +974,13 @@ export default function App() {
     return { ok: true };
   };
   const removeSafra = (id) => { setSafras((a) => a.filter((s) => s.id !== id)); marcaPendencia(); };
+  // trava/destrava lançamentos (agendamentos, manejos, estoque) numa safra — pensada pra
+  // evitar que alguém lance dado na safra errada por esquecimento (ex.: uma safra encerrada
+  // que ainda aparece no seletor). Só o Administrador deve ter acesso a esse botão na tela.
+  const toggleSafraLancamentos = (safraId) => {
+    setSafras((a) => a.map((s) => s.id === safraId ? { ...s, lancamentosDesabilitados: !s.lancamentosDesabilitados } : s));
+    marcaPendencia();
+  };
 
   // ---------- importação em massa de lotes/animais/manejos históricos (planilha) ----------
   // Diferente de addLote (que sempre usa a safra ativa e começa sem animais), aqui cada
@@ -1358,6 +1372,7 @@ export default function App() {
   };
 
   const registrarEntradaEstoque = (categoria, camposItem, quantidade, data, obs, valorUnitario, local) => {
+    if (local !== "externo" && safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
     const dono = local === "externo"
       ? { local: "externo", usuarioId: currentUser?.id, fazendaId: null }
       : { local: "fazenda", fazendaId: fazendaAtivaId, usuarioId: null };
@@ -1378,6 +1393,7 @@ export default function App() {
   };
 
   const registrarSaidaEstoque = (insumoId, quantidade, manejoId, tipoManejo) => {
+    if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação principal já avisou
     const item = insumos.find((i) => i.id === insumoId);
     setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, estoque: Math.max(0, i.estoque - quantidade) } : i));
     setMovimentos((a) => [{ id: uid("mov"), tipo: "saida", insumoId, quantidade, data: todayISO(), manejoId, tipoManejo, local: item?.local || "fazenda", fazendaId: fazendaAtivaId, criadoEm: new Date().toISOString() }, ...a]);
@@ -1394,6 +1410,7 @@ export default function App() {
   };
 
   const registrarManejo = (manejo) => {
+    if (safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
     const id = uid("man");
     // respeita uma data escolhida na tela (permite registro retroativo); se nada for
     // enviado, usa a data de hoje como padrão.
@@ -1464,6 +1481,7 @@ export default function App() {
      de origem, os agendamentos que dependem dele são recriados com base nos novos dados. */
 
   const addAgendamento = (ag) => {
+    if (safraAtivaBloqueada) { avisarSafraBloqueada(); return; }
     const id = uid("ag");
     setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "manual", status: "confirmado", criadoEm: new Date().toISOString() }]);
     marcaPendencia();
@@ -1483,6 +1501,7 @@ export default function App() {
   // aparecem normalmente e o próprio usuário decide qual manter, na seção "Agendamentos duplicados"
   // da Agenda (veja gruposDuplicados em AbaAgenda).
   const criarPreAgendamento = (ag) => {
+    if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação que originou este pré-agendamento já avisou
     const id = uid("ag");
     setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString() }]);
     marcaPendencia();
@@ -1665,12 +1684,24 @@ export default function App() {
         /* Formulários (Fazendas, Estoque, etc.): 3 colunas no computador, no máximo 2 no celular
            — evita amontoar campos numa tela estreita. */
         .grid-form-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+        .grid-form-3 > * { min-width: 0; }
+        /* Formulários de manejo (D0, Retirada, Inseminação, etc.): no celular, cada campo de
+           produto+dose "se abre" em duas colunas (produto e dose viram células separadas do
+           grid) — assim campos soltos (ex.: Lote + Retiro) ficam em até 2 colunas, um produto
+           solo + um produto com dose em até 3, e dois produtos com dose em até 4. */
+        .grid-manejo { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: start; }
+        /* sem isso, um campo com conteúdo largo (ex.: opção comprida de um <select>) usa essa
+           largura como mínimo do grid, ignorando o minmax() acima — é por isso que os campos
+           simples ficavam sozinhos numa linha inteira, um por vez, no celular. */
+        .grid-manejo > * { min-width: 0; }
         @media (max-width: 860px) {
           th { font-size: 10.5px; padding: 7px 8px; }
           td { padding: 8px 8px; font-size: 13px; }
           .grid-relatorios-3 { grid-template-columns: 1fr; }
           .grid-bench-2 { grid-template-columns: 1fr; }
           .grid-form-3 { grid-template-columns: repeat(2, 1fr); }
+          .grid-manejo { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+          .campo-produto-dose { display: contents; }
         }
       `}</style>
 
@@ -1751,8 +1782,11 @@ export default function App() {
                     borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                   }}>
                   {safrasAtivas.length === 0 && <option value="">Nenhuma safra</option>}
-                  {safrasAtivas.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                  {safrasAtivas.map((s) => <option key={s.id} value={s.id}>{s.nome}{s.lancamentosDesabilitados ? " (desabilitada)" : ""}</option>)}
                 </select>
+                {safraAtivaBloqueada && (
+                  <p style={{ fontSize: 10.5, color: "#E3A45C", margin: "5px 2px 0", lineHeight: 1.4 }}>⚠ Lançamentos desabilitados para esta safra.</p>
+                )}
               </div>
             </>
           )}
@@ -1855,7 +1889,7 @@ export default function App() {
               e ainda não registrado ao trocar de aba. */}
           <div style={{ display: section === "cadastros" && sub === "fazenda" ? "block" : "none" }}>
             <AbaFazenda fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addFazenda={addFazenda} addRetiro={addRetiro} removeRetiro={removeRetiro}
-              addSafra={addSafra} removeSafra={removeSafra} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} />
+              addSafra={addSafra} removeSafra={removeSafra} toggleSafraLancamentos={toggleSafraLancamentos} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} />
           </div>
           <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
             <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} importarLotesHistoricos={importarLotesHistoricos} />
@@ -1944,7 +1978,7 @@ export default function App() {
    CADASTROS
 ========================================================= */
 
-function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, fazendaAtivaId, setFazendaAtivaId, removerFazenda }) {
+function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, toggleSafraLancamentos, fazendaAtivaId, setFazendaAtivaId, removerFazenda }) {
   const empty = { nome: "", municipio: "", areaTotal: "", proprietario: "", responsavel: "", telefone: "" };
   const [form, setForm] = useState(empty);
   const [retirosNovos, setRetirosNovos] = useState([]); // nomes ainda não salvos, junto com a fazenda
@@ -2144,8 +2178,16 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                           {safs.length === 0 ? <EmptyState text="Nenhuma safra cadastrada para esta fazenda." /> : (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                               {safs.map((s) => (
-                                <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                                <span key={s.id} style={{
+                                  display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 20, padding: "4px 10px", fontSize: 12.5,
+                                  background: s.lancamentosDesabilitados ? "#FBEAEA" : "#EEEEEE", border: `1px solid ${s.lancamentosDesabilitados ? "#E0B4B4" : "#DDDDDD"}`,
+                                }}>
                                   <Calendar size={12} /> {s.nome}
+                                  <button onClick={() => toggleSafraLancamentos(s.id)}
+                                    title={s.lancamentosDesabilitados ? "Lançamentos desabilitados — clique para reabilitar" : "Lançamentos habilitados — clique para desabilitar"}
+                                    style={{ background: "none", border: "none", cursor: "pointer", color: s.lancamentosDesabilitados ? "#A32D2D" : "#166336", display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 600 }}>
+                                    {s.lancamentosDesabilitados ? <><Lock size={12} /> Desabilitada</> : <><LockOpen size={12} /> Habilitada</>}
+                                  </button>
                                   <button onClick={() => removeSafra(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                                 </span>
                               ))}
@@ -2513,7 +2555,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
             {nomeDuplicado && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Já existe um lote com este nome neste retiro. Use um nome diferente.</p>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
+            <div className="grid-manejo">
               <Field label="Lote (nome)"><input style={inputStyle} value={novoNome} onChange={(e) => { limparMsgSeSucesso(); setNovoNome(e.target.value); }} placeholder="Ex: Lote 01" /></Field>
               <Field label="Categoria">
                 <select style={inputStyle} value={categoria} onChange={(e) => { limparMsgSeSucesso(); setCategoria(e.target.value); }}>
@@ -3030,7 +3072,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 Já existe um lote "{loteDaInducaoSemD0.nome}" registrado na Indução, ainda sem D0. Este registro vai completar os dados desse mesmo lote.
               </p>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
+            <div className="grid-manejo">
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <Field label="Protocolo padrão (opcional)">
                 <input style={inputStyle} list="protocolos-padrao-d0" value={protocoloPadraoNome}
@@ -3333,7 +3375,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       {(implantesR.length === 0 || benzoatosR.length === 0 || prostaglandinasR.length === 0) && (
                         <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
                       )}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
+                      <div className="grid-manejo">
                         <Field label="Categoria">
                           <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={categoriaR} readOnly />
                         </Field>
@@ -3705,7 +3747,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             {(prostaglandinas.length === 0 || cipionatos.length === 0 || ecgHcg.length === 0) && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (prostaglandina, cipionato ou ECG/HCG).</p>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
+            <div className="grid-manejo">
               <Field label="Lote">
                 <select style={inputStyle} value={loteId} onChange={(e) => { limparMsgSeSucesso(); setLoteId(e.target.value); }}>
                   {lotesComD0.map((l) => <option key={l.id} value={l.id}>{l.nome}{l.categoria ? ` — ${l.categoria}` : ""}</option>)}
@@ -4260,7 +4302,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 ? "Esta é a leitura da 1º IATF: os animais lidos aqui passam a compor oficialmente este lote."
                 : "Este lote já foi composto na leitura da 1º IATF. Os animais lidos abaixo devem ser os mesmos já atribuídos a ele."}
             </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, alignItems: "end" }}>
+            <div className="grid-manejo" style={{ alignItems: "end" }}>
               <Field label="Identificação">
                 <div style={{ display: "flex", gap: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
@@ -5023,7 +5065,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                 );
               })}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, alignItems: "end" }}>
+            <div className="grid-manejo" style={{ alignItems: "end" }}>
               <Field label="Identificação (obrigatória)">
                 <div style={{ display: "flex", gap: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
@@ -5242,7 +5284,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
                 <BtnGhost onClick={cancelarConfirmacao}>Cancelar</BtnGhost>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, alignItems: "start" }}>
+            <div className="grid-manejo">
               <Field label="Lote">
                 <select style={inputStyle} value={loteId} onChange={(e) => { limparMsgSeSucesso(); setLoteId(e.target.value); }} disabled={!!sugestaoConfirmandoId}>
                   {lotes.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
@@ -7083,7 +7125,7 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   if (lista.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorTaxa = Math.max(...lista.map((d) => d.taxa || 0), 10);
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: lista.length > (compacto ? 6 : 8) ? "flex-start" : "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
       {lista.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
