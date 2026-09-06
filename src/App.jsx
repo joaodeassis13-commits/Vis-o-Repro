@@ -1031,7 +1031,7 @@ export default function App() {
         const detalhesFinal = [...porBrinco.values()];
         manejosAtuais = manejosAtuais.map((m) => m.id === existente.id
           ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador,
-              numeroManejos: grupo.numeroManejos || m.numeroManejos || null, duracaoProtocolo: grupo.duracaoProtocolo || m.duracaoProtocolo || null }
+              tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null }
           : m);
         manejosAtualizados++;
       } else {
@@ -1039,7 +1039,7 @@ export default function App() {
           id: uid("man"), tipo, fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
           loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
           data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos, inseminador: grupo.inseminador || null,
-          numeroManejos: grupo.numeroManejos || null, duracaoProtocolo: grupo.duracaoProtocolo || null,
+          tipoManejo: grupo.tipoManejo || null, protocolo: grupo.protocolo || null,
           operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
         }];
         manejosCriados++;
@@ -1110,11 +1110,11 @@ export default function App() {
       if (!infoLote) return;
       const ordem = normalizarOrdemIATF(linha.ordem) || ORDENS_IATF[0];
       const chave = `${infoLote.loteId}|${ordem}|${linha.dataInseminacao}`;
-      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, inseminador: null, numeroManejos: null, duracaoProtocolo: null, animais: [] });
+      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, inseminador: null, tipoManejo: null, protocolo: null, animais: [] });
       const grupoInsem = gruposInsem.get(chave);
       if (!grupoInsem.inseminador && linha.inseminador?.trim()) grupoInsem.inseminador = linha.inseminador.trim();
-      if (!grupoInsem.numeroManejos && linha.numeroManejos?.trim()) grupoInsem.numeroManejos = linha.numeroManejos.trim();
-      if (!grupoInsem.duracaoProtocolo && linha.duracaoProtocolo?.trim()) grupoInsem.duracaoProtocolo = linha.duracaoProtocolo.trim();
+      if (!grupoInsem.tipoManejo && linha.numeroManejos?.trim()) grupoInsem.tipoManejo = linha.numeroManejos.trim();
+      if (!grupoInsem.protocolo && linha.duracaoProtocolo?.trim()) grupoInsem.protocolo = linha.duracaoProtocolo.trim();
       grupoInsem.animais.push({
         brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro), touroInformado: linha.touro?.trim() || null,
         racaTouro: linha.racaTouro?.trim() || null, ecc: linha.ecc?.trim() || null,
@@ -6568,8 +6568,8 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
-        numeroManejos: insem.numeroManejos || d0MaisRecente?.tipoManejo || null,
-        duracaoProtocolo: insem.duracaoProtocolo || d0MaisRecente?.protocolo || null,
+        numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo || null,
+        duracaoProtocolo: insem.protocolo || d0MaisRecente?.protocolo || null,
       });
     });
   });

@@ -189,12 +189,19 @@ create table if not exists movimentos (
   quantidade numeric not null,
   valor_unitario numeric,
   local text not null check (local in ('fazenda', 'externo')),
-  manejo_id text references manejos (id),
+  manejo_id text references manejos (id) on delete cascade,
   tipo_manejo text,  -- rótulo do manejo de origem, quando tipo = 'saida'
   data date not null,
   obs text,
   criado_em timestamptz not null default now()
 );
+
+-- garante o "on delete cascade" mesmo em bancos onde a tabela já existia sem ele — sem isso,
+-- apagar um manejo que tinha desconto de estoque (movimentos tipo "saida") ficava bloqueado
+-- pela chave estrangeira, e a exclusão do manejo falhava sempre (violava
+-- "movimentos_manejo_id_fkey"), mesmo o app já tendo limpado esse movimento localmente.
+alter table movimentos drop constraint if exists movimentos_manejo_id_fkey;
+alter table movimentos add constraint movimentos_manejo_id_fkey foreign key (manejo_id) references manejos (id) on delete cascade;
 
 -- ---------- sugestões de ressinc (fila de confirmação em D0 > Ressinc) ----------
 create table if not exists sugestoes_ressinc (
@@ -203,7 +210,7 @@ create table if not exists sugestoes_ressinc (
   safra_id text references safras (id),
   lote_id text not null references lotes (id) on delete cascade,
   brincos text[] not null,
-  origem_manejo_id text references manejos (id),
+  origem_manejo_id text references manejos (id) on delete set null,
   status text not null check (status in ('pendente', 'confirmada', 'descartada')),
   data date not null,
   criado_em timestamptz not null default now()
@@ -216,11 +223,21 @@ create table if not exists sugestoes_repasse (
   safra_id text references safras (id),
   lote_id text not null references lotes (id) on delete cascade,
   brincos text[] not null,
-  origem_manejo_id text references manejos (id),
+  origem_manejo_id text references manejos (id) on delete set null,
   status text not null check (status in ('pendente', 'confirmada', 'descartada')),
   data date not null,
   criado_em timestamptz not null default now()
 );
+
+-- garante o "on delete set null" mesmo em bancos onde essas tabelas já existiam sem ele —
+-- pelo mesmo motivo do "movimentos" acima: sem isso, apagar um manejo de Inseminação ou
+-- Diagnóstico que já tivesse gerado uma sugestão de Ressinc/Repasse ficava bloqueado pela
+-- chave estrangeira. Aqui usa "set null" (não "cascade"): a sugestão continua existindo,
+-- só perde a referência de qual manejo a originou.
+alter table sugestoes_ressinc drop constraint if exists sugestoes_ressinc_origem_manejo_id_fkey;
+alter table sugestoes_ressinc add constraint sugestoes_ressinc_origem_manejo_id_fkey foreign key (origem_manejo_id) references manejos (id) on delete set null;
+alter table sugestoes_repasse drop constraint if exists sugestoes_repasse_origem_manejo_id_fkey;
+alter table sugestoes_repasse add constraint sugestoes_repasse_origem_manejo_id_fkey foreign key (origem_manejo_id) references manejos (id) on delete set null;
 
 -- ---------- protocolos padrão ("modelos" de D0/Retirada) ----------
 -- Na primeira vez que um nome novo de protocolo padrão é usado num D0/Retirada,
