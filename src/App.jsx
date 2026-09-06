@@ -824,7 +824,11 @@ export default function App() {
   const fazendaAtiva = fazendas.find((f) => f.id === fazendaAtivaId) || null;
   // Todo perfil (inclusive Administrador) só enxerga/opera nas fazendas atribuídas a ele —
   // cada Administrador cuida do seu próprio grupo, sem ver as fazendas de outros Administradores.
-  const fazendasVisiveis = fazendas.filter((f) => (currentUser?.fazendasAutorizadas || []).includes(f.id));
+  // Usa a autorização de "users" (a lista principal, sempre em dia com a sincronização) em vez
+  // de "currentUser" diretamente — evita ficar escondendo fazendas por causa de um instante em
+  // que essas duas cópias do usuário logado ainda não tinham se atualizado juntas.
+  const meuUsuario = users.find((u) => u.id === currentUser?.id);
+  const fazendasVisiveis = fazendas.filter((f) => (meuUsuario?.fazendasAutorizadas || currentUser?.fazendasAutorizadas || []).includes(f.id));
   const retirosAtivos = useMemo(() => retiros.filter((r) => r.fazendaId === fazendaAtivaId), [retiros, fazendaAtivaId]);
   const safrasAtivas = useMemo(() => safras.filter((s) => s.fazendaId === fazendaAtivaId), [safras, fazendaAtivaId]);
   const safraAtiva = safras.find((s) => s.id === safraAtivaId) || null;
@@ -1506,9 +1510,9 @@ export default function App() {
   // Todo perfil (inclusive Administrador) só pode ter como fazenda ativa uma das fazendas atribuídas a ele
   React.useEffect(() => {
     if (!currentUser) return;
-    const autorizadas = currentUser.fazendasAutorizadas || [];
+    const autorizadas = meuUsuario?.fazendasAutorizadas || currentUser.fazendasAutorizadas || [];
     if (!autorizadas.includes(fazendaAtivaId)) setFazendaAtivaId(autorizadas[0] || "");
-  }, [currentUser]);
+  }, [currentUser, meuUsuario]);
 
   // ---------- layout responsivo: no celular a barra lateral vira um menu retrátil ----------
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 860 : false);
