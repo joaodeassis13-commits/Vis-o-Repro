@@ -7,7 +7,7 @@ import {
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
   Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload
 } from "lucide-react";
-import { carregarTudo, gravarColecao, gravarRascunhos, apagarTudoLocal } from "./lib/db.js";
+import { carregarTudo, gravarColecao, gravarRascunhos, apagarTudoLocal, lerMeta, gravarMeta } from "./lib/db.js";
 import { sincronizar, buscarPerfilProprio, excluirRegistro } from "./lib/sync.js";
 import {
   buscarBenchmarkTaxaPrenhezSistema, buscarBenchmarkTaxaFertilidadeSistema,
@@ -695,14 +695,39 @@ export default function App() {
   // Ao abrir o app, verifica se já existe uma sessão válida (login persistido
   // com segurança pelo próprio Supabase) e, se sim, entra direto sem pedir
   // e-mail/senha de novo. Também escuta logout/expiração em qualquer aba.
+  //
+  // Antes de confiar nos dados guardados no aparelho, confere de quem eles são: um aparelho
+  // compartilhado (ex.: Administrador testando e depois um Inseminador logando no mesmo
+  // celular) não pode misturar os dados de uma pessoa com a sessão da outra — isso já causou
+  // dados de um usuário sendo enviados com a permissão de outro na sincronização. Como só lê
+  // o que já está salvo localmente (sem precisar de rede), funciona até offline; só limpa
+  // quando detecta uma pessoa DIFERENTE de quem os dados pertenciam — pro mesmo usuário
+  // entrando de novo (inclusive sem internet), os dados continuam intactos.
+  const garantirDonoDosDadosLocais = async (userId) => {
+    const dono = await lerMeta("donoDosDadosLocais");
+    if (dono && dono !== userId) {
+      await apagarTudoLocal();
+      window.location.reload();
+      return false;
+    }
+    if (dono !== userId) await gravarMeta("donoDosDadosLocais", userId);
+    return true;
+  };
+
   React.useEffect(() => {
     if (!supabaseConfigurado) return;
-    obterSessao().then((sessao) => {
-      if (sessao?.user) setCurrentUser((atual) => atual || { id: sessao.user.id, _aguardandoPerfil: true });
+    obterSessao().then(async (sessao) => {
+      if (sessao?.user) {
+        const podeSeguir = await garantirDonoDosDadosLocais(sessao.user.id);
+        if (!podeSeguir) return; // a página vai recarregar sozinha
+        setCurrentUser((atual) => atual || { id: sessao.user.id, _aguardandoPerfil: true });
+      }
       setSessaoAuthCarregada(true);
     });
-    const cancelarEscuta = escutarMudancaAuth((sessao) => {
+    const cancelarEscuta = escutarMudancaAuth(async (sessao) => {
       if (!sessao?.user) { setCurrentUser(null); return; }
+      const podeSeguir = await garantirDonoDosDadosLocais(sessao.user.id);
+      if (!podeSeguir) return;
       setCurrentUser((atual) => (atual && atual.id === sessao.user.id && !atual._aguardandoPerfil) ? atual : { id: sessao.user.id, _aguardandoPerfil: true });
     });
     return cancelarEscuta;
@@ -807,6 +832,49 @@ export default function App() {
     setSincronizando(false);
     return resultado;
   };
+
+  // ---------- sincronização automática ----------
+  // Sem depender de o usuário lembrar de clicar em "Sincronizar": acontece sozinha (1) assim
+  // que o app termina de carregar e o usuário está logado, (2) sempre que a internet volta
+  // depois de ficar offline, e (3) periodicamente em segundo plano enquanto o app fica aberto
+  // (pra também trazer alterações feitas por outras pessoas, não só enviar as suas). O botão
+  // manual continua existindo, útil pra forçar uma sincronização na hora sem esperar.
+  const podeSincronizarAutomaticamente = supabaseConfigurado && online && podeGravar && currentUser && !currentUser._aguardandoPerfil;
+  const sincronizandoRef = React.useRef(false);
+  React.useEffect(() => { sincronizandoRef.current = sincronizando; }, [sincronizando]);
+  // guarda sempre a versão mais recente da função em uma ref, pra (3) não precisar reiniciar
+  // o intervalo de 3 em 3 minutos toda vez que algum dado muda (o que, com edições seguidas,
+  // poderia atrasar a sincronização periódica indefinidamente).
+  const sincronizarAgoraRef = React.useRef(sincronizarAgora);
+  sincronizarAgoraRef.current = sincronizarAgora;
+  const sincronizarSeNaoEstiverEmAndamento = React.useCallback(() => {
+    if (!sincronizandoRef.current) sincronizarAgoraRef.current();
+  }, []);
+
+  // (1) assim que fica pronto pra sincronizar pela primeira vez nesta sessão
+  const jaSincronizouAoAbrir = React.useRef(false);
+  React.useEffect(() => {
+    if (!podeSincronizarAutomaticamente || jaSincronizouAoAbrir.current) return;
+    jaSincronizouAoAbrir.current = true;
+    sincronizarSeNaoEstiverEmAndamento();
+  }, [podeSincronizarAutomaticamente, sincronizarSeNaoEstiverEmAndamento]);
+
+  // (2) quando a internet volta depois de ter caído
+  const estavaOfflineRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!online) { estavaOfflineRef.current = true; return; }
+    if (estavaOfflineRef.current && podeSincronizarAutomaticamente) {
+      estavaOfflineRef.current = false;
+      sincronizarSeNaoEstiverEmAndamento();
+    }
+  }, [online, podeSincronizarAutomaticamente, sincronizarSeNaoEstiverEmAndamento]);
+
+  // (3) periodicamente em segundo plano, a cada 3 minutos
+  React.useEffect(() => {
+    if (!podeSincronizarAutomaticamente) return;
+    const intervalo = setInterval(sincronizarSeNaoEstiverEmAndamento, 3 * 60 * 1000);
+    return () => clearInterval(intervalo);
+  }, [podeSincronizarAutomaticamente, sincronizarSeNaoEstiverEmAndamento]);
 
   const [section, setSection] = useState("cadastros");
   const [sub, setSub] = useState("fazenda");
@@ -1682,6 +1750,11 @@ export default function App() {
                 <RefreshCw size={12} />
                 {sincronizando ? "Sincronizando…" : ultimaSincronizacao ? "Sincronizar agora" : "Sincronizar pela 1ª vez"}
               </button>
+            )}
+            {supabaseConfigurado && ultimaSincronizacao && !sincronizando && (
+              <p style={{ fontSize: 10, color: "#8CA091", margin: "5px 0 0" }}>
+                Sincronização automática · última: {new Date(ultimaSincronizacao).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </p>
             )}
             {erroSincronizacao && (
               <p style={{ fontSize: 10.5, color: "#E3A45C", margin: "6px 0 0", lineHeight: 1.4 }}>⚠ {erroSincronizacao}</p>
