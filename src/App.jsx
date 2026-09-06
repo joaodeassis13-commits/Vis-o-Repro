@@ -882,6 +882,12 @@ export default function App() {
   // localmente (é assim que ela protege contra perda de dado sem querer).
   const removerFazenda = async (id) => {
     setFazendas((a) => a.filter((f) => f.id !== id));
+    // limpa a referência dessa fazenda da lista de autorizados de TODO mundo — sem isso, a
+    // próxima sincronização tentaria recriar essa autorização (usuario_fazendas), e como a
+    // fazenda já não existe mais, isso quebra por violação de chave estrangeira.
+    setUsers((a) => a.map((u) => (u.fazendasAutorizadas || []).includes(id)
+      ? { ...u, fazendasAutorizadas: u.fazendasAutorizadas.filter((fid) => fid !== id) }
+      : u));
     if (fazendaAtivaId === id) setFazendaAtivaId(null);
     marcaPendencia();
     const r = await excluirRegistro("fazendas", id);
