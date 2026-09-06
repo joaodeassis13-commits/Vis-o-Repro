@@ -324,10 +324,26 @@ $$ language sql stable security definer set search_path = public;
 -- criou a fazenda ao grupo dela logo em seguida (ver addFazenda em App.jsx).
 drop policy if exists "fazendas: leitura/edicao/exclusao do proprio grupo" on fazendas;
 create policy "fazendas: leitura/edicao/exclusao do proprio grupo" on fazendas
-  for select using (fazenda_autorizada(id));
+  for select using (
+    fazenda_autorizada(id)
+    -- sem isso, "INSERT ... ON CONFLICT DO UPDATE" (usado pela sincronização) não consegue
+    -- nem verificar se existe conflito numa fazenda órfã (sem ninguém autorizado ainda) —
+    -- o Postgres exige visibilidade (política de SELECT) da linha pra avaliar o ON CONFLICT,
+    -- mesmo quando não existe conflito de verdade. Só vale pra fazenda SEM dono nenhum ainda;
+    -- uma fazenda que já pertence a outro grupo continua invisível pra este Administrador.
+    or (eh_administrador() and not exists (select 1 from usuario_fazendas uf where uf.fazenda_id = fazendas.id))
+  );
 drop policy if exists "fazendas: atualizacao do proprio grupo" on fazendas;
 create policy "fazendas: atualizacao do proprio grupo" on fazendas
-  for update using (fazenda_autorizada(id));
+  for update using (
+    fazenda_autorizada(id)
+    -- qualquer Administrador também pode atualizar — cobre o caso de "upsert" (INSERT ...
+    -- ON CONFLICT DO UPDATE) usado pela sincronização: o Postgres exige que a política de
+    -- UPDATE passe mesmo quando não existe conflito de verdade (é uma exigência da própria
+    -- forma como "ON CONFLICT DO UPDATE" é avaliado, não depende dos dados). Sem isso, a
+    -- primeira sincronização de uma fazenda nova trava sem conseguir se auto-vincular.
+    or eh_administrador()
+  );
 drop policy if exists "fazendas: exclusao do proprio grupo" on fazendas;
 create policy "fazendas: exclusao do proprio grupo" on fazendas
   for delete using (fazenda_autorizada(id));

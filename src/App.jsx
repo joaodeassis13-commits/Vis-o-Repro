@@ -850,12 +850,12 @@ export default function App() {
 
   const addFazenda = (f, retirosNomes = [], safrasAnos = []) => {
     const fazId = uid("faz");
-    setFazendas((a) => [...a, { ...f, id: fazId }]);
+    setFazendas((a) => [...a, { ...f, id: fazId, criadoEm: new Date().toISOString() }]);
     if (retirosNomes.length > 0) {
-      setRetiros((a) => [...a, ...retirosNomes.map((nome) => ({ id: uid("ret"), fazendaId: fazId, nome }))]);
+      setRetiros((a) => [...a, ...retirosNomes.map((nome) => ({ id: uid("ret"), fazendaId: fazId, nome, criadoEm: new Date().toISOString() }))]);
     }
     if (safrasAnos.length > 0) {
-      setSafras((a) => [...a, ...safrasAnos.map((ano) => ({ id: uid("saf"), fazendaId: fazId, nome: `${ano}/${Number(ano) + 1}` }))]);
+      setSafras((a) => [...a, ...safrasAnos.map((ano) => ({ id: uid("saf"), fazendaId: fazId, nome: `${ano}/${Number(ano) + 1}`, criadoEm: new Date().toISOString() }))]);
     }
     // quem cria a fazenda já entra automaticamente no próprio grupo dela — senão ela
     // desapareceria da visão de quem acabou de criar (cada perfil só vê seu grupo agora).
@@ -863,9 +863,9 @@ export default function App() {
     setFazendaAtivaId(fazId);
     marcaPendencia();
   };
-  const addRetiro = (r) => { setRetiros((a) => [...a, { ...r, id: uid("ret") }]); marcaPendencia(); };
+  const addRetiro = (r) => { setRetiros((a) => [...a, { ...r, id: uid("ret"), criadoEm: new Date().toISOString() }]); marcaPendencia(); };
   const removeRetiro = (id) => { setRetiros((a) => a.filter((r) => r.id !== id)); marcaPendencia(); };
-  const addSafra = (fazendaId, ano) => { setSafras((a) => [...a, { id: uid("saf"), fazendaId, nome: `${ano}/${Number(ano) + 1}` }]); marcaPendencia(); };
+  const addSafra = (fazendaId, ano) => { setSafras((a) => [...a, { id: uid("saf"), fazendaId, nome: `${ano}/${Number(ano) + 1}`, criadoEm: new Date().toISOString() }]); marcaPendencia(); };
   const removeSafra = (id) => { setSafras((a) => a.filter((s) => s.id !== id)); marcaPendencia(); };
 
   // ---------- importação em massa de lotes/animais/manejos históricos (planilha) ----------
@@ -1090,7 +1090,7 @@ export default function App() {
   };
   const addLote = (l) => {
     const id = uid("lot");
-    setLotes((a) => [...a, { ...l, id, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, animais: [] }]);
+    setLotes((a) => [...a, { ...l, id, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, animais: [], criadoEm: new Date().toISOString() }]);
     marcaPendencia();
     return id;
   };
@@ -1158,7 +1158,7 @@ export default function App() {
   const criarSugestaoRessinc = (loteId, brincos, origemManejoId) => {
     setSugestoesRessinc((a) => [...a, {
       id: uid("sug"), loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
-      data: todayISO(), status: "pendente",
+      data: todayISO(), status: "pendente", criadoEm: new Date().toISOString(),
     }]);
     marcaPendencia();
   };
@@ -1183,7 +1183,7 @@ export default function App() {
   const criarSugestaoRepasse = (loteId, brincos, origemManejoId) => {
     setSugestoesRepasse((a) => [...a, {
       id: uid("sug"), loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
-      data: todayISO(), status: "pendente",
+      data: todayISO(), status: "pendente", criadoEm: new Date().toISOString(),
     }]);
     marcaPendencia();
   };
@@ -1210,7 +1210,7 @@ export default function App() {
     if (!nomeLimpo) return;
     const jaExiste = protocolosPadrao.some((p) => p.fazendaId === fazendaAtivaId && p.manejo === manejo && p.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
     if (jaExiste) return;
-    setProtocolosPadrao((a) => [...a, { id: uid("prot"), fazendaId: fazendaAtivaId, manejo, nome: nomeLimpo, ...campos }]);
+    setProtocolosPadrao((a) => [...a, { id: uid("prot"), fazendaId: fazendaAtivaId, manejo, nome: nomeLimpo, ...campos, criadoEm: new Date().toISOString() }]);
     marcaPendencia();
   };
 
@@ -1251,9 +1251,9 @@ export default function App() {
     if (existente) {
       setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, ...camposItem, estoque: i.estoque + quantidade, quantidade, valorUnitario } : i));
     } else {
-      setInsumos((a) => [...a, { ...camposItem, id: insumoId, ...dono, categoria, quantidade, estoque: quantidade, valorUnitario }]);
+      setInsumos((a) => [...a, { ...camposItem, id: insumoId, ...dono, categoria, quantidade, estoque: quantidade, valorUnitario, criadoEm: new Date().toISOString() }]);
     }
-    setMovimentos((a) => [{ id: uid("mov"), tipo: "entrada", insumoId, quantidade, data, obs, valorUnitario, local: dono.local, fazendaId: fazendaAtivaId }, ...a]);
+    setMovimentos((a) => [{ id: uid("mov"), tipo: "entrada", insumoId, quantidade, data, obs, valorUnitario, local: dono.local, fazendaId: fazendaAtivaId, criadoEm: new Date().toISOString() }, ...a]);
     marcaPendencia();
     return insumoId;
   };
@@ -1261,7 +1261,7 @@ export default function App() {
   const registrarSaidaEstoque = (insumoId, quantidade, manejoId, tipoManejo) => {
     const item = insumos.find((i) => i.id === insumoId);
     setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, estoque: Math.max(0, i.estoque - quantidade) } : i));
-    setMovimentos((a) => [{ id: uid("mov"), tipo: "saida", insumoId, quantidade, data: todayISO(), manejoId, tipoManejo, local: item?.local || "fazenda", fazendaId: fazendaAtivaId }, ...a]);
+    setMovimentos((a) => [{ id: uid("mov"), tipo: "saida", insumoId, quantidade, data: todayISO(), manejoId, tipoManejo, local: item?.local || "fazenda", fazendaId: fazendaAtivaId, criadoEm: new Date().toISOString() }, ...a]);
   };
 
   const removerEntradaEstoque = (movimentoId) => {
@@ -1276,7 +1276,7 @@ export default function App() {
     const id = uid("man");
     // respeita uma data escolhida na tela (permite registro retroativo); se nada for
     // enviado, usa a data de hoje como padrão.
-    const manejoCompleto = { ...manejo, id, data: manejo.data || todayISO(), operador: currentUser.nome, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null };
+    const manejoCompleto = { ...manejo, id, data: manejo.data || todayISO(), operador: currentUser.nome, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, criadoEm: new Date().toISOString() };
     setManejos((a) => [manejoCompleto, ...a]);
     marcaPendencia();
     gerarPreAgendamentos(manejoCompleto);
@@ -1340,7 +1340,7 @@ export default function App() {
 
   const addAgendamento = (ag) => {
     const id = uid("ag");
-    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "manual", status: "confirmado" }]);
+    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "manual", status: "confirmado", criadoEm: new Date().toISOString() }]);
     marcaPendencia();
     const tipoInterno = TIPO_AGENDAMENTO_PARA_MANEJO[ag.tipo];
     if (tipoInterno) {
@@ -1359,7 +1359,7 @@ export default function App() {
   // da Agenda (veja gruposDuplicados em AbaAgenda).
   const criarPreAgendamento = (ag) => {
     const id = uid("ag");
-    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente" }]);
+    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString() }]);
     marcaPendencia();
     // a retirada, assim que agendada (mesmo ainda pendente de confirmação), já sugere a inseminação
     if (ag.tipo === "Retirada") {

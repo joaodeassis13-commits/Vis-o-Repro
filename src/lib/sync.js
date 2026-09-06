@@ -58,6 +58,14 @@ const CAMPOS_SO_LOCAIS = {
   usuarios: ["fazendasAutorizadas"],
 };
 
+// coleções cuja tabela exige "criado_em" preenchido (not null) — usado como rede de
+// segurança abaixo, pra nunca travar a sincronização por falta desse campo, seja qual
+// for a coleção ou o motivo dele estar faltando.
+const COLECOES_COM_CRIADO_EM = new Set([
+  "usuarios", "fazendas", "retiros", "safras", "lotes", "insumos", "manejos",
+  "movimentos", "agendamentos", "sugestoesRessinc", "sugestoesRepasse", "protocolosPadrao",
+]);
+
 // ---------- envia (upsert) uma coleção inteira ----------
 async function enviarColecao(colecao, itens) {
   if (!supabaseConfigurado || !itens || itens.length === 0) return { ok: true, enviados: 0 };
@@ -70,9 +78,12 @@ async function enviarColecao(colecao, itens) {
   if (colecao === "usuarios") {
     validos = itens.filter((u) => REGEX_UUID.test(u.id));
     invalidos = itens.filter((u) => !REGEX_UUID.test(u.id));
-    // "criado_em" é obrigatório na tabela; usuários criados antes desse campo existir no app
-    // ficariam sem ele — preenche na hora do envio em vez de bloquear a sincronização inteira.
-    validos = validos.map((u) => (u.criadoEm ? u : { ...u, criadoEm: new Date().toISOString() }));
+  }
+  // "criado_em" é obrigatório (not null) em várias tabelas; um registro sem esse campo
+  // (de qualquer coleção, criado antes de alguma correção, ou por um bug futuro) travaria
+  // o lote inteiro daquela tabela — preenche na hora do envio em vez de bloquear tudo.
+  if (COLECOES_COM_CRIADO_EM.has(colecao)) {
+    validos = validos.map((item) => (item.criadoEm ? item : { ...item, criadoEm: new Date().toISOString() }));
   }
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
