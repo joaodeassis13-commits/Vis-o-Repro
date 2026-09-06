@@ -643,20 +643,30 @@ export default function App() {
   // Se já havia dados salvos de uma sessão anterior (mesmo sem internet), eles
   // substituem os dados de exemplo (seed) assim que terminam de carregar.
   const tentarCarregarBanco = () => {
+    // Com o Supabase configurado, o app trabalha com dados reais — um resultado vazio aqui
+    // (ex.: logo depois de "Limpar dados guardados neste aparelho") precisa ficar REALMENTE
+    // vazio, nunca cair de volta nos dados de demonstração (seed) usados como valor inicial
+    // dos estados — senão essa "fazenda de exemplo" e afins acabam indo parar no Supabase de
+    // verdade na sincronização seguinte. Sem Supabase configurado (modo 100% local/demo), o
+    // comportamento antigo continua: só substitui o seed se já existir algo salvo de verdade.
+    const aplicar = (valor, setter) => {
+      if (supabaseConfigurado) setter(valor || (Array.isArray(valor) ? [] : {}));
+      else if (valor && (Array.isArray(valor) ? valor.length : Object.keys(valor).length)) setter(valor);
+    };
     carregarTudo().then((dados) => {
-      if (dados.usuarios.length) setUsers(dados.usuarios);
-      if (dados.fazendas.length) setFazendas(dados.fazendas);
-      if (dados.retiros.length) setRetiros(dados.retiros);
-      if (dados.safras.length) setSafras(dados.safras);
-      if (dados.lotes.length) setLotes(dados.lotes);
-      if (dados.insumos.length) setInsumos(dados.insumos);
-      if (dados.manejos.length) setManejos(dados.manejos);
-      if (dados.movimentos.length) setMovimentos(dados.movimentos);
-      if (dados.agendamentos.length) setAgendamentos(dados.agendamentos);
-      if (dados.sugestoesRessinc.length) setSugestoesRessinc(dados.sugestoesRessinc);
-      if (dados.sugestoesRepasse?.length) setSugestoesRepasse(dados.sugestoesRepasse);
-      if (dados.protocolosPadrao?.length) setProtocolosPadrao(dados.protocolosPadrao);
-      if (Object.keys(dados.rascunhos).length) setRascunhos(dados.rascunhos);
+      aplicar(dados.usuarios, setUsers);
+      aplicar(dados.fazendas, setFazendas);
+      aplicar(dados.retiros, setRetiros);
+      aplicar(dados.safras, setSafras);
+      aplicar(dados.lotes, setLotes);
+      aplicar(dados.insumos, setInsumos);
+      aplicar(dados.manejos, setManejos);
+      aplicar(dados.movimentos, setMovimentos);
+      aplicar(dados.agendamentos, setAgendamentos);
+      aplicar(dados.sugestoesRessinc, setSugestoesRessinc);
+      aplicar(dados.sugestoesRepasse, setSugestoesRepasse);
+      aplicar(dados.protocolosPadrao, setProtocolosPadrao);
+      aplicar(dados.rascunhos, setRascunhos);
       // só a partir daqui a gravação automática é liberada — é crítico nunca marcar isso como
       // concluído sem ter, de fato, lido os dados com sucesso: as gravações automáticas
       // (useEffect logo abaixo) SEMPRE apagam a tabela antes de regravar, então se isso disparasse
