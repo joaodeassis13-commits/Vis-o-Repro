@@ -1109,11 +1109,21 @@ export default function App() {
     marcaPendencia();
   };
   const toggleAutorizacaoFazenda = (userId, fazendaId) => {
-    setUsers((a) => a.map((u) => u.id === userId
-      ? { ...u, fazendasAutorizadas: (u.fazendasAutorizadas || []).includes(fazendaId)
-          ? u.fazendasAutorizadas.filter((id) => id !== fazendaId)
-          : [...(u.fazendasAutorizadas || []), fazendaId] }
-      : u));
+    setUsers((a) => {
+      // se o próprio usuário ainda não estiver na lista local (pode acontecer logo depois de
+      // "Limpar dados" + login, antes do perfil terminar de recarregar), cria uma entrada
+      // mínima pra ele em vez de silenciosamente não fazer nada — sem isso, a fazenda ficava
+      // "órfã" (sem ninguém autorizado) e desaparecia na sincronização seguinte.
+      if (!a.some((u) => u.id === userId)) {
+        const eu = userId === currentUser?.id ? currentUser : null;
+        return [...a, { id: userId, nome: eu?.nome || "", login: eu?.login || "", perfil: eu?.perfil || "Administrador", email: eu?.email || null, criadoEm: new Date().toISOString(), fazendasAutorizadas: [fazendaId] }];
+      }
+      return a.map((u) => u.id === userId
+        ? { ...u, fazendasAutorizadas: (u.fazendasAutorizadas || []).includes(fazendaId)
+            ? u.fazendasAutorizadas.filter((id) => id !== fazendaId)
+            : [...(u.fazendasAutorizadas || []), fazendaId] }
+        : u);
+    });
     marcaPendencia();
   };
   const addLote = (l) => {
