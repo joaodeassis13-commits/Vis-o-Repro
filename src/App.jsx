@@ -8,7 +8,7 @@ import {
   Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos } from "./lib/db.js";
-import { sincronizar, buscarPerfilProprio } from "./lib/sync.js";
+import { sincronizar, buscarPerfilProprio, excluirRegistro } from "./lib/sync.js";
 import {
   buscarBenchmarkTaxaPrenhezSistema, buscarBenchmarkTaxaFertilidadeSistema,
   buscarBenchmarkConcepcaoPorOrdemSistema, buscarBenchmarkConcepcaoPorCategoriaSistema, buscarBenchmarkFertilidadePorCategoriaSistema,
@@ -866,6 +866,17 @@ export default function App() {
   const addRetiro = (r) => { setRetiros((a) => [...a, { ...r, id: uid("ret"), criadoEm: new Date().toISOString() }]); marcaPendencia(); };
   const removeRetiro = (id) => { setRetiros((a) => a.filter((r) => r.id !== id)); marcaPendencia(); };
   const addSafra = (fazendaId, ano) => { setSafras((a) => [...a, { id: uid("saf"), fazendaId, nome: `${ano}/${Number(ano) + 1}`, criadoEm: new Date().toISOString() }]); marcaPendencia(); };
+  // remove uma fazenda de vez — inclusive no Supabase (não só localmente). Sem isso, a próxima
+  // sincronização traria ela de volta, já que a sincronização sempre preserva o que existe só
+  // localmente (é assim que ela protege contra perda de dado sem querer).
+  const removerFazenda = async (id) => {
+    setFazendas((a) => a.filter((f) => f.id !== id));
+    if (fazendaAtivaId === id) setFazendaAtivaId(null);
+    marcaPendencia();
+    const r = await excluirRegistro("fazendas", id);
+    if (!r.ok) return { ok: false, erro: `Removida deste aparelho, mas não foi possível apagar no Supabase agora (${r.erro}). Tente sincronizar novamente mais tarde.` };
+    return { ok: true };
+  };
   const removeSafra = (id) => { setSafras((a) => a.filter((s) => s.id !== id)); marcaPendencia(); };
 
   // ---------- importação em massa de lotes/animais/manejos históricos (planilha) ----------
@@ -1702,7 +1713,7 @@ export default function App() {
               e ainda não registrado ao trocar de aba. */}
           <div style={{ display: section === "cadastros" && sub === "fazenda" ? "block" : "none" }}>
             <AbaFazenda fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addFazenda={addFazenda} addRetiro={addRetiro} removeRetiro={removeRetiro}
-              addSafra={addSafra} removeSafra={removeSafra} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} />
+              addSafra={addSafra} removeSafra={removeSafra} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} />
           </div>
           <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
             <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} importarLotesHistoricos={importarLotesHistoricos} />
@@ -1788,11 +1799,12 @@ export default function App() {
    CADASTROS
 ========================================================= */
 
-function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, fazendaAtivaId, setFazendaAtivaId }) {
+function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, fazendaAtivaId, setFazendaAtivaId, removerFazenda }) {
   const empty = { nome: "", municipio: "", areaTotal: "", proprietario: "", responsavel: "", telefone: "" };
   const [form, setForm] = useState(empty);
   const [retirosNovos, setRetirosNovos] = useState([]); // nomes ainda não salvos, junto com a fazenda
   const [nomeRetiro, setNomeRetiro] = useState("");
+  const [confirmarExclusaoFazendaId, setConfirmarExclusaoFazendaId] = useState(null);
   const [safrasNovas, setSafrasNovas] = useState([]); // anos de início ainda não salvos, junto com a fazenda
   const [anoSafra, setAnoSafra] = useState("");
   const [fazendaAberta, setFazendaAberta] = useState(null);
@@ -1942,6 +1954,15 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
                           {!ativa && (
                             <BtnGhost onClick={(e) => { e.stopPropagation(); setFazendaAtivaId(f.id); }}>Usar</BtnGhost>
+                          )}
+                          {confirmarExclusaoFazendaId === f.id ? (
+                            <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ fontSize: 11, color: "#A32D2D" }}>Excluir?</span>
+                              <button onClick={async () => { const r = await removerFazenda(f.id); if (!r.ok) alert(r.erro); setConfirmarExclusaoFazendaId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Check size={14} /></button>
+                              <button onClick={() => setConfirmarExclusaoFazendaId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
+                            </span>
+                          ) : (
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmarExclusaoFazendaId(f.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={13} /></button>
                           )}
                           <ChevronRight size={15} color="#9B9686" style={{ transform: aberta ? "rotate(90deg)" : "none" }} />
                         </div>

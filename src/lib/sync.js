@@ -205,6 +205,20 @@ export async function sincronizar(estado) {
   return { ok: erros.length === 0, erros, atualizado, sincronizadoEm: new Date().toISOString() };
 }
 
+// ---------- exclui um registro de verdade no Supabase (não só localmente) ----------
+// Necessário porque a sincronização (mesclarComLocal, acima) sempre preserva o que existe
+// só localmente — se um registro fosse só removido do estado local, sem avisar o servidor,
+// a próxima sincronização traria ele de volta (é exatamente o que protege contra perda de
+// dado sem querer, mas por isso mesmo uma exclusão de verdade precisa ser explícita aqui).
+export async function excluirRegistro(colecao, id) {
+  if (!supabaseConfigurado) return { ok: true }; // nada pra apagar no servidor se não tem Supabase
+  const tabela = TABELAS[colecao];
+  if (!tabela) return { ok: true };
+  const { error } = await supabase.from(tabela).delete().eq("id", id);
+  if (error) return { ok: false, erro: error.message };
+  return { ok: true };
+}
+
 // ---------- busca só a própria linha em "usuarios" ----------
 // Usado logo após o login, para resolver o perfil (nome/perfil/fazendas) em
 // um aparelho novo, que ainda não tem nada em cache local — a política de

@@ -57,14 +57,22 @@ create table if not exists usuario_fazendas (
 create table if not exists retiros (
   id text primary key,
   fazenda_id text not null references fazendas (id) on delete cascade,
-  nome text not null
+  nome text not null,
+  criado_em timestamptz not null default now()
 );
 
 create table if not exists safras (
   id text primary key,
   fazenda_id text not null references fazendas (id) on delete cascade,
-  nome text not null  -- formato "2025/2026"
+  nome text not null,  -- formato "2025/2026"
+  criado_em timestamptz not null default now()
 );
+
+-- garante a coluna mesmo em bancos criados antes dela existir nessas duas tabelas
+-- (todas as outras tabelas do sistema já tinham "criado_em" desde o início; essas duas
+-- ficaram de fora por um descuido, só corrigido agora).
+alter table retiros add column if not exists criado_em timestamptz not null default now();
+alter table safras add column if not exists criado_em timestamptz not null default now();
 
 -- ---------- lote (depende de fazenda, safra, retiro) ----------
 create table if not exists lotes (
@@ -261,6 +269,24 @@ create table if not exists agendamentos (
 -- garante as colunas mesmo em bancos criados antes delas existirem
 alter table agendamentos add column if not exists numero_animais integer;
 alter table agendamentos add column if not exists categoria text;
+
+-- garante "criado_em" em TODAS as tabelas que precisam dele, mesmo nas que foram criadas
+-- há mais tempo (antes dessa coluna existir na definição de "create table" acima) — "create
+-- table if not exists" nunca adiciona coluna nova a uma tabela que já existe, só "alter table"
+-- faz isso. Sem isso, a sincronização trava com "Could not find the criado_em column" em
+-- qualquer uma dessas tabelas que tenha sido criada antes dessa coluna existir.
+alter table fazendas add column if not exists criado_em timestamptz not null default now();
+alter table usuarios add column if not exists criado_em timestamptz not null default now();
+alter table retiros add column if not exists criado_em timestamptz not null default now();
+alter table safras add column if not exists criado_em timestamptz not null default now();
+alter table lotes add column if not exists criado_em timestamptz not null default now();
+alter table insumos add column if not exists criado_em timestamptz not null default now();
+alter table manejos add column if not exists criado_em timestamptz not null default now();
+alter table movimentos add column if not exists criado_em timestamptz not null default now();
+alter table sugestoes_ressinc add column if not exists criado_em timestamptz not null default now();
+alter table sugestoes_repasse add column if not exists criado_em timestamptz not null default now();
+alter table protocolos_padrao add column if not exists criado_em timestamptz not null default now();
+alter table agendamentos add column if not exists criado_em timestamptz not null default now();
 
 -- =====================================================================
 -- RLS (row-level security) — cada usuário só vê as fazendas autorizadas
@@ -837,3 +863,8 @@ returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, 
 $$ language sql stable security definer set search_path = public;
 
 grant execute on function benchmarking_fertilidade_por_categoria_grupo(text, text) to authenticated;
+
+-- avisa a API (PostgREST) que o schema mudou — importante sempre que uma coluna nova é
+-- adicionada (como "criado_em" em retiros/safras acima), pra ela não continuar usando uma
+-- versão em cache das tabelas.
+notify pgrst, 'reload schema';
