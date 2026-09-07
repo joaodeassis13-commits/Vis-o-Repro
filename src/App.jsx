@@ -4818,8 +4818,6 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 ========================================================= */
 
 function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo, registrarSaidaEstoque, manejos, atualizarLote, addAnimalAoLote, atribuirManejosRetroativos, garantirLoteDesconhecidos, criarSugestaoRessinc, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho }) {
-  const [localEstoque, setLocalEstoque] = useState("fazenda");
-
   // só entram lotes que já tiveram Inseminação registrada para a ordem ATUAL do lote e que ainda
   // não tiveram Diagnóstico registrado nessa mesma ordem.
   const lotesComInseminacao = lotes.filter((l) =>
@@ -4844,7 +4842,6 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   const resultadoInputRef = React.useRef(null);
   const [registros, setRegistros] = useState([]);
   useAvisarSaidaComPendencia(registros.length > 0);
-  const [medicamentos, setMedicamentos] = useState([]);
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
 
@@ -4852,13 +4849,12 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   React.useEffect(() => {
     if (chaveRascunho && registros.length === 0 && rascunhos[chaveRascunho]) {
       setRegistros(rascunhos[chaveRascunho].registros || []);
-      setMedicamentos(rascunhos[chaveRascunho].medicamentos || []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveRascunho]);
   const salvarProgresso = () => {
     if (!chaveRascunho || registros.length === 0) { setMsg("Leia ao menos um animal antes de salvar."); return; }
-    salvarRascunho(chaveRascunho, { registros, medicamentos });
+    salvarRascunho(chaveRascunho, { registros });
     setMsg("Progresso salvo. Você pode continuar depois.");
   };
 
@@ -5037,7 +5033,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
       const lote = lotes.find((l) => l.id === idLote);
       const registrosDoLote = registros.filter((r) => r.loteId === idLote);
       if (!lote || registrosDoLote.length === 0) return;
-      const manejoId = registrarManejo({ tipo: "diagnostico", loteId: lote.id, ordem: lote.ordem || ordemComum, medicamentos, localEstoque, animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo, destinoVazias });
+      const manejoId = registrarManejo({ tipo: "diagnostico", loteId: lote.id, ordem: lote.ordem || ordemComum, medicamentos: [], localEstoque: null, animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo, destinoVazias });
       manejoIds.push(manejoId);
       // animais Vazia geram uma sugestão de Ressinc OU de Repasse (nunca as duas), conforme o
       // "Destino para vazias" escolhido — "Descarte" não gera nenhuma sugestão.
@@ -5047,9 +5043,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
         else if (destinoVazias === "Repasse") criarSugestaoRepasse(lote.id, vaziaBrincos, manejoId);
       }
     });
-    if (manejoIds.length > 0) medicamentos.forEach((m) => registrarSaidaEstoque(m.medicamentoId, m.dose, manejoIds[0], "diagnostico"));
 
-    setRegistros([]); setMedicamentos([]); setDataManejo(todayISO()); setMsg("Diagnóstico registrado.");
+    setRegistros([]); setDataManejo(todayISO()); setMsg("Diagnóstico registrado.");
     if (chaveRascunho) limparRascunho(chaveRascunho);
   };
 
@@ -5102,6 +5097,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   <option value="Descarte">Descarte</option>
                 </select>
               </Field>
+            </div>
+            <div className="grid-manejo" style={{ alignItems: "end", marginTop: 14 }}>
               <div className="campo-leitura-linha-cheia-mobile">
                 <Field label="Leitura do animal (obrigatória)">
                   <div style={{ display: "flex", gap: 8 }}>
@@ -5112,7 +5109,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   </div>
                 </Field>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
+              <div className="campo-leitura-linha-cheia-mobile" style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Field label="Resultado">
                     <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
@@ -5120,15 +5117,20 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (resolverResultado(resultadoInput) === "Prenha") tempoGestacaoInputRef.current?.focus(); else adicionar(); } }} />
                   </Field>
                 </div>
-                {resultado !== "Prenha" && <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>}
+                {resultado === "Prenha" ? (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Field label="Tempo de gestação (dias)">
+                      <input ref={tempoGestacaoInputRef} style={inputStyle} type="number" value={tempoGestacaoInput}
+                        onChange={(e) => { limparMsgSeSucesso(); setTempoGestacaoInput(e.target.value); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
+                    </Field>
+                  </div>
+                ) : (
+                  <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>
+                )}
               </div>
               {resultado === "Prenha" && (
-                <div style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
-                  <Field label="Tempo de gestação (dias)">
-                    <input ref={tempoGestacaoInputRef} style={inputStyle} type="number" value={tempoGestacaoInput}
-                      onChange={(e) => { limparMsgSeSucesso(); setTempoGestacaoInput(e.target.value); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
-                  </Field>
+                <div className="campo-leitura-linha-cheia-mobile" style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Field label="Origem da prenhez">
                       <input style={{ ...inputStyle, background: "#F0F0F0", color: origemPrenhez === "Repasse" ? "#166336" : "#6B685E", fontWeight: 600 }} value={origemPrenhez || "—"} readOnly />
@@ -5204,10 +5206,6 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 </table>
               </div>
             )}
-
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8, marginTop: 6 }}>Local de estoque (medicamentos)</div>
-            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
-            <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
             {jaRegistradoNestaOrdem && (
               <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 12 }}>
@@ -5357,7 +5355,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
     registrarManejo({
       tipo: "repasse", loteId, loteNome: loteAtual?.nome || "", categoria: loteAtual?.categoria || null,
       retiroId: loteAtual?.retiroId || null, numeroAnimais: numBR(numeroAnimais), data: dataInicio,
-      dataInicio, dataFim, detalhes: [],
+      dataInicio, dataFim, detalhes: [], animaisLidos: [],
     });
     if (sugestaoConfirmandoId) removerSugestaoRepasse(sugestaoConfirmandoId);
     setSugestaoConfirmandoId(null);
@@ -5558,6 +5556,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
         dataISO: detalheInsem && insem ? insem.data : null,
         dg: detalheDiag?.resultado || "—",
         touro: semenInsumo?.touro || null,
+        origemPrenhez: detalheDiag?.origemPrenhez || null,
       };
     });
 
@@ -5566,10 +5565,11 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
     const hoje = todayISO();
     const tempoCalculado = ordemPrenha?.dataISO ? diasEntre(ordemPrenha.dataISO, hoje) : null;
     const touroDaPrenhez = ordemPrenha?.touro || null;
+    const origemDaPrenhez = ordemPrenha?.origemPrenhez || null;
 
     setConsultaAtual({
       brinco: b, categoria: lote.categoria || "—", loteNome: lote.nome, retiroNome: nomeRetiro(lote.retiroId), porOrdem,
-      tempoCalculado, touroDaPrenhez,
+      tempoCalculado, touroDaPrenhez, origemDaPrenhez,
     });
     setMsg("");
     dgFinalInputRef.current?.focus();
@@ -5650,6 +5650,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   ))}
                   <div><strong>Tempo de gestação calculado:</strong> {consultaAtual.tempoCalculado != null ? `${consultaAtual.tempoCalculado} dia(s)` : "—"}</div>
                   <div><strong>Touro da prenhez:</strong> {consultaAtual.touroDaPrenhez || "—"}</div>
+                  <div><strong>Origem da prenhez:</strong> <span style={{ fontWeight: consultaAtual.origemDaPrenhez === "Repasse" ? 700 : 400, color: consultaAtual.origemDaPrenhez === "Repasse" ? "#166336" : "#4A473E" }}>{consultaAtual.origemDaPrenhez || "—"}</span></div>
                 </div>
               </div>
             )}

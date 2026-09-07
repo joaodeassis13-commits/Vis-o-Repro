@@ -101,6 +101,9 @@ async function enviarColecao(colecao, itens) {
     // junto de outros manejos que TÊM detalhes, o lote inteiro falhava (a linha sem o campo
     // era gravada como null, violando a coluna). Preenche com lista vazia por padrão.
     validos = validos.map((item) => (item.detalhes ? item : { ...item, detalhes: [] }));
+    // mesmo problema com "animaisLidos" — o Repasse (registro do período, sem leitura
+    // individual) nunca preenchia esse campo, e ele também é obrigatório na tabela.
+    validos = validos.map((item) => (item.animaisLidos ? item : { ...item, animaisLidos: [] }));
   }
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
