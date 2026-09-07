@@ -104,6 +104,9 @@ async function enviarColecao(colecao, itens) {
     // mesmo problema com "animaisLidos" — o Repasse (registro do período, sem leitura
     // individual) nunca preenchia esse campo, e ele também é obrigatório na tabela.
     validos = validos.map((item) => (item.animaisLidos ? item : { ...item, animaisLidos: [] }));
+    // e também "medicamentos" — o mesmo Repasse (e qualquer manejo sem essa etapa) pode nunca
+    // ter definido esse campo, que também é obrigatório na tabela.
+    validos = validos.map((item) => (item.medicamentos ? item : { ...item, medicamentos: [] }));
   }
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`

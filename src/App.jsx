@@ -5355,7 +5355,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
     registrarManejo({
       tipo: "repasse", loteId, loteNome: loteAtual?.nome || "", categoria: loteAtual?.categoria || null,
       retiroId: loteAtual?.retiroId || null, numeroAnimais: numBR(numeroAnimais), data: dataInicio,
-      dataInicio, dataFim, detalhes: [], animaisLidos: [],
+      dataInicio, dataFim, detalhes: [], animaisLidos: [], medicamentos: [],
     });
     if (sugestaoConfirmandoId) removerSugestaoRepasse(sugestaoConfirmandoId);
     setSugestaoConfirmandoId(null);
