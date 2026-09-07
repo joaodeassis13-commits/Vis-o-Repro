@@ -15,7 +15,7 @@ import {
   buscarBenchmarkConcepcaoPorOrdemSistema, buscarBenchmarkConcepcaoPorCategoriaSistema, buscarBenchmarkFertilidadePorCategoriaSistema,
 } from "./lib/benchmarking.js";
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
-import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario } from "./lib/auth.js";
+import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario, pedirRedefinicaoSenha, definirNovaSenha } from "./lib/auth.js";
 import logoImg from "./assets/logo.png";
 import logoBannerImg from "./assets/logo-banner.png";
 import logoBannerLoginImg from "./assets/logo-banner-login.png";
@@ -536,7 +536,7 @@ function CampoMedicamentos({ insumos, local, selecionados, setSelecionados }) {
             return (
               <span key={s.medicamentoId} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                 {m?.produtoComercial} ({s.dose} {m?.unidadeEmbalagem})
-                <button onClick={() => remover(s.medicamentoId)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
+                <button onClick={() => window.confirm(`Remover "${m?.produtoComercial}" desta lista?`) && remover(s.medicamentoId)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
               </span>
             );
           })}
@@ -550,6 +550,53 @@ function EmptyState({ text }) {
   return (
     <div style={{ padding: "26px 10px", textAlign: "center", color: "#9B9686", fontSize: 13.5, border: "1px dashed #DDD6C3", borderRadius: 10 }}>
       {text}
+    </div>
+  );
+}
+
+/* =========================================================
+   DEFINIR NOVA SENHA — depois de clicar no link recebido por e-mail
+   ("Esqueci minha senha")
+========================================================= */
+
+function DefinirNovaSenha({ onDefinir, onConcluido }) {
+  const [senha, setSenha] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  const salvar = async () => {
+    if (senha.length < 6) { setErro("A senha precisa ter pelo menos 6 caracteres."); return; }
+    if (senha !== confirmar) { setErro("As duas senhas digitadas são diferentes."); return; }
+    setErro(""); setEnviando(true);
+    const r = await onDefinir(senha);
+    setEnviando(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setSucesso(true);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F7F7F7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
+      <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20, color: "#232520", marginBottom: 6, textAlign: "center" }}>Definir nova senha</div>
+        {sucesso ? (
+          <>
+            <p style={{ fontSize: 13, color: "#166336", textAlign: "center", margin: "18px 0" }}>Senha atualizada com sucesso.</p>
+            <BtnPrimary onClick={onConcluido} style={{ width: "100%", justifyContent: "center" }}>Ir para o login</BtnPrimary>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: "#6B685E", textAlign: "center", marginBottom: 20 }}>Escolha a nova senha da sua conta.</p>
+            <Field label="Nova senha"><input style={inputStyle} type="password" value={senha} onChange={(e) => { setErro(""); setSenha(e.target.value); }} placeholder="Mínimo de 6 caracteres" /></Field>
+            <Field label="Confirmar nova senha"><input style={inputStyle} type="password" value={confirmar} onChange={(e) => { setErro(""); setConfirmar(e.target.value); }} onKeyDown={(e) => e.key === "Enter" && salvar()} /></Field>
+            {erro && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 4 }}>{erro}</p>}
+            <BtnPrimary onClick={salvar} disabled={enviando} style={{ width: "100%", justifyContent: "center", marginTop: 14 }}>
+              {enviando ? "Salvando…" : "Salvar nova senha"}
+            </BtnPrimary>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -611,6 +658,19 @@ function Login({ users, onLoginLocal, onEntrarReal, avisoCarregamento }) {
   // modo de teste (sem Supabase configurado): seleciona um usuário local, qualquer senha
   const [selected, setSelected] = useState(users[0]?.id || "");
 
+  const [mostrarEsqueciSenha, setMostrarEsqueciSenha] = useState(false);
+  const [emailRecuperacao, setEmailRecuperacao] = useState("");
+  const [msgRecuperacao, setMsgRecuperacao] = useState("");
+  const [enviandoRecuperacao, setEnviandoRecuperacao] = useState(false);
+
+  const pedirRecuperacao = async () => {
+    if (!emailRecuperacao.trim()) { setMsgRecuperacao("Informe o e-mail da conta."); return; }
+    setMsgRecuperacao(""); setEnviandoRecuperacao(true);
+    const r = await pedirRedefinicaoSenha(emailRecuperacao);
+    setEnviandoRecuperacao(false);
+    setMsgRecuperacao(r.ok ? "Se esse e-mail estiver cadastrado, você vai receber um link pra redefinir a senha." : r.erro);
+  };
+
   const doLoginReal = async () => {
     if (!email.trim() || !senha) { setErro("Informe e-mail e senha."); return; }
     setErro(""); setCarregando(true);
@@ -656,6 +716,25 @@ function Login({ users, onLoginLocal, onEntrarReal, avisoCarregamento }) {
             <BtnPrimary onClick={doLoginReal} disabled={carregando} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>
               {carregando ? "Entrando…" : "Entrar"}
             </BtnPrimary>
+            {mostrarEsqueciSenha ? (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #EEEEEE" }}>
+                <Field label="E-mail da conta">
+                  <input type="email" placeholder="seu.email@fazenda.com" style={inputStyle} value={emailRecuperacao}
+                    onChange={(e) => { setEmailRecuperacao(e.target.value); setMsgRecuperacao(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && pedirRecuperacao()} />
+                </Field>
+                {msgRecuperacao && <p style={{ fontSize: 12, color: msgRecuperacao.includes("receber") ? "#166336" : "#A32D2D", margin: "0 0 10px" }}>{msgRecuperacao}</p>}
+                <div style={{ display: "flex", gap: 10 }}>
+                  <BtnPrimary onClick={pedirRecuperacao} disabled={enviandoRecuperacao}>{enviandoRecuperacao ? "Enviando…" : "Enviar link"}</BtnPrimary>
+                  <BtnGhost onClick={() => { setMostrarEsqueciSenha(false); setMsgRecuperacao(""); }}>Cancelar</BtnGhost>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setMostrarEsqueciSenha(true); setEmailRecuperacao(email); }}
+                style={{ background: "none", border: "none", color: "#166336", cursor: "pointer", fontSize: 12.5, marginTop: 12, textDecoration: "underline", padding: 0, display: "block", textAlign: "center", width: "100%" }}>
+                Esqueci minha senha
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -792,6 +871,7 @@ export default function App() {
 
   const [recuperacaoPinDisponivel, setRecuperacaoPinDisponivel] = useState(null); // userId, se der pra oferecer recuperação por PIN
   const [avisoSessaoPerdida, setAvisoSessaoPerdida] = useState(false); // sessão caiu sozinha (não foi "Sair"), mas há leitura não salva — espera a pessoa salvar antes de trocar de tela
+  const [modoRedefinirSenha, setModoRedefinirSenha] = useState(false); // veio de um clique no link de "Esqueci minha senha"
 
   React.useEffect(() => {
     if (!supabaseConfigurado) return;
@@ -809,7 +889,11 @@ export default function App() {
       }
       setSessaoAuthCarregada(true);
     });
-    const cancelarEscuta = escutarMudancaAuth(async (sessao) => {
+    const cancelarEscuta = escutarMudancaAuth(async (sessao, evento) => {
+      // clicou no link do e-mail de "Esqueci minha senha" — o Supabase autentica
+      // temporariamente só pra permitir essa ação; mostra a tela de definir senha nova,
+      // sem entrar direto no app com essa sessão provisória.
+      if (evento === "PASSWORD_RECOVERY") { setModoRedefinirSenha(true); return; }
       if (!sessao?.user) {
         // a sessão caiu sozinha (expirou, foi invalidada, etc.) — SEM passar pelo botão "Sair",
         // que é onde normalmente avisamos sobre leitura não salva. Se houver alguma agora, não
@@ -1797,6 +1881,7 @@ export default function App() {
   // "podeGravar", ver tentarCarregarBanco) até uma nova tentativa funcionar, pra nunca arriscar
   // sobrescrever dados reais que só não puderam ser lidos ainda. Um aviso não-bloqueante aparece
   // na tela de login em vez de travar o app inteiro.
+  if (modoRedefinirSenha) return <DefinirNovaSenha onDefinir={definirNovaSenha} onConcluido={() => setModoRedefinirSenha(false)} />;
   if (!sessaoAuthCarregada) return null; // evita piscar a tela de login antes de checar sessão salva
   if (!currentUser && recuperacaoPinDisponivel) return <RecuperarComPin onEntrar={entrarComPinLocal} />;
   if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} avisoCarregamento={erroCarregamentoBanco ? { onTentar: tentarCarregarBanco } : null} />;
@@ -1867,6 +1952,13 @@ export default function App() {
            largura como mínimo do grid, ignorando o minmax() acima — é por isso que os campos
            simples ficavam sozinhos numa linha inteira, um por vez, no celular. */
         .grid-manejo > * { min-width: 0; }
+        /* "Leitura do animal" (Diagnóstico de Inseminação/Repasse): linha inteira só no celular
+           (onde precisa de espaço pra caber leitura + botão de câmera confortavelmente); no
+           computador segue o mesmo tamanho dos outros campos do grid, na sequência normal. */
+        .campo-leitura-linha-cheia-mobile { grid-column: 1 / -1; }
+        @media (min-width: 861px) {
+          .campo-leitura-linha-cheia-mobile { grid-column: auto; }
+        }
         @media (max-width: 860px) {
           th { font-size: 10.5px; padding: 7px 8px; }
           td { padding: 8px 8px; font-size: 13px; }
@@ -2123,7 +2215,7 @@ export default function App() {
           <div style={{ display: section === "manejo" && sub === "inseminacao" ? "block" : "none" }}>
             <AbaInseminacao fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} registrarManejo={registrarManejo}
               registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos} addAnimalAoLote={addAnimalAoLote} atribuirManejosRetroativos={atribuirManejosRetroativos}
-              atribuirManejosRetroativosPorOrdem={atribuirManejosRetroativosPorOrdem} garantirLoteDesconhecidos={garantirLoteDesconhecidos}
+              atribuirManejosRetroativosPorOrdem={atribuirManejosRetroativosPorOrdem} garantirLoteDesconhecidos={garantirLoteDesconhecidos} criarSugestaoRepasse={criarSugestaoRepasse}
               atualizarManejo={atualizarManejo} removerManejo={removerManejo}
               rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} currentUser={currentUser} />
           </div>
@@ -2263,7 +2355,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
               {retirosNovos.map((nome, i) => (
                 <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                   <Building2 size={12} /> {nome}
-                  <button onClick={() => removerRetiroNovo(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
+                  <button onClick={() => window.confirm("Remover este retiro da lista?") && removerRetiroNovo(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                 </span>
               ))}
             </div>
@@ -2284,7 +2376,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
               {safrasNovas.map((ano, i) => (
                 <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                   <Calendar size={12} /> {ano}/{Number(ano) + 1}
-                  <button onClick={() => removerSafraNova(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
+                  <button onClick={() => window.confirm("Remover esta safra da lista?") && removerSafraNova(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                 </span>
               ))}
             </div>
@@ -2370,7 +2462,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                               {rets.map((r) => (
                                 <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
                                   <Building2 size={12} /> {r.nome}
-                                  <button onClick={() => removeRetiro(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
+                                  <button onClick={() => window.confirm(`Excluir o retiro "${r.nome}"?`) && removeRetiro(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                                 </span>
                               ))}
                             </div>
@@ -2396,7 +2488,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                                     style={{ background: "none", border: "none", cursor: "pointer", color: s.lancamentosDesabilitados ? "#A32D2D" : "#166336", display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 600 }}>
                                     {s.lancamentosDesabilitados ? <><Lock size={12} /> Desabilitada</> : <><LockOpen size={12} /> Habilitada</>}
                                   </button>
-                                  <button onClick={() => removeSafra(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
+                                  <button onClick={() => window.confirm(`Excluir a safra "${s.nome}"?`) && removeSafra(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex" }}><X size={12} /></button>
                                 </span>
                               ))}
                             </div>
@@ -3405,7 +3497,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           <td>{a.ecc}</td>
                           <td>{a.peso ? `${a.peso} kg` : "—"}</td>
                           <td>{lotes.find((l) => (l.animais || []).includes(a.brinco))?.nome || "—"}</td>
-                          <td><button onClick={() => removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={13} /></button></td>
+                          <td><button onClick={() => window.confirm(`Remover o animal ${a.brinco} desta leitura?`) && removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={13} /></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -4066,7 +4158,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                           <td>{a.ecc}</td>
                           <td>{a.peso ? `${a.peso} kg` : "—"}</td>
                           <td>{lotes.find((l) => (l.animais || []).includes(a.brinco))?.nome || "—"}</td>
-                          <td><button onClick={() => removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={13} /></button></td>
+                          <td><button onClick={() => window.confirm(`Remover o animal ${a.brinco} desta leitura?`) && removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={13} /></button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -4165,7 +4257,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
    INSEMINAÇÃO — leitura obrigatória, touro por animal
 ========================================================= */
 
-function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addAnimalAoLote, atribuirManejosRetroativos, atribuirManejosRetroativosPorOrdem, garantirLoteDesconhecidos, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho, currentUser }) {
+function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addAnimalAoLote, atribuirManejosRetroativos, atribuirManejosRetroativosPorOrdem, garantirLoteDesconhecidos, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho, currentUser }) {
   const [localEstoque, setLocalEstoque] = useState("fazenda");
   const semensTodos = insumos.filter((i) => i.categoria === "Sêmen");
   const semens = semensTodos.filter((i) => i.local === localEstoque);
@@ -4182,6 +4274,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const [lotesSelecionados, setLotesSelecionados] = useState(lotesComRetirada[0] ? [lotesComRetirada[0].id] : []);
   const [msgLote, setMsgLote] = useState("");
   const [dataManejo, setDataManejo] = useState(todayISO());
+  const [repasseIntegrado, setRepasseIntegrado] = useState("Não");
   const [touro, setTouro] = useState(touros[0] || "");
   const [semenId, setSemenId] = useState("");
   const [inseminador, setInseminador] = useState(currentUser?.nome || "");
@@ -4407,6 +4500,10 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
         medicamentos, localEstoque, animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo, inseminador: inseminador.trim() || currentUser?.nome || null,
       });
       manejoIds.push(manejoId);
+      // "Repasse integrado" pula a etapa do Diagnóstico de Inseminação — o lote já entra
+      // direto como sugestão de Repasse, usando os mesmos animais que acabaram de ser
+      // inseminados aqui.
+      if (repasseIntegrado === "Sim") criarSugestaoRepasse(lote.id, registrosDoLote.map((r) => r.brinco), manejoId);
       const porSemen = {};
       registrosDoLote.forEach((r) => { porSemen[r.semenId] = (porSemen[r.semenId] || 0) + 1; });
       Object.entries(porSemen).forEach(([sid, qtd]) => registrarSaidaEstoque(sid, qtd, manejoId, "inseminacao"));
@@ -4425,7 +4522,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       brincosLidos.forEach((b) => addAnimalAoLote(alvoId, b));
       atribuirManejosRetroativos(alvoId, brincosLidos);
     }
-    setRegistros([]); setMedicamentos([]); setDataManejo(todayISO()); setInseminador(currentUser?.nome || ""); setMsg("Inseminação registrada.");
+    setRegistros([]); setMedicamentos([]); setDataManejo(todayISO()); setRepasseIntegrado("Não"); setInseminador(currentUser?.nome || ""); setMsg("Inseminação registrada.");
     if (chaveRascunho) limparRascunho(chaveRascunho);
   };
 
@@ -4486,6 +4583,12 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
                 </Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => setDataManejo(e.target.value)} /></Field>
+                <Field label="Repasse integrado">
+                  <select style={inputStyle} value={repasseIntegrado} onChange={(e) => setRepasseIntegrado(e.target.value)}>
+                    <option value="Não">Não</option>
+                    <option value="Sim">Sim</option>
+                  </select>
+                </Field>
                 <Field label="Retiro / Categoria por lote">
                   <div style={{ fontSize: 12.5, color: "#4A473E", paddingTop: 8 }}>
                     {lotesSelecionadosObjs.map((l) => `${l.nome}: ${nomeRetiro(l.retiroId)} — ${l.categoria || "—"}`).join(" · ")}
@@ -4634,7 +4737,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         <td>{r.observacoes || "—"}</td>
                         <td>{r.gnrhId ? `${nomeInsumo(r.gnrhId)} (${r.doseGnrh} mL)` : "—"}</td>
                         <td>{r.notaAtribuicao || "—"}</td>
-                        <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                        <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -4972,7 +5075,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   <option value="Descarte">Descarte</option>
                 </select>
               </Field>
-              <div style={{ gridColumn: "1 / -1" }}>
+              <div className="campo-leitura-linha-cheia-mobile">
                 <Field label="Leitura do animal (obrigatória)">
                   <div style={{ display: "flex", gap: 8 }}>
                     <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
@@ -5050,7 +5153,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                         </td>
                         <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
                         <td>{r.observacao || "—"}</td>
-                        <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                        <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -5308,7 +5411,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
               })}
             </div>
             <div className="grid-manejo" style={{ alignItems: "end" }}>
-              <div style={{ gridColumn: "1 / -1" }}>
+              <div className="campo-leitura-linha-cheia-mobile">
                 <Field label="Identificação (obrigatória)">
                   <div style={{ display: "flex", gap: 8 }}>
                     <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
@@ -5380,7 +5483,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                       <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
                       <td style={{ color: r.resultado === "Prenha" ? "#166336" : "#166336", fontWeight: 600 }}>{r.resultado}</td>
                       <td>{r.tempoGestacaoInformado != null ? `${r.tempoGestacaoInformado} dia(s)` : "—"}</td>
-                      <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                      <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -5741,7 +5844,6 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   <input ref={brincoInputRef} style={inputStyle} placeholder="Ler brinco / QR e Enter" value={brinco}
                     onChange={(e) => { if (msg) setMsg(""); setBrinco(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lerAnimal(); } }} />
-                  <BtnPrimary onClick={lerAnimal}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
@@ -5750,12 +5852,17 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   onChange={(e) => setDgFinalInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); tempoInformadoInputRef.current?.focus(); } }} />
               </Field>
-              <Field label="Tempo de gestação informado">
-                <input ref={tempoInformadoInputRef} style={inputStyle} type="number" value={tempoInformadoInput} disabled={!consultaAtual}
-                  placeholder={consultaAtual?.tempoCalculado != null ? String(consultaAtual.tempoCalculado) : "—"}
-                  onChange={(e) => setTempoInformadoInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); registrar(); } }} />
-              </Field>
+              <div style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Field label="Tempo de gestação informado">
+                    <input ref={tempoInformadoInputRef} style={inputStyle} type="number" value={tempoInformadoInput} disabled={!consultaAtual}
+                      placeholder={consultaAtual?.tempoCalculado != null ? String(consultaAtual.tempoCalculado) : "—"}
+                      onChange={(e) => setTempoInformadoInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); registrar(); } }} />
+                  </Field>
+                </div>
+                <BtnPrimary onClick={registrar} disabled={!consultaAtual} style={{ marginBottom: 14, flexShrink: 0 }}>Registrar</BtnPrimary>
+              </div>
             </div>
 
             {consultaAtual && (
@@ -5782,7 +5889,6 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
 
             {msg && <p style={{ fontSize: 12.5, color: msg.includes("salvo") ? "#166336" : "#A32D2D", marginTop: 10 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              {consultaAtual && <BtnPrimary onClick={registrar}>Registrar</BtnPrimary>}
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               {registros.length > 0 && <BtnGhost danger onClick={limparTudo}>Limpar consulta</BtnGhost>}
             </div>
@@ -5831,7 +5937,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                       <td>{r.touroDaPrenhez || "—"}</td>
                       <td>{r.tempoInformado != null ? `${r.tempoInformado} dia(s)` : "—"}</td>
                       <td style={{ fontWeight: r.origem !== "—" ? 600 : 400, color: r.origem === "Repasse" ? "#166336" : r.origem === "Inseminação" ? "#166336" : "#6B685E" }}>{r.origem}</td>
-                      <td><button onClick={() => remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                      <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -6053,7 +6159,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                     <td>{m.valorUnitario != null ? `R$ ${(m.valorUnitario * m.quantidade).toFixed(2)}` : "—"}</td>
                     <td>{fmtDate(m.data)}</td>
                     <td style={{ textAlign: "right" }}>
-                      <button onClick={() => removerEntradaEstoque(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
+                      <button onClick={() => window.confirm("Excluir esta entrada de estoque?") && removerEntradaEstoque(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
                         <Trash2 size={13} /> Excluir
                       </button>
                     </td>
@@ -6483,7 +6589,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
               <BtnGhost danger onClick={() => descartarAgendamento(a.id)}><XCircle size={13} /></BtnGhost>
             </>
           ) : (
-            <button onClick={() => removerAgendamento(a.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button>
+            <button onClick={() => window.confirm("Excluir este agendamento?") && removerAgendamento(a.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button>
           )}
         </div>
       </div>

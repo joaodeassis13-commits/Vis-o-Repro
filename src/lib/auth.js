@@ -32,6 +32,34 @@ export async function sair() {
   await supabase.auth.signOut();
 }
 
+// envia um e-mail com um link pra redefinir a senha — precisa de internet, já que é o
+// Supabase quem manda o e-mail e confere a nova senha depois.
+export async function pedirRedefinicaoSenha(email) {
+  if (!supabaseConfigurado) return { ok: false, erro: "Supabase não configurado — recuperação de senha indisponível neste ambiente." };
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin,
+    });
+    if (error) return { ok: false, erro: traduzErro(error.message) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: "Não foi possível conectar. Verifique sua internet e tente novamente." };
+  }
+}
+
+// define a nova senha — só funciona dentro da sessão temporária que o link do e-mail cria
+// (o Supabase já deixa o usuário "autenticado" nesse contexto específico, só pra essa ação).
+export async function definirNovaSenha(novaSenha) {
+  if (!supabaseConfigurado) return { ok: false, erro: "Supabase não configurado." };
+  try {
+    const { error } = await supabase.auth.updateUser({ password: novaSenha });
+    if (error) return { ok: false, erro: traduzErro(error.message) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: "Não foi possível conectar. Verifique sua internet e tente novamente." };
+  }
+}
+
 export async function obterSessao() {
   if (!supabaseConfigurado) return null;
   try {
@@ -49,7 +77,10 @@ export async function obterSessao() {
 // token renovado, sessão expirada) — inclusive se acontecer em outra aba.
 export function escutarMudancaAuth(callback) {
   if (!supabaseConfigurado) return () => {};
-  const { data } = supabase.auth.onAuthStateChange((_evento, sessao) => callback(sessao));
+  // passa o "evento" também (não só a sessão) — precisa disso pra distinguir um login normal
+  // de um clique no link de "Redefinir senha" (evento "PASSWORD_RECOVERY"), que também loga a
+  // pessoa automaticamente, mas exige mostrar a tela de escolher a nova senha em vez do app.
+  const { data } = supabase.auth.onAuthStateChange((evento, sessao) => callback(sessao, evento));
   return () => data.subscription.unsubscribe();
 }
 
