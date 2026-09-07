@@ -5,7 +5,7 @@ import {
   ClipboardList, Stethoscope, Warehouse, ArrowDownToLine, ArrowUpFromLine,
   LogOut, Plus, Trash2, ScanLine, Wifi, WifiOff, Download, ChevronRight,
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
-  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload, Lock, LockOpen
+  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload, Lock, LockOpen, ChevronUp, ChevronDown
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos, apagarTudoLocal, lerMeta, gravarMeta } from "./lib/db.js";
 import { sincronizar, buscarPerfilProprio, excluirRegistro } from "./lib/sync.js";
@@ -1565,6 +1565,30 @@ export default function App() {
     }
   };
 
+  // move um agendamento pra cima/baixo dentro do MESMO dia — só muda a ordem de exibição,
+  // sem tocar em nenhum outro campo (por isso é uma função separada de atualizarAgendamento,
+  // que apaga os pré-agendamentos derivados sempre que qualquer campo muda; aqui isso nunca
+  // deveria acontecer só por reorganizar a sequência na tela).
+  const reordenarAgendamentoNoDia = (id, direcao) => {
+    setAgendamentos((lista) => {
+      const alvo = lista.find((a) => a.id === id);
+      if (!alvo) return lista;
+      const doMesmoDia = lista
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => a.data === alvo.data)
+        .sort((x, y) => (x.a.ordemExibicao ?? x.i) - (y.a.ordemExibicao ?? y.i));
+      const posAtual = doMesmoDia.findIndex(({ a }) => a.id === id);
+      const posVizinho = posAtual + (direcao === "cima" ? -1 : 1);
+      if (posVizinho < 0 || posVizinho >= doMesmoDia.length) return lista; // já é o primeiro/último do dia
+      const idsNaNovaOrdem = doMesmoDia.map(({ a }) => a.id);
+      [idsNaNovaOrdem[posAtual], idsNaNovaOrdem[posVizinho]] = [idsNaNovaOrdem[posVizinho], idsNaNovaOrdem[posAtual]];
+      const novaOrdemPorId = {};
+      idsNaNovaOrdem.forEach((idDoItem, indice) => { novaOrdemPorId[idDoItem] = indice; });
+      return lista.map((a) => novaOrdemPorId[a.id] !== undefined ? { ...a, ordemExibicao: novaOrdemPorId[a.id] } : a);
+    });
+    marcaPendencia();
+  };
+
   /* ---------- navegação ---------- */
 
   const NAV = currentUser?.perfil === "Supervisor"
@@ -1966,7 +1990,8 @@ export default function App() {
           <div style={{ display: section === "agenda" ? "block" : "none" }}>
             <AbaAgenda fazendaAtiva={fazendaAtiva} fazendas={fazendasVisiveis} lotes={lotesAtivos} retiros={retirosAtivos} agendamentos={agendamentosVisiveis}
               addAgendamento={addAgendamento} confirmarAgendamento={confirmarAgendamento}
-              descartarAgendamento={descartarAgendamento} removerAgendamento={removerAgendamento} atualizarAgendamento={atualizarAgendamento} />
+              descartarAgendamento={descartarAgendamento} removerAgendamento={removerAgendamento} atualizarAgendamento={atualizarAgendamento}
+              reordenarAgendamentoNoDia={reordenarAgendamentoNoDia} />
           </div>
 
           <div style={{ display: section === "usuarios" ? "block" : "none" }}>
@@ -4773,26 +4798,33 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
               </Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Leitura do animal (obrigatória)">
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
+                      onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
+                    <BtnPrimary onClick={() => { if (brinco.trim()) conferirAoLer(); resultadoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0}><ScanLine size={15} /></BtnPrimary>
+                    <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
+                  </div>
+                </Field>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Field label="Resultado">
+                    <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
+                      onChange={(e) => { limparMsgSeSucesso(); const v = e.target.value; setResultadoInput(v); setResultado(resolverResultado(v)); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
+                  </Field>
+                </div>
+                <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>
+              </div>
               <Field label="Destino para vazias">
                 <select style={inputStyle} value={destinoVazias} onChange={(e) => { limparMsgSeSucesso(); setDestinoVazias(e.target.value); }}>
                   <option value="Ressinc">Ressinc</option>
                   <option value="Repasse">Repasse</option>
                   <option value="Descarte">Descarte</option>
                 </select>
-              </Field>
-              <Field label="Leitura do animal (obrigatória)">
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
-                    onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
-                  <BtnPrimary onClick={() => { if (brinco.trim()) conferirAoLer(); resultadoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0}><ScanLine size={15} /></BtnPrimary>
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
-                </div>
-              </Field>
-              <Field label="Resultado">
-                <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
-                  onChange={(e) => { limparMsgSeSucesso(); const v = e.target.value; setResultadoInput(v); setResultado(resolverResultado(v)); }}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
               </Field>
             </div>
             {avisoImediato && (
@@ -5088,19 +5120,26 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
               })}
             </div>
             <div className="grid-manejo" style={{ alignItems: "end" }}>
-              <Field label="Identificação (obrigatória)">
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
-                    onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Identificação (obrigatória)">
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
+                      onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
+                    <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
+                  </div>
+                </Field>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Field label="Resultado">
+                    <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
+                      onChange={(e) => { limparMsgSeSucesso(); const v = e.target.value; setResultadoInput(v); setResultado(resolverResultado(v)); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); tempoInputRef.current?.focus(); } }} />
+                  </Field>
                 </div>
-              </Field>
-              <Field label="Resultado">
-                <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
-                  onChange={(e) => { limparMsgSeSucesso(); const v = e.target.value; setResultadoInput(v); setResultado(resolverResultado(v)); }}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); tempoInputRef.current?.focus(); } }} />
-              </Field>
+                <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>
+              </div>
               <Field label="Tempo de gestação informado">
                 <input ref={tempoInputRef} style={inputStyle} type="number" value={tempoGestacaoInformado}
                   onChange={(e) => { limparMsgSeSucesso(); setTempoGestacaoInformado(e.target.value); }}
@@ -6012,7 +6051,7 @@ const CORES_TIPO = {
   "Inseminação": "#4A6FA5", "Diagnóstico": "#7A5C9E", "Diagnóstico - repasse": "#166336", "Outro": "#6B685E",
 };
 
-function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento }) {
+function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento, reordenarAgendamentoNoDia }) {
   // versão compacta do calendário só no celular — no computador, nada muda
   const [isMobileCalendario, setIsMobileCalendario] = useState(typeof window !== "undefined" ? window.innerWidth < 860 : false);
   React.useEffect(() => {
@@ -6099,7 +6138,13 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
   const porDia = useMemo(() => {
     const map = {};
-    visiveis.forEach((a) => { (map[a.data] = map[a.data] || []).push(a); });
+    // guarda o índice original (i) junto — é o desempate quando "ordemExibicao" ainda não foi
+    // definida (ex.: agendamentos criados antes dessa função existir), preservando a ordem que
+    // já estava sendo mostrada em vez de embaralhar tudo.
+    visiveis.forEach((a, i) => { (map[a.data] = map[a.data] || []).push({ a, i }); });
+    Object.keys(map).forEach((dia) => {
+      map[dia] = map[dia].sort((x, y) => (x.a.ordemExibicao ?? x.i) - (y.a.ordemExibicao ?? y.i)).map(({ a }) => a);
+    });
     return map;
   }, [visiveis]);
 
@@ -6144,7 +6189,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
   const loteDoAgendamento = (a) => a.loteNome ? lotes.find((l) => l.nome === a.loteNome && (!a.retiroId || l.retiroId === a.retiroId)) : null;
 
-  const ItemAgendamento = ({ a }) => {
+  const ItemAgendamento = ({ a, ehPrimeiro, ehUltimo }) => {
     if (editingId === a.id && editForm) {
       return (
         <div style={{ ...cardStyle, padding: "12px 14px", border: "1.5px solid #166336" }}>
@@ -6190,7 +6235,19 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
     return (
       <div style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+          <button onClick={() => reordenarAgendamentoNoDia(a.id, "cima")} disabled={ehPrimeiro}
+            title="Mover pra cima" aria-label="Mover pra cima"
+            style={{ background: "none", border: "none", cursor: ehPrimeiro ? "default" : "pointer", color: ehPrimeiro ? "#DDDDDD" : "#6B685E", padding: 2, display: "flex" }}>
+            <ChevronUp size={16} />
+          </button>
+          <button onClick={() => reordenarAgendamentoNoDia(a.id, "baixo")} disabled={ehUltimo}
+            title="Mover pra baixo" aria-label="Mover pra baixo"
+            style={{ background: "none", border: "none", cursor: ehUltimo ? "default" : "pointer", color: ehUltimo ? "#DDDDDD" : "#6B685E", padding: 2, display: "flex" }}>
+            <ChevronDown size={16} />
+          </button>
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_TIPO[a.tipo] || "#6B685E", flexShrink: 0 }} />
             <strong style={{ fontSize: 13.5 }}>{a.titulo}</strong>
@@ -6203,13 +6260,13 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
           {(() => {
             const lote = loteDoAgendamento(a);
             const ordem = a.ordem || lote?.ordem;
-            const categoria = lote?.categoria;
+            const categoria = a.categoria || lote?.categoria;
             const numeroAnimais = a.numeroAnimais ?? lote?.numeroAnimais;
-            if (!lote && !ordem && numeroAnimais == null) return null;
+            if (!lote && !ordem && numeroAnimais == null && !categoria) return null;
             return (
               <div style={{ fontSize: 11.5, color: "#9B9686", marginTop: 3 }}>
-                {categoria ? `Categoria: ${categoria}` : ""}
-                {numeroAnimais != null ? `${categoria ? " · " : ""}Nº animais: ${numeroAnimais}` : ""}
+                {numeroAnimais != null ? `Nº animais: ${numeroAnimais}` : ""}
+                {categoria ? `${numeroAnimais != null ? " · " : ""}Categoria: ${categoria}` : ""}
                 {ordem ? `${categoria || numeroAnimais != null ? " · " : ""}Ordem: ${ordem}` : ""}
               </div>
             );
@@ -6448,7 +6505,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                     return (
                       <button key={i} onClick={() => setSelecionado(iso)}
                         style={{
-                          minHeight: 74, textAlign: "left", padding: "6px 6px", border: "none",
+                          minHeight: 96, textAlign: "left", padding: "6px 6px", border: "none",
                           borderRight: (i + 1) % 7 !== 0 ? "1px solid #F0F0F0" : "none",
                           borderBottom: "1px solid #F0F0F0",
                           background: ativo ? "#FFFFFF" : "#FFF", cursor: "pointer",
@@ -6459,18 +6516,24 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                           width: 20, height: 20, borderRadius: "50%", fontSize: 11.5, fontWeight: 700,
                           background: hoje ? "#166336" : "transparent", color: hoje ? "#FFFFFF" : "#4A473E",
                         }}>{d.getDate()}</span>
-                        <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
-                          {itens.slice(0, 2).map((a) => {
+                        <div style={{ marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                          {itens.slice(0, 6).map((a) => {
                             const n = a.numeroAnimais ?? loteDoAgendamento(a)?.numeroAnimais;
                             return (
                               <span key={a.id} style={{
-                                fontSize: 10, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#6B685E",
-                                borderRadius: 4, padding: "1.5px 5px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                fontSize: 9, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#6B685E",
+                                borderRadius: 4, padding: "1.5px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                                 opacity: a.status === "pendente" ? 0.6 : 1,
                               }}>{a.titulo}{n != null ? ` · ${n}` : ""}</span>
                             );
                           })}
-                          {itens.length > 2 && <span style={{ fontSize: 10, color: "#9B9686" }}>+{itens.length - 2} mais</span>}
+                          {itens.length > 6 && (
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 9.5, fontWeight: 700, color: "#FFFFFF", background: "#C0392B",
+                              borderRadius: 4, padding: "1.5px 4px",
+                            }}>+{itens.length - 6}</span>
+                          )}
                         </div>
                       </button>
                     );
@@ -6521,7 +6584,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                   <EmptyState text="Nenhum agendamento neste dia." />
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {(porDia[selecionado] || []).map((a) => <ItemAgendamento key={a.id} a={a} />)}
+                    {(porDia[selecionado] || []).map((a, idx, arr) => <ItemAgendamento key={a.id} a={a} ehPrimeiro={idx === 0} ehUltimo={idx === arr.length - 1} />)}
                   </div>
                 )}
               </div>
@@ -7181,11 +7244,12 @@ function GraficoColunas({ titulo, descricao, dados, ordenarPorTaxaDesc, compacto
 function LinhaConcepcao({ dados, agruparPorMes }) {
   if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const alturaUtil = 130;
-  const margemTopo = 24;
-  const margemBaixo = agruparPorMes ? 40 : 26; // rótulo do dia (girado, ocupa pouca altura) + rótulo do mês, quando agrupado
+  const margemTopo = 44; // maior que antes: a porcentagem agora fica na vertical (rotacionada), ocupando mais altura acima do ponto
+  // rótulos sempre na horizontal agora (nunca girados) — cabem numa única linha de texto,
+  // por isso a margem de baixo é bem mais enxuta do que quando o dia ficava rotacionado.
+  const margemBaixo = agruparPorMes ? 34 : 20; // rótulo do dia + (quando agrupado) rótulo do mês, ambos deitados
   const alturaTotal = alturaUtil + margemTopo + margemBaixo;
-  // com o eixo mostrando só o dia (girado na vertical, sem o "n" embaixo), os pontos podem ficar bem mais próximos
-  const largura = Math.max(dados.length * (agruparPorMes ? 26 : 60), 260);
+  const largura = Math.max(dados.length * (agruparPorMes ? 30 : 60), 260);
   const maiorTaxa = Math.max(...dados.map((d) => d.taxa || 0), 10);
   const passoX = dados.length > 1 ? largura / (dados.length - 1) : 0;
   const pontos = dados.map((d, i) => ({
@@ -7207,7 +7271,7 @@ function LinhaConcepcao({ dados, agruparPorMes }) {
   }
 
   return (
-    <div className="rola-horizontal" style={{ height: "100%", width: "100%", overflowX: "auto" }}>
+    <div className="rola-horizontal" style={{ height: "100%", width: "100%", overflowX: "auto", overflowY: "hidden" }}>
       {/* Importante: NÃO usar preserveAspectRatio="none" aqui — ele estica largura e altura em
           proporções diferentes quando há poucos pontos, o que distorce e borra o texto (que faz
           parte do desenho SVG). Mantendo a proporção padrão, o gráfico cresce igual nos dois eixos —
@@ -7218,17 +7282,16 @@ function LinhaConcepcao({ dados, agruparPorMes }) {
         {pontos.map((p, i) => (
           <g key={`${p.label}-${i}`}>
             <circle cx={p.x} cy={p.y} r="4" fill="#166336" vectorEffect="non-scaling-stroke" />
-            <text x={p.x} y={p.y - 10} fontSize="11.5" fontWeight="700" fill="#232520" textAnchor="middle">{p.taxa}%</text>
-            {/* rótulo do dia girado na vertical — ocupa bem menos espaço horizontal do que o texto deitado,
-                permitindo os pontos ficarem mais próximos entre si */}
-            <text x={p.x} y={margemTopo + alturaUtil + 12} fontSize="10" fill="#6B685E" textAnchor="end"
-              transform={`rotate(-90 ${p.x} ${margemTopo + alturaUtil + 12})`}>{p.label}</text>
+            <text x={p.x} y={p.y - 12} fontSize="11.5" fontWeight="700" fill="#232520" textAnchor="start"
+              transform={`rotate(-90 ${p.x} ${p.y - 12})`}>{Math.round(p.taxa)}%</text>
+            {/* rótulo do dia sempre deitado (nunca girado) */}
+            <text x={p.x} y={margemTopo + alturaUtil + 14} fontSize="10" fill="#6B685E" textAnchor="middle">{p.label}</text>
           </g>
         ))}
         {agruparPorMes && gruposMes.map((g, i) => {
           const xMedio = (g.pontos[0].x + g.pontos[g.pontos.length - 1].x) / 2;
           return (
-            <text key={i} x={xMedio} y={margemTopo + alturaUtil + 36} fontSize="10.5" fontWeight="700" fill="#166336" textAnchor="middle">
+            <text key={i} x={xMedio} y={margemTopo + alturaUtil + 30} fontSize="10.5" fontWeight="700" fill="#166336" textAnchor="middle">
               {fmtMes(g.mes)}
             </text>
           );
@@ -7638,7 +7701,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
                 ) : (
                   <BarrasConcepcao dados={[
                     { label: "Sua Fazenda", n: null, taxa: suaFazendaFertilidade, cor: "#159FDB" },
-                    { label: "Geral", n: null, taxa: statsFertilidadeAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
+                    { label: "Média Geral", n: null, taxa: statsFertilidadeAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
                     { label: "Melhores", n: null, taxa: statsFertilidadeAtual?.mediaTop25 ?? null, cor: "#166336" },
                     { label: "Piores", n: null, taxa: statsFertilidadeAtual?.mediaBottom25 ?? null, cor: "#C0392B" },
                   ]} />
@@ -7666,7 +7729,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
                 ) : (
                   <BarrasConcepcao dados={[
                     { label: "Sua Fazenda", n: null, taxa: suaFazendaConcepcao, cor: "#159FDB" },
-                    { label: "Geral", n: null, taxa: statsConcepcaoAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
+                    { label: "Média Geral", n: null, taxa: statsConcepcaoAtual?.mediaGeral ?? null, cor: "#1F5C7A" },
                     { label: "Melhores", n: null, taxa: statsConcepcaoAtual?.mediaTop25 ?? null, cor: "#166336" },
                     { label: "Piores", n: null, taxa: statsConcepcaoAtual?.mediaBottom25 ?? null, cor: "#C0392B" },
                   ]} />

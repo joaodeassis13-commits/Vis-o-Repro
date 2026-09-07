@@ -284,11 +284,13 @@ create table if not exists agendamentos (
   origem text not null check (origem in ('manual', 'automatico')),
   origem_agendamento_id text references agendamentos (id),  -- referência à própria tabela: ok, ela já existe neste ponto
   status text not null check (status in ('pendente', 'confirmado', 'descartado')),
+  ordem_exibicao integer,  -- ordem manual dentro do mesmo dia (arrastar/mover pra cima ou pra baixo, na Agenda)
   criado_em timestamptz not null default now()
 );
 
 -- garante as colunas mesmo em bancos criados antes delas existirem
 alter table agendamentos add column if not exists numero_animais integer;
+alter table agendamentos add column if not exists ordem_exibicao integer;
 alter table agendamentos add column if not exists categoria text;
 
 -- garante "criado_em" em TODAS as tabelas que precisam dele, mesmo nas que foram criadas
