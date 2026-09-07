@@ -4894,6 +4894,28 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     return insems.reduce((mais, atual) => (atual.data > mais.data ? atual : mais));
   };
   const diasEntre = (dataA, dataB) => Math.round((parseISODate(dataB) - parseISODate(dataA)) / 86400000);
+
+  const tempoGestacaoInputRef = React.useRef(null);
+  const [tempoGestacaoInput, setTempoGestacaoInput] = useState("");
+  // calculado a partir da última Inseminação registrada PARA ESTE animal — não muda pela
+  // ordem/lote selecionados, é sempre o histórico individual do próprio animal.
+  const tempoGestacaoCalculado = React.useMemo(() => {
+    const b = brinco.trim();
+    if (!b || resultado !== "Prenha") return null;
+    const ultimaInsem = buscarUltimaInseminacao(b);
+    if (!ultimaInsem) return null;
+    return diasEntre(ultimaInsem.data, dataManejo);
+  }, [brinco, resultado, dataManejo, manejos]);
+  React.useEffect(() => {
+    setTempoGestacaoInput(tempoGestacaoCalculado != null ? String(tempoGestacaoCalculado) : "");
+  }, [tempoGestacaoCalculado]);
+  // se o valor digitado for MENOR que o calculado com base na última Inseminação, a prenhez
+  // não bate com o tempo esperado da Inseminação — deve ter vindo do touro de Repasse. Se
+  // ninguém mexer no campo (fica igual ao calculado), a origem é a própria Inseminação.
+  const origemPrenhez = (resultado === "Prenha" && tempoGestacaoCalculado != null && tempoGestacaoInput.trim() !== "")
+    ? (Number(tempoGestacaoInput) < tempoGestacaoCalculado ? "Repasse" : "Inseminação")
+    : null;
+
   const buscarDiagnosticoAnterior = (b, ordem) => {
     const diags = manejos.filter((m) => m.tipo === "diagnostico" && m.ordem === ordem && (m.animaisLidos || []).includes(b));
     if (diags.length === 0) return null;
@@ -4958,19 +4980,22 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     if (!b) { setMsg("Leia o brinco do animal."); return; }
     if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
     if (!resultado) { setMsg("Digite P (Prenha) ou V (Vazia) no campo Resultado."); resultadoInputRef.current?.focus(); return; }
+    if (resultado === "Prenha" && tempoGestacaoInput.trim() === "") { setMsg("Informe o Tempo de gestação."); tempoGestacaoInputRef.current?.focus(); return; }
 
     const { avisos, semInseminacao, loteConflito, loteResolvidoId } = calcularAvisos(b);
+    const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
 
     if (avisos.length > 0) { setPendente({ brinco: b, avisos, semInseminacao, loteConflito, loteResolvidoId }); setMsg(""); return; }
 
-    setRegistros((a) => [...a, { brinco: b, resultado, loteId: loteResolvidoId }]);
+    setRegistros((a) => [...a, { brinco: b, resultado, loteId: loteResolvidoId, ...camposPrenhez }]);
     setBrinco(""); setResultadoInput(""); setResultado(""); setAvisoImediato(null); setMsg("");
     brincoInputRef.current?.focus();
   };
 
   const confirmarPendente = () => {
     if (!pendente) return;
-    setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: pendente.loteResolvidoId }]);
+    const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
+    setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: pendente.loteResolvidoId, ...camposPrenhez }]);
     setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setAvisoImediato(null); setMsg("");
     brincoInputRef.current?.focus();
   };
@@ -4978,7 +5003,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     if (!pendente) return;
     const idDesconhecidos = garantirLoteDesconhecidos();
     addAnimalAoLote(idDesconhecidos, pendente.brinco);
-    setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: idDesconhecidos, observacao: "Atribuído ao lote de desconhecidos" }]);
+    const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
+    setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: idDesconhecidos, observacao: "Atribuído ao lote de desconhecidos", ...camposPrenhez }]);
     setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setMsg("");
     brincoInputRef.current?.focus();
   };
@@ -4987,7 +5013,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     const alvoId = lotesSelecionados[0];
     addAnimalAoLote(alvoId, pendente.brinco);
     atribuirManejosRetroativos(alvoId, [pendente.brinco]);
-    setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: alvoId, observacao: "Inserido por dedução" }]);
+    const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
+    setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: alvoId, observacao: "Inserido por dedução", ...camposPrenhez }]);
     setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setMsg("");
     brincoInputRef.current?.focus();
   };
@@ -5090,11 +5117,26 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   <Field label="Resultado">
                     <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
                       onChange={(e) => { limparMsgSeSucesso(); const v = e.target.value; setResultadoInput(v); setResultado(resolverResultado(v)); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (resolverResultado(resultadoInput) === "Prenha") tempoGestacaoInputRef.current?.focus(); else adicionar(); } }} />
                   </Field>
                 </div>
-                <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>
+                {resultado !== "Prenha" && <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>}
               </div>
+              {resultado === "Prenha" && (
+                <div style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
+                  <Field label="Tempo de gestação (dias)">
+                    <input ref={tempoGestacaoInputRef} style={inputStyle} type="number" value={tempoGestacaoInput}
+                      onChange={(e) => { limparMsgSeSucesso(); setTempoGestacaoInput(e.target.value); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} />
+                  </Field>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Field label="Origem da prenhez">
+                      <input style={{ ...inputStyle, background: "#F0F0F0", color: origemPrenhez === "Repasse" ? "#166336" : "#6B685E", fontWeight: 600 }} value={origemPrenhez || "—"} readOnly />
+                    </Field>
+                  </div>
+                  <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado || tempoGestacaoInput.trim() === ""}>Registrar</BtnPrimary>
+                </div>
+              )}
             </div>
             {avisoImediato && (
               <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
@@ -5143,7 +5185,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão</div>
                 <table>
-                  <thead><tr><th>Animal</th><th>Resultado</th><th>Lote</th><th>Observação</th><th></th></tr></thead>
+                  <thead><tr><th>Animal</th><th>Resultado</th><th>Tempo gestação</th><th>Origem</th><th>Lote</th><th>Observação</th><th></th></tr></thead>
                   <tbody>
                     {registros.map((r) => (
                       <tr key={r.brinco}>
@@ -5151,6 +5193,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                         <td style={{ color: r.resultado === "Prenha" ? "#166336" : "#166336", fontWeight: 600 }}>
                           {r.resultado}{r.resultado === "Vazia" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#166336" }}>· gera sugestão de Ressinc</span>}
                         </td>
+                        <td>{r.tempoGestacao != null ? `${r.tempoGestacao} dias` : "—"}</td>
+                        <td style={{ fontWeight: r.origemPrenhez === "Repasse" ? 700 : 400 }}>{r.origemPrenhez || "—"}</td>
                         <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
                         <td>{r.observacao || "—"}</td>
                         <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
@@ -5189,6 +5233,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                     <th>Lote</th>
                     <th>Ordem</th>
                     <th>Prenhas</th>
+                    <th>Origem das prenhas</th>
                     <th>Avaliadas</th>
                     <th>Medicamentos</th>
                     <th>Local</th>
@@ -5199,11 +5244,14 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 <tbody>
                   {historico.map((m) => {
                     const prenhas = m.detalhes.filter((d) => d.resultado === "Prenha").length;
+                    const prenhasInsem = m.detalhes.filter((d) => d.resultado === "Prenha" && d.origemPrenhez !== "Repasse").length;
+                    const prenhasRepasse = m.detalhes.filter((d) => d.resultado === "Prenha" && d.origemPrenhez === "Repasse").length;
                     return (
                       <tr key={m.id}>
                         <td style={{ fontWeight: 700 }}>{nomeLote(m.loteId)}</td>
                         <td>{m.ordem || "—"}</td>
                         <td>{prenhas}</td>
+                        <td style={{ fontSize: 12 }}>{prenhas === 0 ? "—" : `Inseminação: ${prenhasInsem} · Repasse: ${prenhasRepasse}`}</td>
                         <td>{m.detalhes.length}</td>
                         <td>{resumoMedicamentos(m.medicamentos, insumos)}</td>
                         {editandoId === m.id ? (
@@ -5252,301 +5300,20 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
    para os animais que passaram pelo manejo de Repasse.
 ========================================================= */
 
-function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, registrarManejo, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho }) {
-  // só entram lotes que já tiveram Repasse registrado
-  const lotesComRepasse = lotes.filter((l) => manejos.some((m) => m.tipo === "repasse" && m.loteId === l.id));
-
-  const [lotesSelecionados, setLotesSelecionados] = useState(lotesComRepasse[0] ? [lotesComRepasse[0].id] : []);
-  React.useEffect(() => {
-    setLotesSelecionados((a) => a.filter((id) => lotesComRepasse.some((l) => l.id === id)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lotesComRepasse.map((l) => l.id).join(",")]);
-  const toggleLote = (id) => setLotesSelecionados((a) => a.includes(id) ? a.filter((x) => x !== id) : [...a, id]);
-
-  const [dataManejo, setDataManejo] = useState(todayISO());
-  const [brinco, setBrinco] = useState("");
-  const brincoInputRef = React.useRef(null);
-  const [resultadoInput, setResultadoInput] = useState("");
-  const [resultado, setResultado] = useState("");
-  const resultadoInputRef = React.useRef(null);
-  const [tempoGestacaoInformado, setTempoGestacaoInformado] = useState("");
-  const tempoInputRef = React.useRef(null);
-  const [registros, setRegistros] = useState([]);
-  useAvisarSaidaComPendencia(registros.length > 0);
-  const [msg, setMsg] = useState("");
-  const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
-
-  const chaveRascunho = lotesSelecionados.length > 0 ? `diagnostico_repasse_${lotesSelecionados.slice().sort().join("-")}` : null;
-  React.useEffect(() => {
-    if (chaveRascunho && registros.length === 0 && rascunhos[chaveRascunho]) {
-      setRegistros(rascunhos[chaveRascunho].registros || []);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chaveRascunho]);
-  const salvarProgresso = () => {
-    if (!chaveRascunho || registros.length === 0) { setMsg("Leia ao menos um animal antes de salvar."); return; }
-    salvarRascunho(chaveRascunho, { registros });
-    setMsg("Progresso salvo. Você pode continuar depois.");
-  };
-
-  const resolverResultado = (txt) => {
-    const t = txt.trim().toUpperCase();
-    if (t.startsWith("P")) return "Prenha";
-    if (t.startsWith("V")) return "Vazia";
-    return "";
-  };
-
-  // checa TODO o histórico do animal (Diagnóstico de Inseminação e de Repasse) por um
-  // resultado de Prenha já registrado antes.
-  const buscarPrenhezAnterior = (b) => {
-    const diags = manejos.filter((m) => (m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse") && (m.detalhes || []).some((d) => d.brinco === b && d.resultado === "Prenha"));
-    if (diags.length === 0) return null;
-    return diags.reduce((mais, atual) => (atual.data > mais.data ? atual : mais));
-  };
-
-  // aviso imediato assim que o brinco é lido — antes mesmo do Resultado ser preenchido: prenhez
-  // anterior E se o animal já pertence a outro lote diferente do(s) selecionado(s).
-  const [avisoImediato, setAvisoImediato] = useState(null); // { brinco, avisos: [] }
-  const conferirAoLer = () => {
-    const b = brinco.trim();
-    if (!b) return;
-    const avisos = [];
-    const prenhezAnterior = buscarPrenhezAnterior(b);
-    if (prenhezAnterior) avisos.push(`Este animal já tem um registro de Prenha em ${fmtDate(prenhezAnterior.data)}.`);
-    const loteDoBicho = lotes.find((l) => (l.animais || []).includes(b));
-    if (loteDoBicho && !lotesSelecionados.includes(loteDoBicho.id)) {
-      const nomesSelecionados = lotes.filter((l) => lotesSelecionados.includes(l.id)).map((l) => l.nome).join(", ") || "—";
-      avisos.push(`Este animal já pertence ao lote "${loteDoBicho.nome}", diferente do(s) lote(s) selecionado(s) (${nomesSelecionados}).`);
-    }
-    setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
-  };
-
-  const [pendente, setPendente] = useState(null); // { brinco, avisos: [] } — precisa de confirmação antes de registrar
-  const adicionar = () => {
-    const b = brinco.trim();
-    if (!b) { setMsg("Leia o brinco do animal."); return; }
-    if (!resultado) { setMsg("Informe o resultado (P ou V)."); return; }
-    if (lotesSelecionados.length === 0) { setMsg("Selecione ao menos um lote."); return; }
-    if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
-
-    const loteDoBicho = lotes.find((l) => (l.animais || []).includes(b));
-    const pertenceASelecionados = loteDoBicho && lotesSelecionados.includes(loteDoBicho.id);
-
-    // animal de um lote diferente do(s) selecionado(s) — pede confirmação antes de registrar,
-    // em vez de simplesmente resolver sozinho pro primeiro lote selecionado.
-    if (loteDoBicho && !pertenceASelecionados) {
-      const nomesSelecionados = lotes.filter((l) => lotesSelecionados.includes(l.id)).map((l) => l.nome).join(", ") || "—";
-      setPendente({ brinco: b, avisos: [`Este animal está alocado no lote "${loteDoBicho.nome}", diferente do(s) lote(s) selecionado(s) aqui (${nomesSelecionados}).`] });
-      setMsg("");
-      return;
-    }
-
-    const loteResolvidoId = pertenceASelecionados ? loteDoBicho.id : lotesSelecionados[0];
-
-    setRegistros((a) => [...a, {
-      brinco: b, resultado, tempoGestacaoInformado: tempoGestacaoInformado.trim() !== "" ? numBR(tempoGestacaoInformado) : null,
-      loteId: loteResolvidoId,
-    }]);
-    setBrinco(""); setResultadoInput(""); setResultado(""); setTempoGestacaoInformado(""); setAvisoImediato(null); setMsg("");
-    brincoInputRef.current?.focus();
-  };
-
-  const confirmarPendente = () => {
-    if (!pendente) return;
-    setRegistros((a) => [...a, {
-      brinco: pendente.brinco, resultado, tempoGestacaoInformado: tempoGestacaoInformado.trim() !== "" ? numBR(tempoGestacaoInformado) : null,
-      loteId: lotesSelecionados[0],
-    }]);
-    setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setTempoGestacaoInformado(""); setAvisoImediato(null); setMsg("");
-    brincoInputRef.current?.focus();
-  };
-  const cancelarPendente = () => setPendente(null);
-
-  const remover = (b) => setRegistros((a) => a.filter((r) => r.brinco !== b));
-
-  const finalizar = () => {
-    if (registros.length === 0) { setMsg("Leia ao menos um animal antes de finalizar."); return; }
-    const idsComRegistro = [...new Set(registros.map((r) => r.loteId))];
-    idsComRegistro.forEach((idLote) => {
-      const lote = lotes.find((l) => l.id === idLote);
-      const registrosDoLote = registros.filter((r) => r.loteId === idLote);
-      if (!lote || registrosDoLote.length === 0) return;
-      registrarManejo({
-        tipo: "diagnostico_repasse", loteId: lote.id, loteNome: lote.nome, retiroId: lote.retiroId || null,
-        animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo,
-      });
-    });
-    setRegistros([]); setDataManejo(todayISO()); setMsg("Diagnóstico de Repasse registrado.");
-    if (chaveRascunho) limparRascunho(chaveRascunho);
-  };
-
-  const historico = manejos.filter((m) => m.tipo === "diagnostico_repasse").slice(0, 8);
-
-  return (
-    <div>
-      {!fazendaAtiva ? (
-        <EmptyState text="Selecione uma fazenda ativa para registrar diagnósticos." />
-      ) : !safraAtiva ? (
-        <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos." />
-      ) : lotesComRepasse.length === 0 ? (
-        <EmptyState text="Nenhum lote disponível para Diagnóstico de Repasse no momento. Um lote aparece aqui depois de ter um Repasse registrado." />
-      ) : (
-        <>
-          <div style={{ ...cardStyle, marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-              {lotesComRepasse.map((l) => {
-                const selecionado = lotesSelecionados.includes(l.id);
-                return (
-                  <button key={l.id} onClick={() => toggleLote(l.id)}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
-                      borderRadius: 20, padding: "6px 12px", fontSize: 12.5,
-                      background: selecionado ? "#E6EFE5" : "#EEEEEE", color: selecionado ? "#2A4531" : "#6B685E", fontWeight: selecionado ? 600 : 400,
-                    }}>
-                    {selecionado ? <CheckCircle2 size={13} /> : <Circle size={13} color="#9B9686" />}
-                    {l.nome}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="grid-manejo" style={{ alignItems: "end" }}>
-              <div className="campo-leitura-linha-cheia-mobile">
-                <Field label="Identificação (obrigatória)">
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
-                      onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
-                    <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
-                  </div>
-                </Field>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Field label="Resultado">
-                    <input ref={resultadoInputRef} style={inputStyle} placeholder="P (Prenha) ou V (Vazia)" value={resultadoInput}
-                      onChange={(e) => { limparMsgSeSucesso(); const v = e.target.value; setResultadoInput(v); setResultado(resolverResultado(v)); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); tempoInputRef.current?.focus(); } }} />
-                  </Field>
-                </div>
-                <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>
-              </div>
-              <Field label="Tempo de gestação informado">
-                <input ref={tempoInputRef} style={inputStyle} type="number" value={tempoGestacaoInformado}
-                  onChange={(e) => { limparMsgSeSucesso(); setTempoGestacaoInformado(e.target.value); }}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} placeholder="dias (opcional)" />
-              </Field>
-              <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
-            </div>
-            {avisoImediato && (
-              <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
-                </div>
-                {avisoImediato.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
-                ))}
-                <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente.</p>
-              </div>
-            )}
-            {pendente && (
-              <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <EarTag size="sm">{pendente.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Confirmação necessária</span>
-                </div>
-                {pendente.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
-                ))}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                  <BtnPrimary onClick={confirmarPendente}>Registrar mesmo assim</BtnPrimary>
-                  <BtnGhost onClick={cancelarPendente}>Cancelar</BtnGhost>
-                </div>
-              </div>
-            )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("salvo") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
-            <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
-              <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
-              <BtnPrimary onClick={finalizar}>Finalizar Diagnóstico de Repasse ({registros.length})</BtnPrimary>
-            </div>
-          </div>
-
-          {registros.length > 0 && (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
-              <table>
-                <thead><tr><th>Animal</th><th>Lote</th><th>Resultado</th><th>Tempo de gestação informado</th><th></th></tr></thead>
-                <tbody>
-                  {registros.map((r) => (
-                    <tr key={r.brinco}>
-                      <td><EarTag size="sm">{r.brinco}</EarTag></td>
-                      <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
-                      <td style={{ color: r.resultado === "Prenha" ? "#166336" : "#166336", fontWeight: 600 }}>{r.resultado}</td>
-                      <td>{r.tempoGestacaoInformado != null ? `${r.tempoGestacaoInformado} dia(s)` : "—"}</td>
-                      <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Diagnósticos de Repasse registrados</div>
-          {historico.length === 0 ? (
-            <EmptyState text="Nenhum Diagnóstico de Repasse registrado ainda." />
-          ) : (
-            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
-              <table>
-                <thead><tr><th>Lote</th><th>Prenhas</th><th>Avaliadas</th><th>Data</th></tr></thead>
-                <tbody>
-                  {historico.map((m) => (
-                    <tr key={m.id}>
-                      <td style={{ fontWeight: 700 }}>{m.loteNome}</td>
-                      <td>{(m.detalhes || []).filter((d) => d.resultado === "Prenha").length}</td>
-                      <td>{(m.detalhes || []).length}</td>
-                      <td>{fmtDate(m.data)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
 
 /* =========================================================
-   DIAGNÓSTICO — envoltório com duas abas internas: "Diagnóstico de
-   Inseminação" (o diagnóstico normal, ligado às ordens de IATF) e
-   "Diagnóstico de Repasse" (para os animais que passaram pelo Repasse).
+   DIAGNÓSTICO — formulário único: qualquer lote com Inseminação registrada e
+   ainda sem Diagnóstico aparece aqui pra diagnosticar, independente de ter
+   passado por Repasse ou não (a origem da prenhez — Inseminação ou Repasse —
+   é resolvida pelo Tempo de gestação informado, não por uma aba separada).
 ========================================================= */
 
 function AbaDiagnostico(props) {
-  const [abaInterna, setAbaInterna] = useState("inseminacao"); // "inseminacao" | "repasse"
   return (
     <div>
-      <SectionTitle icon={UltrasoundIcon} title="Diagnóstico" subtitle="Escolha se o diagnóstico é da Inseminação ou do Repasse." />
+      <SectionTitle icon={UltrasoundIcon} title="Diagnóstico" subtitle="Diagnostique qualquer lote com Inseminação pendente de resultado." />
       <FazendaAtivaBanner fazendaAtiva={props.fazendaAtiva} />
-      <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 20, width: "fit-content" }}>
-        <button onClick={() => setAbaInterna("inseminacao")}
-          style={{
-            padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "inseminacao" ? "#166336" : "transparent", color: abaInterna === "inseminacao" ? "#FFFFFF" : "#6B685E",
-          }}>Diagnóstico de Inseminação</button>
-        <button onClick={() => setAbaInterna("repasse")}
-          style={{
-            padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-            background: abaInterna === "repasse" ? "#166336" : "transparent", color: abaInterna === "repasse" ? "#FFFFFF" : "#6B685E",
-          }}>Diagnóstico de Repasse</button>
-      </div>
-      <div style={{ display: abaInterna === "inseminacao" ? "block" : "none" }}>
-        <AbaDiagnosticoInseminacao {...props} />
-      </div>
-      <div style={{ display: abaInterna === "repasse" ? "block" : "none" }}>
-        <AbaDiagnosticoRepasse {...props} />
-      </div>
+      <AbaDiagnosticoInseminacao {...props} />
     </div>
   );
 }
