@@ -15,9 +15,16 @@ export async function entrar(email, senha) {
   if (!supabaseConfigurado) {
     return { ok: false, erro: "Supabase não configurado — autenticação real indisponível neste ambiente." };
   }
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
-  if (error) return { ok: false, erro: traduzErro(error.message) };
-  return { ok: true, sessao: data.session, authUser: data.user };
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha });
+    if (error) return { ok: false, erro: traduzErro(error.message) };
+    return { ok: true, sessao: data.session, authUser: data.user };
+  } catch (e) {
+    // sem conexão de verdade (não é erro de credencial — o pedido nem chega a sair do
+    // aparelho), ou o servidor está fora do ar: sem isso, o "Failed to fetch" (mensagem
+    // técnica do navegador) vazava direto pra tela, sem explicar nada pra quem está usando.
+    return { ok: false, erro: "Não foi possível conectar. Verifique sua internet e tente novamente." };
+  }
 }
 
 export async function sair() {
@@ -27,8 +34,15 @@ export async function sair() {
 
 export async function obterSessao() {
   if (!supabaseConfigurado) return null;
-  const { data } = await supabase.auth.getSession();
-  return data.session || null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data.session || null;
+  } catch (e) {
+    // sem internet, a tentativa de renovar um token perto de expirar pode falhar — mas isso
+    // não pode travar o carregamento do app pra quem já estava logado antes de ficar offline.
+    console.error("Falha ao obter sessão (provavelmente sem conexão):", e);
+    return null;
+  }
 }
 
 // dispara `callback(sessao | null)` sempre que o login muda (login, logout,

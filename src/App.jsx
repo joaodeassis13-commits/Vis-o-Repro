@@ -8,6 +8,7 @@ import {
   Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload, Lock, LockOpen, ChevronUp, ChevronDown
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos, apagarTudoLocal, lerMeta, gravarMeta } from "./lib/db.js";
+import { definirPinLocal, conferirPinLocal, temPinLocal, removerPinLocal } from "./lib/pinLocal.js";
 import { sincronizar, buscarPerfilProprio, excluirRegistro } from "./lib/sync.js";
 import {
   buscarBenchmarkTaxaPrenhezSistema, buscarBenchmarkTaxaFertilidadeSistema,
@@ -365,7 +366,21 @@ function FazendaAtivaBanner({ fazendaAtiva }) {
 /* Avisa o navegador para perguntar "sair sem salvar?" quando há uma leitura em
    andamento (animais já lidos, mas ainda não registrados/finalizados) — protege
    contra atualização acidental da página, fechar a aba, etc. */
+// registro global (fora do React, um Set comum) de quais telas de leitura têm animais lidos
+// ainda não salvos nem registrados neste exato momento — usado pelo "Sair" da conta pra avisar
+// antes de descartar essa leitura (a lista de animais lidos existe só na memória da tela
+// aberta; ela não é a mesma coisa que os dados já persistidos no aparelho, e se perde se a
+// tela for trocada pela de login).
+const pendenciasDeLeituraAtivas = new Set();
+function haPendenciaDeLeituraAtiva() { return pendenciasDeLeituraAtivas.size > 0; }
+
 function useAvisarSaidaComPendencia(haPendencia) {
+  const idRef = React.useRef(`${Date.now()}_${Math.random()}`);
+  React.useEffect(() => {
+    if (haPendencia) pendenciasDeLeituraAtivas.add(idRef.current);
+    else pendenciasDeLeituraAtivas.delete(idRef.current);
+    return () => pendenciasDeLeituraAtivas.delete(idRef.current);
+  }, [haPendencia]);
   React.useEffect(() => {
     const handler = (e) => {
       if (!haPendencia) return;
@@ -540,6 +555,50 @@ function EmptyState({ text }) {
 }
 
 /* =========================================================
+   RECUPERAR ACESSO OFFLINE COM PIN LOCAL
+   Só aparece quando não existe sessão ativa E o aparelho está sem internet —
+   deixa continuar usando os dados já salvos localmente até a conexão voltar
+   (quando um login de verdade, com e-mail e senha, passa a ser exigido de novo).
+========================================================= */
+
+function RecuperarComPin({ onEntrar }) {
+  const [pin, setPin] = useState("");
+  const [erro, setErro] = useState("");
+  const [entrando, setEntrando] = useState(false);
+
+  const tentar = async () => {
+    if (!pin.trim()) { setErro("Digite o PIN."); return; }
+    setErro(""); setEntrando(true);
+    const r = await onEntrar(pin.trim());
+    setEntrando(false);
+    if (!r.ok) setErro(r.erro);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F7F7F7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
+      <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 20, color: "#232520", marginBottom: 6, textAlign: "center" }}>Sem internet no momento</div>
+        <p style={{ fontSize: 13, color: "#6B685E", textAlign: "center", marginBottom: 22, lineHeight: 1.5 }}>
+          Não é possível confirmar a senha sem conexão. Digite o PIN deste aparelho pra continuar usando os dados já salvos aqui — a sincronização volta a funcionar assim que a internet voltar.
+        </p>
+        <Field label="PIN deste aparelho">
+          <input style={inputStyle} type="password" inputMode="numeric" value={pin}
+            onChange={(e) => { setErro(""); setPin(e.target.value); }}
+            onKeyDown={(e) => e.key === "Enter" && tentar()} placeholder="••••" autoFocus />
+        </Field>
+        {erro && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 4 }}>{erro}</p>}
+        <BtnPrimary onClick={tentar} disabled={entrando} style={{ width: "100%", justifyContent: "center", marginTop: 14 }}>
+          {entrando ? "Verificando…" : "Continuar"}
+        </BtnPrimary>
+        <p style={{ fontSize: 11, color: "#9B9686", textAlign: "center", marginTop: 16 }}>
+          Esqueceu o PIN? Só é possível recuperar o acesso normalmente quando a internet voltar.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
    LOGIN
 ========================================================= */
 
@@ -638,6 +697,10 @@ export default function App() {
   const [podeGravar, setPodeGravar] = useState(false); // true SÓ quando a leitura teve sucesso de verdade — único gate da gravação automática
   const [erroCarregamentoBanco, setErroCarregamentoBanco] = useState(false);
   const [confirmarLimparLocal, setConfirmarLimparLocal] = useState(false);
+  const [mostrarConfigPin, setMostrarConfigPin] = useState(false);
+  const [pinNovo, setPinNovo] = useState("");
+  const [pinConfirmar, setPinConfirmar] = useState("");
+  const [msgPin, setMsgPin] = useState("");
   const [ultimaSincronizacao, setUltimaSincronizacao] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
 
@@ -727,6 +790,9 @@ export default function App() {
     return true;
   };
 
+  const [recuperacaoPinDisponivel, setRecuperacaoPinDisponivel] = useState(null); // userId, se der pra oferecer recuperação por PIN
+  const [avisoSessaoPerdida, setAvisoSessaoPerdida] = useState(false); // sessão caiu sozinha (não foi "Sair"), mas há leitura não salva — espera a pessoa salvar antes de trocar de tela
+
   React.useEffect(() => {
     if (!supabaseConfigurado) return;
     obterSessao().then(async (sessao) => {
@@ -734,11 +800,24 @@ export default function App() {
         const podeSeguir = await garantirDonoDosDadosLocais(sessao.user.id);
         if (!podeSeguir) return; // a página vai recarregar sozinha
         setCurrentUser((atual) => atual || { id: sessao.user.id, _aguardandoPerfil: true });
+      } else if (!online) {
+        // sem sessão E sem internet: se esse aparelho já teve um PIN de recuperação
+        // configurado pra alguém, oferece essa saída em vez de travar no login normal
+        // (que exigiria internet pra conferir a senha no servidor).
+        const donoId = await lerMeta("donoDosDadosLocais");
+        if (donoId && (await temPinLocal(donoId))) setRecuperacaoPinDisponivel(donoId);
       }
       setSessaoAuthCarregada(true);
     });
     const cancelarEscuta = escutarMudancaAuth(async (sessao) => {
-      if (!sessao?.user) { setCurrentUser(null); return; }
+      if (!sessao?.user) {
+        // a sessão caiu sozinha (expirou, foi invalidada, etc.) — SEM passar pelo botão "Sair",
+        // que é onde normalmente avisamos sobre leitura não salva. Se houver alguma agora, não
+        // troca de tela ainda: deixa a pessoa salvar primeiro, e só desloga depois disso.
+        if (haPendenciaDeLeituraAtiva()) { setAvisoSessaoPerdida(true); return; }
+        setCurrentUser(null);
+        return;
+      }
       const podeSeguir = await garantirDonoDosDadosLocais(sessao.user.id);
       if (!podeSeguir) return;
       setCurrentUser((atual) => (atual && atual.id === sessao.user.id && !atual._aguardandoPerfil) ? atual : { id: sessao.user.id, _aguardandoPerfil: true });
@@ -746,6 +825,30 @@ export default function App() {
     return cancelarEscuta;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // enquanto o aviso de sessão perdida estiver esperando, confere periodicamente se a leitura
+  // já foi salva (ou registrada) — assim que não houver mais pendência, completa o logout
+  // sozinho, sem precisar que a pessoa clique em nada a mais.
+  React.useEffect(() => {
+    if (!avisoSessaoPerdida) return;
+    const intervalo = setInterval(() => {
+      if (!haPendenciaDeLeituraAtiva()) { setAvisoSessaoPerdida(false); setCurrentUser(null); }
+    }, 1000);
+    return () => clearInterval(intervalo);
+  }, [avisoSessaoPerdida]);
+
+  // entra usando o PIN local (sem sessão de verdade) — só restaura o perfil já salvo
+  // localmente; a sincronização continua bloqueada até um login de verdade acontecer,
+  // já que não existe uma sessão válida no servidor pra autorizar nenhum envio.
+  const entrarComPinLocal = async (pin) => {
+    const ok = await conferirPinLocal(recuperacaoPinDisponivel, pin);
+    if (!ok) return { ok: false, erro: "PIN incorreto." };
+    const perfilLocal = users.find((u) => u.id === recuperacaoPinDisponivel);
+    if (!perfilLocal) return { ok: false, erro: "Não foi possível encontrar os dados desse usuário neste aparelho." };
+    setCurrentUser({ ...perfilLocal, _recuperadoOffline: true });
+    setRecuperacaoPinDisponivel(null);
+    return { ok: true };
+  };
 
   // Depois de autenticado (id confirmado pelo Supabase), busca o perfil
   // completo (nome, perfil de acesso, fazendas autorizadas) na lista local de
@@ -781,6 +884,25 @@ export default function App() {
   };
 
   const sairDaConta = async () => {
+    // se houver animais lidos numa tela de leitura (Inseminação, Diagnóstico, etc.) que ainda
+    // não foram salvos como rascunho nem registrados, sair agora perderia essa leitura — essa
+    // lista existe só na memória da tela aberta, não é a mesma coisa que já estar salva no
+    // aparelho. Avisa antes, independente de ter internet ou não.
+    if (haPendenciaDeLeituraAtiva()) {
+      const confirmou = window.confirm(
+        "Há animais lidos numa tela de manejo que ainda não foram salvos nem registrados. Se sair agora, essa leitura será perdida. Quer sair mesmo assim?"
+      );
+      if (!confirmou) return;
+    }
+    // sem internet, sair da conta é praticamente irreversível até a conexão voltar (fazer login
+    // de novo sempre exige checar a senha no servidor) — por isso, nesse caso específico, confirma
+    // antes, pra evitar que alguém saia sem querer no meio de uma atividade a campo sem sinal.
+    if (!online) {
+      const confirmou = window.confirm(
+        "Você está sem internet agora. Se sair da conta, só vai conseguir entrar de novo quando a conexão voltar — os dados que ainda não foram sincronizados continuam salvos neste aparelho, mas ficam inacessíveis até você entrar de novo. Tem certeza que quer sair?"
+      );
+      if (!confirmou) return;
+    }
     await sair();
     setCurrentUser(null);
   };
@@ -852,7 +974,7 @@ export default function App() {
   // depois de ficar offline, e (3) periodicamente em segundo plano enquanto o app fica aberto
   // (pra também trazer alterações feitas por outras pessoas, não só enviar as suas). O botão
   // manual continua existindo, útil pra forçar uma sincronização na hora sem esperar.
-  const podeSincronizarAutomaticamente = supabaseConfigurado && online && podeGravar && currentUser && !currentUser._aguardandoPerfil;
+  const podeSincronizarAutomaticamente = supabaseConfigurado && online && podeGravar && currentUser && !currentUser._aguardandoPerfil && !currentUser._recuperadoOffline;
   const sincronizandoRef = React.useRef(false);
   React.useEffect(() => { sincronizandoRef.current = sincronizando; }, [sincronizando]);
   // guarda sempre a versão mais recente da função em uma ref, pra (3) não precisar reiniciar
@@ -1676,6 +1798,7 @@ export default function App() {
   // sobrescrever dados reais que só não puderam ser lidos ainda. Um aviso não-bloqueante aparece
   // na tela de login em vez de travar o app inteiro.
   if (!sessaoAuthCarregada) return null; // evita piscar a tela de login antes de checar sessão salva
+  if (!currentUser && recuperacaoPinDisponivel) return <RecuperarComPin onEntrar={entrarComPinLocal} />;
   if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} avisoCarregamento={erroCarregamentoBanco ? { onTentar: tentarCarregarBanco } : null} />;
   if (currentUser._aguardandoPerfil) {
     return (
@@ -1702,6 +1825,19 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "'Work Sans', sans-serif", minHeight: "100vh", background: "#F7F7F7", display: "flex" }}>
+      {avisoSessaoPerdida && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
+          background: "#A32D2D", color: "#FFFFFF", padding: "10px 16px", fontSize: 13,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", textAlign: "center",
+        }}>
+          ⚠ Sua sessão foi encerrada, mas há uma leitura de animais ainda não salva. Clique em "Salvar" na tela atual antes de continuar — a saída acontece automaticamente assim que a leitura for salva.
+          <button onClick={() => { setAvisoSessaoPerdida(false); setCurrentUser(null); }}
+            style={{ background: "none", border: "1px solid #FFFFFF", color: "#FFFFFF", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>
+            Já salvei, sair agora
+          </button>
+        </div>
+      )}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
         * { box-sizing: border-box; }
@@ -1867,7 +2003,38 @@ export default function App() {
                 </button>
               )
             )}
+            {supabaseConfigurado && (
+              mostrarConfigPin ? (
+                <div style={{ marginTop: 6, fontSize: 10.5, color: "#CCCCCC", lineHeight: 1.4 }}>
+                  Define um PIN pra continuar acessando os dados salvos neste aparelho se, um dia, sair da conta sem internet disponível.
+                  <input type="password" inputMode="numeric" placeholder="Novo PIN" value={pinNovo} onChange={(e) => { setMsgPin(""); setPinNovo(e.target.value); }}
+                    style={{ ...inputStyle, marginTop: 6, padding: "5px 8px", fontSize: 11 }} />
+                  <input type="password" inputMode="numeric" placeholder="Confirmar PIN" value={pinConfirmar} onChange={(e) => { setMsgPin(""); setPinConfirmar(e.target.value); }}
+                    style={{ ...inputStyle, marginTop: 6, padding: "5px 8px", fontSize: 11 }} />
+                  {msgPin && <p style={{ color: msgPin.includes("salvo") ? "#8CA091" : "#E3A45C", margin: "4px 0 0" }}>{msgPin}</p>}
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <button onClick={async () => {
+                      if (pinNovo.trim().length < 4) { setMsgPin("O PIN precisa ter pelo menos 4 dígitos."); return; }
+                      if (pinNovo !== pinConfirmar) { setMsgPin("Os dois PINs digitados são diferentes."); return; }
+                      await definirPinLocal(currentUser.id, pinNovo.trim());
+                      setMsgPin("PIN salvo neste aparelho."); setPinNovo(""); setPinConfirmar("");
+                    }} style={{ background: "none", border: "1px solid #6B7A6F", color: "#CCCCCC", borderRadius: 6, padding: "3px 8px", fontSize: 10.5, cursor: "pointer" }}>Salvar PIN</button>
+                    <button onClick={() => { setMostrarConfigPin(false); setPinNovo(""); setPinConfirmar(""); setMsgPin(""); }} style={{ background: "none", border: "none", color: "#CCCCCC", cursor: "pointer", fontSize: 10.5 }}>Fechar</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setMostrarConfigPin(true)} style={{ background: "none", border: "none", color: "#6B7A6F", cursor: "pointer", fontSize: 10.5, marginTop: 6, textDecoration: "underline", padding: 0, display: "block" }}>
+                  Configurar PIN de recuperação offline
+                </button>
+              )
+            )}
           </div>
+          {currentUser._recuperadoOffline && (
+            <div style={{ margin: "0 10px 10px", padding: 10, background: "rgba(227, 164, 92, 0.15)", border: "1px solid #E3A45C", borderRadius: 8, fontSize: 10.5, color: "#E3A45C", lineHeight: 1.4 }}>
+              ⚠ Acesso recuperado pelo PIN, sem sessão de verdade — a sincronização está pausada.
+              {online ? " Faça login com e-mail e senha pra retomar." : " Assim que tiver internet, faça login de novo pra retomar."}
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
             <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#EFC257", color: "#4A2E10", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
               {currentUser.nome.split(" ").map((s) => s[0]).slice(0, 2).join("")}
@@ -4798,13 +4965,19 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
               </Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
+              <Field label="Destino para vazias">
+                <select style={inputStyle} value={destinoVazias} onChange={(e) => { limparMsgSeSucesso(); setDestinoVazias(e.target.value); }}>
+                  <option value="Ressinc">Ressinc</option>
+                  <option value="Repasse">Repasse</option>
+                  <option value="Descarte">Descarte</option>
+                </select>
+              </Field>
               <div style={{ gridColumn: "1 / -1" }}>
                 <Field label="Leitura do animal (obrigatória)">
                   <div style={{ display: "flex", gap: 8 }}>
                     <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
                       onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
-                    <BtnPrimary onClick={() => { if (brinco.trim()) conferirAoLer(); resultadoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0}><ScanLine size={15} /></BtnPrimary>
                     <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
                   </div>
                 </Field>
@@ -4819,13 +4992,6 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 </div>
                 <BtnPrimary onClick={adicionar} style={{ marginBottom: 14, flexShrink: 0 }} disabled={!resultado}>Registrar</BtnPrimary>
               </div>
-              <Field label="Destino para vazias">
-                <select style={inputStyle} value={destinoVazias} onChange={(e) => { limparMsgSeSucesso(); setDestinoVazias(e.target.value); }}>
-                  <option value="Ressinc">Ressinc</option>
-                  <option value="Repasse">Repasse</option>
-                  <option value="Descarte">Descarte</option>
-                </select>
-              </Field>
             </div>
             {avisoImediato && (
               <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
@@ -5052,6 +5218,7 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
   };
 
+  const [pendente, setPendente] = useState(null); // { brinco, avisos: [] } — precisa de confirmação antes de registrar
   const adicionar = () => {
     const b = brinco.trim();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
@@ -5061,6 +5228,16 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
 
     const loteDoBicho = lotes.find((l) => (l.animais || []).includes(b));
     const pertenceASelecionados = loteDoBicho && lotesSelecionados.includes(loteDoBicho.id);
+
+    // animal de um lote diferente do(s) selecionado(s) — pede confirmação antes de registrar,
+    // em vez de simplesmente resolver sozinho pro primeiro lote selecionado.
+    if (loteDoBicho && !pertenceASelecionados) {
+      const nomesSelecionados = lotes.filter((l) => lotesSelecionados.includes(l.id)).map((l) => l.nome).join(", ") || "—";
+      setPendente({ brinco: b, avisos: [`Este animal está alocado no lote "${loteDoBicho.nome}", diferente do(s) lote(s) selecionado(s) aqui (${nomesSelecionados}).`] });
+      setMsg("");
+      return;
+    }
+
     const loteResolvidoId = pertenceASelecionados ? loteDoBicho.id : lotesSelecionados[0];
 
     setRegistros((a) => [...a, {
@@ -5070,6 +5247,17 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
     setBrinco(""); setResultadoInput(""); setResultado(""); setTempoGestacaoInformado(""); setAvisoImediato(null); setMsg("");
     brincoInputRef.current?.focus();
   };
+
+  const confirmarPendente = () => {
+    if (!pendente) return;
+    setRegistros((a) => [...a, {
+      brinco: pendente.brinco, resultado, tempoGestacaoInformado: tempoGestacaoInformado.trim() !== "" ? numBR(tempoGestacaoInformado) : null,
+      loteId: lotesSelecionados[0],
+    }]);
+    setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setTempoGestacaoInformado(""); setAvisoImediato(null); setMsg("");
+    brincoInputRef.current?.focus();
+  };
+  const cancelarPendente = () => setPendente(null);
 
   const remover = (b) => setRegistros((a) => a.filter((r) => r.brinco !== b));
 
@@ -5157,6 +5345,21 @@ function AbaDiagnosticoRepasse({ fazendaAtiva, safraAtiva, lotes, manejos, regis
                   <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
                 ))}
                 <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente.</p>
+              </div>
+            )}
+            {pendente && (
+              <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <EarTag size="sm">{pendente.brinco}</EarTag>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Confirmação necessária</span>
+                </div>
+                {pendente.avisos.map((a, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                ))}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                  <BtnPrimary onClick={confirmarPendente}>Registrar mesmo assim</BtnPrimary>
+                  <BtnGhost onClick={cancelarPendente}>Cancelar</BtnGhost>
+                </div>
               </div>
             )}
             {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("salvo") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
