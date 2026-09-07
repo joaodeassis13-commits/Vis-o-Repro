@@ -1870,8 +1870,7 @@ export default function App() {
               style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", padding: 4, display: "flex" }}>
               <Menu size={22} />
             </button>
-            <img src={logoImg} alt="VArepro" style={{ width: 26, height: 26, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} />
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 16 }}>VArepro</div>
+            <img src={logoBannerImg} alt="VArepro" style={{ height: 28, width: "auto", flexShrink: 0 }} />
           </div>
         )}
         {SUBTABS[section] && (
@@ -1880,18 +1879,23 @@ export default function App() {
               const Icon = t.icon;
               const active = sub === t.key;
               const pendentesSubtab = t.key === "implantacao" ? sugestoesRessincAtivas.length : t.key === "repasse" ? sugestoesRepasseAtivas.length : 0;
+              const estiloManejo = section === "manejo" || section === "estoque" || section === "cadastros"; // "Registrar manejo", "Estoque" e "Cadastros" usam o destaque em caixa verde, sem ícone
               return (
                 <button key={t.key} onClick={() => setSub(t.key)}
-                  style={{
+                  style={estiloManejo ? {
+                    display: "flex", alignItems: "center", padding: "9px 14px", borderRadius: 8,
+                    border: "none", background: active ? "#166336" : "transparent", color: active ? "#FFFFFF" : "#6B685E",
+                    fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.3px", cursor: "pointer", marginBottom: 5,
+                  } : {
                     display: "flex", alignItems: "center", gap: 6, padding: "9px 14px",
                     border: "none", borderBottom: active ? "2px solid #166336" : "2px solid transparent",
                     background: "transparent", color: active ? "#166336" : "#6B685E",
                     fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: -1,
                   }}>
-                  <Icon size={14} />
+                  {!estiloManejo && <Icon size={14} />}
                   {t.label}
                   {pendentesSubtab > 0 && (
-                    <span style={{ background: "#166336", color: "#FFFFFF", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px" }}>{pendentesSubtab}</span>
+                    <span style={{ background: estiloManejo ? "#FFFFFF" : "#166336", color: estiloManejo ? "#166336" : "#FFFFFF", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px", marginLeft: estiloManejo ? 6 : 0 }}>{pendentesSubtab}</span>
                   )}
                 </button>
               );
