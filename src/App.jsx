@@ -16,6 +16,7 @@ import {
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
 import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario } from "./lib/auth.js";
 import logoImg from "./assets/logo.png";
+import logoBannerImg from "./assets/logo-banner.png";
 
 /* ---------------------------------------------------------------
    VISÃOREPRO — controle de inseminação artificial de bovinos
@@ -285,15 +286,30 @@ function Field({ label, children }) {
   );
 }
 
+// legenda dos campos marcados com "*" — usada em todo formulário que tenha pelo menos um
+// campo opcional, pra explicar o que o "*" significa sem repetir "(opcional)" em cada rótulo.
+function LegendaCamposOpcionais() {
+  return <p style={{ fontSize: 11, color: "#9B9686", margin: "-6px 0 14px" }}>* Campo opcional</p>;
+}
+
 // Agrupa um campo de produto e o campo da dose correspondente lado a lado, DENTRO de um
 // único item da grade — assim os dois nunca "quebram" para linhas diferentes, não importa
 // quantas colunas cabem na tela. Usado em todos os manejos que têm par produto + dose
-// (Indução, D0, Ressinc, Retirada, Inseminação).
-function CampoProdutoDose({ labelProduto, produto, labelDose, dose }) {
+// (Indução, D0, Ressinc, Retirada, Inseminação). "unidade" (mL/unid) é resolvida a partir do
+// produto selecionado (o mesmo valor informado na entrada de estoque dele) e mostrada ao
+// lado do campo — ninguém precisa mais escolher a unidade manualmente no manejo.
+function CampoProdutoDose({ labelProduto, produto, labelDose, dose, unidade }) {
   return (
     <div className="campo-produto-dose" style={{ display: "flex", gap: 10, alignItems: "end" }}>
       <div style={{ flex: 1.6, minWidth: 0 }}><Field label={labelProduto}>{produto}</Field></div>
-      <div style={{ flex: 1, minWidth: 0 }}><Field label={labelDose}>{dose}</Field></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Field label={labelDose}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>{dose}</div>
+            {unidade && <span style={{ fontSize: 12, color: "#6B685E", flexShrink: 0 }}>{unidade}</span>}
+          </div>
+        </Field>
+      </div>
     </div>
   );
 }
@@ -1722,9 +1738,8 @@ export default function App() {
           transition: "transform 0.22s ease",
         } : { zIndex: 10 }),
       }}>
-        <div style={{ padding: "20px 18px", display: "flex", alignItems: "center", gap: 9 }}>
-          <img src={logoImg} alt="VArepro" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }} />
-          <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 18 }}>VArepro</div>
+        <div style={{ padding: "20px 18px", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
+          <img src={logoBannerImg} alt="VArepro" style={{ maxWidth: "100%", height: "auto" }} />
           {isMobile && (
             <button onClick={() => setMenuAberto(false)} aria-label="Fechar menu"
               style={{ marginLeft: "auto", background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", padding: 4 }}>
@@ -2456,7 +2471,6 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
   const [dataManejo, setDataManejo] = useState(todayISO());
   const [produtoId, setProdutoId] = useState(produtos[0]?.id || "");
   const [quantidade, setQuantidade] = useState("");
-  const [unidadeDose, setUnidadeDose] = useState(UNIDADES_EMBALAGEM[0]);
   const [comLeitura, setComLeitura] = useState(false);
   const [animaisLidos, setAnimaisLidos] = useState([]);
   useAvisarSaidaComPendencia(animaisLidos.length > 0);
@@ -2506,7 +2520,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
     const idDoLote = addLote({ retiroId: novoRetiroId, nome: novoNome, categoria, numeroAnimais: numBR(numeroAnimais), raca: null, mesParicao: null });
 
     const manejoId = registrarManejo({
-      tipo, loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, numeroAnimais: numBR(numeroAnimais), produtoId, quantidade: qtd, unidade: unidadeDose, medicamentos,
+      tipo, loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, numeroAnimais: numBR(numeroAnimais), produtoId, quantidade: qtd, unidade: produtos.find((p) => p.id === produtoId)?.unidadeEmbalagem || "mL", medicamentos,
       localEstoque, animaisLidos: comLeitura ? animaisLidos : [], detalhes: [], data: dataManejo,
     });
     registrarSaidaEstoque(produtoId, qtd, manejoId, tipo);
@@ -2570,26 +2584,20 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
-              <div style={{ display: "flex", gap: 10, alignItems: "end", gridColumn: "span 2" }}>
-                <div style={{ flex: 2, minWidth: 0 }}>
-                  <Field label="Progesterona injetável">
-                    <select style={inputStyle} value={produtoId} onChange={(e) => { limparMsgSeSucesso(); setProdutoId(e.target.value); }}>
-                      {produtos.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
-                    </select>
-                  </Field>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Field label="Dose"><input style={inputStyle} type="number" value={quantidade} onChange={(e) => { limparMsgSeSucesso(); setQuantidade(e.target.value); }} placeholder="0" /></Field>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Field label="Unidade">
-                    <select style={inputStyle} value={unidadeDose} onChange={(e) => { limparMsgSeSucesso(); setUnidadeDose(e.target.value); }}>
-                      {UNIDADES_EMBALAGEM.map((u) => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                  </Field>
-                </div>
-              </div>
+              <CampoProdutoDose
+                labelProduto="Progesterona injetável"
+                produto={
+                  <select style={inputStyle} value={produtoId} onChange={(e) => { limparMsgSeSucesso(); setProdutoId(e.target.value); }}>
+                    {produtos.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
+                  </select>
+                }
+                labelDose="Dose"
+                dose={<input className="campo-dose" style={inputStyle} type="number" value={quantidade} onChange={(e) => { limparMsgSeSucesso(); setQuantidade(e.target.value); }} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === produtoId)?.unidadeEmbalagem || "mL"}
+              />
             </div>
+
+            <LegendaCamposOpcionais />
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
               {comLeitura ? <CheckCircle2 size={18} color="#166336" /> : <Circle size={18} color="#B0AA98" />}
@@ -3074,7 +3082,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             )}
             <div className="grid-manejo">
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
-              <Field label="Protocolo padrão (opcional)">
+              <Field label="Protocolo padrão *">
                 <input style={inputStyle} list="protocolos-padrao-d0" value={protocoloPadraoNome}
                   onChange={(e) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(e.target.value); }}
                   placeholder="Nome do protocolo — novo ou já cadastrado" />
@@ -3100,7 +3108,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 </select>
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
-              <Field label="Mês de parição (opcional)">
+              <Field label="Mês de parição *">
                 <select style={inputStyle} value={mesParicao} onChange={(e) => { limparMsgSeSucesso(); setMesParicao(e.target.value); }}>
                   <option value="">— não se aplica —</option>
                   {NOMES_MES.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -3133,8 +3141,9 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     {benzoatos.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose (mL)"
+                labelDose="Dose"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseBenzoato} onChange={(e) => { limparMsgSeSucesso(); setDoseBenzoato(e.target.value); }} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === benzoatoId)?.unidadeEmbalagem || "mL"}
               />
               <CampoProdutoDose
                 labelProduto="Prostaglandina"
@@ -3143,23 +3152,25 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     {prostaglandinas.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose (mL)"
+                labelDose="Dose"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseProstaglandina} onChange={(e) => { limparMsgSeSucesso(); setDoseProstaglandina(e.target.value); }} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === prostaglandinaId)?.unidadeEmbalagem || "mL"}
               />
               <CampoProdutoDose
-                labelProduto="GnRH (opcional)"
+                labelProduto="GnRH *"
                 produto={
                   <select style={inputStyle} value={gnrhId} onChange={(e) => { limparMsgSeSucesso(); setGnrhId(e.target.value); }}>
                     <option value="">— não usar —</option>
                     {gnrh.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose (mL)"
+                labelDose="Dose"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => { limparMsgSeSucesso(); setDoseGnrh(e.target.value); }} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === gnrhId)?.unidadeEmbalagem || "mL"}
               />
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
+            <LegendaCamposOpcionais />            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
               {comLeitura ? <CheckCircle2 size={18} color="#166336" /> : <Circle size={18} color="#B0AA98" />}
               <span style={{ fontSize: 13, color: "#4A473E" }}>Registrar leitura individual dos animais (opcional)</span>
             </div>
@@ -3174,7 +3185,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       {OPCOES_ECC.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </Field>
-                  <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
+                  <Field label="Peso *"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
                   <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }} disabled={!novoNome.trim()}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={!novoNome.trim()} />
                 </div>
@@ -3410,8 +3421,9 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                               {benzoatosR.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                             </select>
                           }
-                          labelDose="Dose (mL)"
+                          labelDose="Dose"
                           dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseBenzoatoR} onChange={(e) => { limparMsgRSeSucesso(); setDoseBenzoatoR(e.target.value); }} placeholder="0" />}
+                          unidade={insumos.find((i) => i.id === benzoatoIdR)?.unidadeEmbalagem || "mL"}
                         />
                         <CampoProdutoDose
                           labelProduto="Prostaglandina"
@@ -3420,8 +3432,9 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                               {prostaglandinasR.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                             </select>
                           }
-                          labelDose="Dose (mL)"
+                          labelDose="Dose"
                           dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseProstaglandinaR} onChange={(e) => { limparMsgRSeSucesso(); setDoseProstaglandinaR(e.target.value); }} placeholder="0" />}
+                          unidade={insumos.find((i) => i.id === prostaglandinaIdR)?.unidadeEmbalagem || "mL"}
                         />
                       </div>
 
@@ -3757,7 +3770,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                 <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.ordem || "—"} readOnly />
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
-              <Field label="Protocolo padrão (opcional)">
+              <Field label="Protocolo padrão *">
                 <input style={inputStyle} list="protocolos-padrao-retirada" value={protocoloPadraoNome}
                   onChange={(e) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(e.target.value); }}
                   placeholder="Nome do protocolo — novo ou já cadastrado" />
@@ -3765,7 +3778,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                   {protocolosPadraoRetirada.map((p) => <option key={p.id} value={p.nome} />)}
                 </datalist>
               </Field>
-              <Field label="Perdas de implante (opcional)"><input style={inputStyle} type="number" min="0" value={perdasImplante} onChange={(e) => { limparMsgSeSucesso(); setPerdasImplante(e.target.value); }} placeholder="0" /></Field>
+              <Field label="Perdas de implante *"><input style={inputStyle} type="number" min="0" value={perdasImplante} onChange={(e) => { limparMsgSeSucesso(); setPerdasImplante(e.target.value); }} placeholder="0" /></Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <div style={{ display: "flex", gap: 10, alignItems: "end" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -3782,8 +3795,9 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     {prostaglandinas.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose (mL)"
+                labelDose="Dose"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseProstaglandina} onChange={(e) => { limparMsgSeSucesso(); setDoseProstaglandina(e.target.value); }} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === prostaglandinaId)?.unidadeEmbalagem || "mL"}
               />
               <CampoProdutoDose
                 labelProduto="Cipionato"
@@ -3792,8 +3806,9 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     {cipionatos.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose (mL)"
+                labelDose="Dose"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseCipionato} onChange={(e) => { limparMsgSeSucesso(); setDoseCipionato(e.target.value); }} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === cipionatoId)?.unidadeEmbalagem || "mL"}
               />
               <CampoProdutoDose
                 labelProduto="ECG/HCG"
@@ -3802,10 +3817,13 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     {ecgHcg.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose (mL)"
+                labelDose="Dose"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseEcgHcg} onChange={(e) => { limparMsgSeSucesso(); setDoseEcgHcg(e.target.value); }} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === ecgHcgId)?.unidadeEmbalagem || "mL"}
               />
             </div>
+
+            <LegendaCamposOpcionais />
 
             {jaRegistradoNestaOrdem && (
               <p style={{ fontSize: 12.5, color: "#A32D2D", marginBottom: 12 }}>
@@ -3828,7 +3846,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                       {OPCOES_ECC.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </Field>
-                  <Field label="Peso (opcional)"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
+                  <Field label="Peso *"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
                   <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }} disabled={!loteId}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={!loteId} />
                 </div>
@@ -4323,7 +4341,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente; a confirmação final aparecerá ao registrar o animal.</p>
                 </div>
               )}
-              <Field label="Raça da matriz (opcional)">
+              <Field label="Raça da matriz *">
                 <input style={inputStyle} list="racas-conhecidas" value={racaMatriz} onChange={(e) => { limparMsgSeSucesso(); setRacaMatriz(e.target.value); }} placeholder="Ex: Nelore" />
                 <datalist id="racas-conhecidas">
                   {racasConhecidas.map((r) => <option key={r} value={r} />)}
@@ -4352,23 +4370,26 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   {OPCOES_ECC.map((o) => <option key={o} value={o} />)}
                 </datalist>
               </Field>
-              <Field label="Peso (opcional)"><input ref={pesoInputRef} style={inputStyle} value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg"
+              <Field label="Peso *"><input ref={pesoInputRef} style={inputStyle} value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg"
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); observacoesInputRef.current?.focus(); } }} /></Field>
-              <Field label="Observações (opcional)"><input ref={observacoesInputRef} style={inputStyle} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Livre"
+              <Field label="Observações *"><input ref={observacoesInputRef} style={inputStyle} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Livre"
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionar(); } }} /></Field>
               <CampoProdutoDose
-                labelProduto="GnRH (opcional)"
+                labelProduto="GnRH *"
                 produto={
                   <select style={inputStyle} value={gnrhId} onChange={(e) => setGnrhId(e.target.value)}>
                     <option value="">— não usar —</option>
                     {gnrh.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
                   </select>
                 }
-                labelDose="Dose (mL)"
+                labelDose="Dose"
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => setDoseGnrh(e.target.value)} placeholder="0" />}
+                unidade={insumos.find((i) => i.id === gnrhId)?.unidadeEmbalagem || "mL"}
               />
               <BtnPrimary onClick={adicionar} style={{ marginBottom: 14 }} disabled={lotesSelecionados.length === 0}>Registrar animal</BtnPrimary>
             </div>
+
+            <LegendaCamposOpcionais />
 
             {pendente && (
               <div style={{ marginBottom: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
@@ -5704,7 +5725,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                 <Field label="Quantidade"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
-                <Field label="Observação (opcional)"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, lote..." /></Field>
+                <Field label="Observação *"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, lote..." /></Field>
               </div>
             )}
 
@@ -5716,21 +5737,21 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                 <Field label="Quantidade de doses"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
-                <Field label="Motilidade inicial (%) (opcional)"><input style={inputStyle} type="number" min="0" max="100" value={form.motilidadeInicial} onChange={set("motilidadeInicial")} placeholder="0 a 100" /></Field>
-                <Field label="Vigor inicial (opcional)">
+                <Field label="Motilidade inicial (%) *"><input style={inputStyle} type="number" min="0" max="100" value={form.motilidadeInicial} onChange={set("motilidadeInicial")} placeholder="0 a 100" /></Field>
+                <Field label="Vigor inicial *">
                   <select style={inputStyle} value={form.vigorInicial} onChange={set("vigorInicial")}>
                     <option value="">— não informado —</option>
                     {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </Field>
-                <Field label="Motilidade final (%) (opcional)"><input style={inputStyle} type="number" min="0" max="100" value={form.motilidadeFinal} onChange={set("motilidadeFinal")} placeholder="0 a 100" /></Field>
-                <Field label="Vigor final (opcional)">
+                <Field label="Motilidade final (%) *"><input style={inputStyle} type="number" min="0" max="100" value={form.motilidadeFinal} onChange={set("motilidadeFinal")} placeholder="0 a 100" /></Field>
+                <Field label="Vigor final *">
                   <select style={inputStyle} value={form.vigorFinal} onChange={set("vigorFinal")}>
                     <option value="">— não informado —</option>
                     {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </Field>
-                <Field label="Observação (opcional)"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, central de IA..." /></Field>
+                <Field label="Observação *"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, central de IA..." /></Field>
               </div>
             )}
 
@@ -5753,7 +5774,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                 <Field label="Quantidade"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
-                <Field label="Observação (opcional)"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, lote..." /></Field>
+                <Field label="Observação *"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, lote..." /></Field>
               </div>
             )}
 
@@ -5764,11 +5785,12 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                 <Field label="Quantidade"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
-                <Field label="Observação (opcional)"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, fornecedor..." /></Field>
+                <Field label="Observação *"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, fornecedor..." /></Field>
               </div>
             )}
 
             {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            <LegendaCamposOpcionais />
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: 12 }}>
               <Plus size={15} /> Registrar entrada
             </BtnPrimary>
@@ -6308,7 +6330,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                 </select>
               </Field>
               <Field label="Data"><input style={inputStyle} type="date" value={form.data} onChange={set("data")} /></Field>
-              <Field label="Nº de animais (opcional)"><input style={inputStyle} type="number" min="0" value={form.numeroAnimais} onChange={set("numeroAnimais")} placeholder="0" /></Field>
+              <Field label="Nº de animais *"><input style={inputStyle} type="number" min="0" value={form.numeroAnimais} onChange={set("numeroAnimais")} placeholder="0" /></Field>
               {form.tipo === "D0" && (
                 <>
                   <Field label="Número de manejos">
@@ -6331,6 +6353,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
               </BtnPrimary>
             </div>
             {msg && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 10 }}>{msg}</p>}
+            <LegendaCamposOpcionais />
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 16 }}>
