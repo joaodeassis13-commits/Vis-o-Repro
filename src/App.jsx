@@ -17,6 +17,7 @@ import { supabaseConfigurado } from "./lib/supabaseClient.js";
 import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario } from "./lib/auth.js";
 import logoImg from "./assets/logo.png";
 import logoBannerImg from "./assets/logo-banner.png";
+import logoBannerLoginImg from "./assets/logo-banner-login.png";
 
 /* ---------------------------------------------------------------
    VISÃOREPRO — controle de inseminação artificial de bovinos
@@ -569,12 +570,8 @@ function Login({ users, onLoginLocal, onEntrarReal, avisoCarregamento }) {
   return (
     <div style={{ minHeight: "100vh", background: "#F7F7F7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Work Sans', sans-serif", padding: 20 }}>
       <div style={{ width: 380, maxWidth: "100%", background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 16, padding: "34px 30px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <img src={logoImg} alt="VArepro" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover" }} />
-          <div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 22, color: "#232520" }}>VArepro</div>
-            <div style={{ fontSize: 12, color: "#9B9686" }}>Controle de IATF a campo</div>
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, marginBottom: 4 }}>
+          <img src={logoBannerLoginImg} alt="VArepro" style={{ maxWidth: "100%", height: "auto" }} />
         </div>
         <div style={{ height: 1, background: "#EEEEEE", margin: "20px 0" }} />
 
