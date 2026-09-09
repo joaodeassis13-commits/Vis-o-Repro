@@ -4753,16 +4753,18 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 : "Este lote já foi composto na leitura da 1º IATF. Os animais lidos abaixo devem ser os mesmos já atribuídos a ele."}
             </p>
             <div className="grid-manejo" style={{ alignItems: "end" }}>
-              <Field label="Identificação">
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
-                    onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
-                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
-                </div>
-              </Field>
+              <div className="campo-leitura-linha-cheia-mobile">
+                <Field label="Identificação">
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
+                      onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
+                    <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
+                  </div>
+                </Field>
+              </div>
               {avisoImediato && (
-                <div style={{ gridColumn: "1 / -1", marginBottom: 4, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                <div className="campo-leitura-linha-cheia-mobile" style={{ marginBottom: 4, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <EarTag size="sm">{avisoImediato.brinco}</EarTag>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
@@ -5287,6 +5289,17 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   </div>
                 </Field>
               </div>
+              {avisoImediato && (
+                <div className="campo-leitura-linha-cheia-mobile" style={{ marginBottom: 4, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                  </div>
+                  {avisoImediato.avisos.map((a, i) => (
+                    <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                  ))}
+                </div>
+              )}
               <div className="campo-leitura-linha-cheia-mobile" style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Field label="Resultado">
@@ -5318,18 +5331,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 </div>
               )}
             </div>
-            {avisoImediato && (
-              <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
-                </div>
-                {avisoImediato.avisos.map((a, i) => (
-                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
-                ))}
-                <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Preencha o Resultado normalmente — a confirmação final aparecerá ao registrar.</p>
-              </div>
-            )}
+
             {!editandoManejo && jaRegistradoNestaOrdem && (
               <p style={{ fontSize: 12.5, color: "#A32D2D", margin: "10px 0 0" }}>
                 Já existe um Diagnóstico registrado na {ordemComum} para: {lotesJaRegistrados.map((l) => l.nome).join(", ")}. Não é possível registrar de novo para a mesma ordem.
@@ -7506,13 +7508,17 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   const lista = ordenarPorTaxaDesc ? [...dados].sort((a, b) => b.taxa - a.taxa) : dados;
   if (lista.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorTaxa = Math.max(...lista.map((d) => d.taxa || 0), 10);
+  // altura em pixels fixos (não porcentagem) — dentro de contêineres flex aninhados, uma altura
+  // em "%" às vezes não consegue se basear numa altura definida do pai, e todas as barras acabam
+  // saindo do mesmo tamanho. Em pixel fixo, a altura de cada barra sempre reflete o valor dela.
+  const alturaMaximaPx = compacto ? 90 : 140;
   return (
     <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: lista.length > (compacto ? 6 : 8) ? "flex-start" : "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
       {lista.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa != null ? `${d.taxa}%` : "—"}</div>
-            <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * 100, 3) : 1}%`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
+            <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * alturaMaximaPx, 4) : 2}px`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
           {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>}
