@@ -66,6 +66,31 @@ const COLECOES_COM_CRIADO_EM = new Set([
   "movimentos", "agendamentos", "sugestoesRessinc", "sugestoesRepasse", "protocolosPadrao",
 ]);
 
+// campos "not null default X" que foram adicionados numa tabela DEPOIS que ela já tinha
+// registros — sem essa lista, ao enviar a coleção inteira num único lote, um registro
+// antigo que nunca teve esse campo (undefined no lado do app) é interpretado pelo Supabase
+// como "definir como vazio" (não como "usar o padrão"), e a linha toda falha com
+// "violates not-null constraint" mesmo a coluna tendo um padrão definido no banco.
+// Isso NÃO tem a ver com o campo em si ser opcional — é sobre registros antigos que nunca
+// tiveram a chance de recebê-lo. Sempre que um campo assim for criado no futuro, basta
+// adicionar aqui (coleção -> { campo: valorPadrão }).
+const CAMPOS_COM_PADRAO_OBRIGATORIO = {
+  manejos: { detalhes: [], animaisLidos: [], medicamentos: [] },
+  safras: { lancamentosDesabilitados: false },
+};
+
+function aplicarPadroesObrigatorios(colecao, itens) {
+  const padroes = CAMPOS_COM_PADRAO_OBRIGATORIO[colecao];
+  if (!padroes) return itens;
+  return itens.map((item) => {
+    let alterado = null;
+    for (const [campo, valorPadrao] of Object.entries(padroes)) {
+      if (item[campo] === undefined) { alterado = alterado || { ...item }; alterado[campo] = valorPadrao; }
+    }
+    return alterado || item;
+  });
+}
+
 // ---------- envia (upsert) uma coleção inteira ----------
 async function enviarColecao(colecao, itens) {
   if (!supabaseConfigurado || !itens || itens.length === 0) return { ok: true, enviados: 0 };
@@ -96,18 +121,8 @@ async function enviarColecao(colecao, itens) {
       const { numeroManejos, duracaoProtocolo, ...resto } = item;
       return { ...resto, tipoManejo: resto.tipoManejo || numeroManejos || null, protocolo: resto.protocolo || duracaoProtocolo || null };
     });
-    // "detalhes" é obrigatório (not null) na tabela — manejos sem leitura individual (D0,
-    // Indução, Retirada sem leitura) nunca definem esse campo, ficando undefined. Enviado
-    // junto de outros manejos que TÊM detalhes, o lote inteiro falhava (a linha sem o campo
-    // era gravada como null, violando a coluna). Preenche com lista vazia por padrão.
-    validos = validos.map((item) => (item.detalhes ? item : { ...item, detalhes: [] }));
-    // mesmo problema com "animaisLidos" — o Repasse (registro do período, sem leitura
-    // individual) nunca preenchia esse campo, e ele também é obrigatório na tabela.
-    validos = validos.map((item) => (item.animaisLidos ? item : { ...item, animaisLidos: [] }));
-    // e também "medicamentos" — o mesmo Repasse (e qualquer manejo sem essa etapa) pode nunca
-    // ter definido esse campo, que também é obrigatório na tabela.
-    validos = validos.map((item) => (item.medicamentos ? item : { ...item, medicamentos: [] }));
   }
+  validos = aplicarPadroesObrigatorios(colecao, validos);
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
     : null;
