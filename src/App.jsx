@@ -7284,7 +7284,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
       <FiltroFazendaSafraAdmin perfil={perfil} fazendasVisiveis={fazendasVisiveis} safras={safras}
         fazendaId={filtroFazendaId} setFazendaId={setFiltroFazendaId} safraId={filtroSafraId} setSafraId={setFiltroSafraId} />
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
-        <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />
+        {perfil !== "Administrador" && <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />}
         {fazendaExibida && (
           <>
             <select value={filtroRetiroId} onChange={(e) => setFiltroRetiroId(e.target.value)}
@@ -7520,7 +7520,7 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa != null ? `${d.taxa}%` : "—"}</div>
             <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * alturaMaximaPx, 4) : 2}px`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
-          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
+          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, minHeight: compacto ? 22 : 27, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
           {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>}
         </div>
       ))}
@@ -7955,7 +7955,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
       <SectionTitle icon={TrendingUp} title="Benchmarking" subtitle="Compare a fazenda ativa com outras fazendas — escolha o grupo de comparação abaixo." />
       <FiltroFazendaSafraAdmin perfil={perfil} fazendasVisiveis={fazendasVisiveis} safras={safras}
         fazendaId={filtroFazendaId} setFazendaId={setFiltroFazendaId} safraId={filtroSafraId} setSafraId={setFiltroSafraId} />
-      <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />
+      {perfil !== "Administrador" && <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />}
       {!fazendaExibida ? (
         <EmptyState text="Selecione uma fazenda ativa para comparar." />
       ) : (
