@@ -2175,7 +2175,7 @@ export default function App() {
                   {!estiloManejo && <Icon size={14} />}
                   {t.label}
                   {pendentesSubtab > 0 && (
-                    <span style={{ background: estiloManejo ? "#FFFFFF" : "#166336", color: estiloManejo ? "#166336" : "#FFFFFF", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px", marginLeft: estiloManejo ? 6 : 0 }}>{pendentesSubtab}</span>
+                    <span style={{ background: "#EFC257", color: "#4A2E10", fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: "1px 7px", marginLeft: estiloManejo ? 6 : 0 }}>{pendentesSubtab}</span>
                   )}
                 </button>
               );
@@ -4527,7 +4527,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       loteId: loteResolvidoId,
     };
 
-    if (avisos.length > 0) { setPendente({ ...dados, avisos, loteConflito }); setMsg(""); return; }
+    if (avisos.length > 0) { setPendente({ ...dados, avisos, loteConflito, loteOrigemId: loteDoBicho?.id || null }); setMsg(""); return; }
 
     setRegistros((a) => [...a, dados]);
     limparCamposLeitura();
@@ -4535,13 +4535,13 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
   const confirmarPendente = () => {
     if (!pendente) return;
-    const { avisos, loteConflito, ...dados } = pendente;
+    const { avisos, loteConflito, loteOrigemId, ...dados } = pendente;
     setRegistros((a) => [...a, dados]);
     setPendente(null); limparCamposLeitura();
   };
   const confirmarComoDesconhecido = () => {
     if (!pendente) return;
-    const { avisos, loteConflito, ...dados } = pendente;
+    const { avisos, loteConflito, loteOrigemId, ...dados } = pendente;
     const idDesconhecidos = garantirLoteDesconhecidos();
     addAnimalAoLote(idDesconhecidos, pendente.brinco);
     setRegistros((a) => [...a, { ...dados, loteId: idDesconhecidos, notaAtribuicao: "Atribuído ao lote de desconhecidos" }]);
@@ -4549,11 +4549,19 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   };
   const confirmarComoLoteAtual = () => {
     if (!pendente || lotesSelecionados.length !== 1) return;
-    const { avisos, loteConflito, ...dados } = pendente;
+    const { avisos, loteConflito, loteOrigemId, ...dados } = pendente;
     const alvoId = lotesSelecionados[0];
     addAnimalAoLote(alvoId, pendente.brinco);
     atribuirManejosRetroativosPorOrdem(alvoId, [pendente.brinco], ordemComum);
     setRegistros((a) => [...a, { ...dados, loteId: alvoId, notaAtribuicao: "Inserido por dedução" }]);
+    setPendente(null); limparCamposLeitura();
+  };
+  // registra o animal normalmente, mas atribui a informação ao lote de ORIGEM dele (o que
+  // já era o dele de fato) — não ao lote que estava selecionado na tela.
+  const confirmarComoLoteOrigem = () => {
+    if (!pendente || !pendente.loteOrigemId) return;
+    const { avisos, loteConflito, loteOrigemId, ...dados } = pendente;
+    setRegistros((a) => [...a, { ...dados, loteId: loteOrigemId, notaAtribuicao: "Registrado no lote de origem do animal" }]);
     setPendente(null); limparCamposLeitura();
   };
   const cancelarPendente = () => setPendente(null);
@@ -4827,6 +4835,9 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                   {pendente.loteConflito ? (
                     <>
+                      {pendente.loteOrigemId && (
+                        <BtnPrimary onClick={confirmarComoLoteOrigem}>Registrar e atribuir a seu lote de origem</BtnPrimary>
+                      )}
                       <BtnPrimary onClick={confirmarComoDesconhecido}>Registrar e atribuir ao lote de desconhecidos</BtnPrimary>
                       {lotesSelecionados.length === 1 && (
                         <BtnPrimary onClick={confirmarComoLoteAtual}>Registrar e atribuir ao lote atual</BtnPrimary>
@@ -5071,7 +5082,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
       avisos.push("Não foi encontrada nenhuma Inseminação registrada para este animal.");
       semInseminacao = true;
     } else {
-      const dias = diasEntre(ultimaInsem.data, todayISO());
+      const dias = diasEntre(ultimaInsem.data, dataManejo);
       if (dias < 26) {
         avisos.push(`Só se passaram ${dias} dia(s) desde a última Inseminação deste animal (${fmtDate(ultimaInsem.data)}). O recomendado é aguardar ao menos 26 dias.`);
       }
@@ -5084,7 +5095,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     if (prenhezAnterior) {
       avisos.push(`Este animal já tem um registro de Prenha em ${fmtDate(prenhezAnterior.data)}.`);
     }
-    return { avisos, semInseminacao, loteConflito, loteResolvidoId };
+    return { avisos, semInseminacao, loteConflito, loteResolvidoId, loteOrigemId: loteDoBicho?.id || null };
   };
 
   // aviso imediato assim que o brinco é lido — antes mesmo do Resultado ser preenchido
@@ -5103,10 +5114,10 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     if (!resultado) { setMsg("Digite P (Prenha) ou V (Vazia) no campo Resultado."); resultadoInputRef.current?.focus(); return; }
     if (resultado === "Prenha" && tempoGestacaoInput.trim() === "") { setMsg("Informe o Tempo de gestação."); tempoGestacaoInputRef.current?.focus(); return; }
 
-    const { avisos, semInseminacao, loteConflito, loteResolvidoId } = calcularAvisos(b);
+    const { avisos, semInseminacao, loteConflito, loteResolvidoId, loteOrigemId } = calcularAvisos(b);
     const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
 
-    if (avisos.length > 0) { setPendente({ brinco: b, avisos, semInseminacao, loteConflito, loteResolvidoId }); setMsg(""); return; }
+    if (avisos.length > 0) { setPendente({ brinco: b, avisos, semInseminacao, loteConflito, loteResolvidoId, loteOrigemId }); setMsg(""); return; }
 
     setRegistros((a) => [...a, { brinco: b, resultado, loteId: loteResolvidoId, ...camposPrenhez }]);
     setBrinco(""); setResultadoInput(""); setResultado(""); setAvisoImediato(null); setMsg("");
@@ -5136,6 +5147,15 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     atribuirManejosRetroativos(alvoId, [pendente.brinco]);
     const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
     setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: alvoId, observacao: "Inserido por dedução", ...camposPrenhez }]);
+    setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setMsg("");
+    brincoInputRef.current?.focus();
+  };
+  // registra o animal normalmente, mas atribui a informação ao lote de ORIGEM dele (o que
+  // já era o dele de fato) — não ao lote que estava selecionado na tela.
+  const confirmarComoLoteOrigem = () => {
+    if (!pendente || !pendente.loteOrigemId) return;
+    const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
+    setRegistros((a) => [...a, { brinco: pendente.brinco, resultado, loteId: pendente.loteOrigemId, observacao: "Registrado no lote de origem do animal", ...camposPrenhez }]);
     setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setMsg("");
     brincoInputRef.current?.focus();
   };
@@ -5326,7 +5346,16 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
                 ))}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                  {pendente.semInseminacao ? (
+                  {pendente.loteConflito ? (
+                    <>
+                      {pendente.loteOrigemId && (
+                        <BtnPrimary onClick={confirmarComoLoteOrigem}>Registrar e atribuir a seu lote de origem</BtnPrimary>
+                      )}
+                      {lotesSelecionados.length === 1 && (
+                        <BtnPrimary onClick={confirmarComoLoteAtual}>Registrar e atribuir ao lote atual</BtnPrimary>
+                      )}
+                    </>
+                  ) : pendente.semInseminacao ? (
                     <>
                       <BtnPrimary onClick={confirmarComoDesconhecido}>Registrar e atribuir ao lote de desconhecidos</BtnPrimary>
                       {lotesSelecionados.length === 1 && (
@@ -5918,7 +5947,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
 
   const empty = {
     produtoComercial: "", hormonio: HORMONIOS[0], tamanhoEmbalagem: "", unidadeEmbalagem: UNIDADES_EMBALAGEM[0],
-    touro: "", raca: "", partida: "", unidade: "", quantidade: "",
+    touro: "", raca: "", partida: "", unidade: "", quantidade: "", doseMedia: "",
     motilidadeInicial: "", vigorInicial: "", motilidadeFinal: "", vigorFinal: "",
   };
   const [form, setForm] = useState(empty);
@@ -5946,7 +5975,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
     const qtd = numBR(form.quantidade);
     let camposItem = {};
     if (categoriaInterna === "Hormônio") {
-      camposItem = { produtoComercial: form.produtoComercial, hormonio: form.hormonio, tamanhoEmbalagem: numBR(form.tamanhoEmbalagem), unidadeEmbalagem: form.unidadeEmbalagem };
+      camposItem = { produtoComercial: form.produtoComercial, hormonio: form.hormonio, tamanhoEmbalagem: numBR(form.tamanhoEmbalagem), unidadeEmbalagem: form.unidadeEmbalagem, doseMedia: form.doseMedia.trim() !== "" ? numBR(form.doseMedia) : null };
     } else if (categoriaInterna === "Sêmen") {
       camposItem = {
         touro: form.touro, raca: form.raca, partida: form.partida,
@@ -5956,7 +5985,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
         vigorFinal: form.vigorFinal !== "" ? Number(form.vigorFinal) : null,
       };
     } else if (categoriaInterna === "Medicamento") {
-      camposItem = { produtoComercial: form.produtoComercial, tipoMedicamento: form.tipoMedicamento || TIPOS_MEDICAMENTO[0], tamanhoEmbalagem: numBR(form.tamanhoEmbalagem), unidadeEmbalagem: form.unidadeEmbalagem };
+      camposItem = { produtoComercial: form.produtoComercial, tipoMedicamento: form.tipoMedicamento || TIPOS_MEDICAMENTO[0], tamanhoEmbalagem: numBR(form.tamanhoEmbalagem), unidadeEmbalagem: form.unidadeEmbalagem, doseMedia: form.doseMedia.trim() !== "" ? numBR(form.doseMedia) : null };
     } else if (categoriaInterna === "Utensílio") {
       camposItem = { produtoComercial: form.produtoComercial, unidade: form.unidade };
     }
@@ -6027,6 +6056,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                   </div>
                 </Field>
                 <Field label="Quantidade"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
+                <Field label="Dose média *"><input style={inputStyle} type="number" min="0" step="any" value={form.doseMedia} onChange={set("doseMedia")} placeholder={form.unidadeEmbalagem ? `Em ${form.unidadeEmbalagem}` : "0"} /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
                 <Field label="Observação *"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, lote..." /></Field>
@@ -6076,6 +6106,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                   </div>
                 </Field>
                 <Field label="Quantidade"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
+                <Field label="Dose média *"><input style={inputStyle} type="number" min="0" step="any" value={form.doseMedia} onChange={set("doseMedia")} placeholder={form.unidadeEmbalagem ? `Em ${form.unidadeEmbalagem}` : "0"} /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
                 <Field label="Observação *"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, lote..." /></Field>
