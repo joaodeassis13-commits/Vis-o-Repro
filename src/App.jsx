@@ -4469,7 +4469,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // outro campo ser preenchido: já avisa se o animal tem Diagnóstico de Prenha ou se pertence a outro lote.
   const conferirAoLer = () => {
     const b = brinco.trim();
-    if (!b) return;
+    if (!b) return false;
     const avisos = [];
     const diagPrenha = buscarDiagnosticoPrenha(b);
     if (diagPrenha) avisos.push(`Este animal já tem um Diagnóstico registrado como Prenha em ${fmtDate(diagPrenha.data)}.`);
@@ -4481,6 +4481,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
     // raça da matriz: reaproveita a já atribuída antes; se não houver, deixa livre para digitar
     setRacaMatriz(buscarRacaConhecida(b) || "");
+    return avisos.length > 0;
   };
 
   const limparCamposLeitura = () => { setBrinco(""); setEcc(""); setPeso(""); setObservacoes(""); setGnrhId(""); setDoseGnrh(""); setRacaMatriz(""); setMsg(""); setAvisoImediato(null); brincoInputRef.current?.focus(); };
@@ -4753,28 +4754,14 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 : "Este lote já foi composto na leitura da 1º IATF. Os animais lidos abaixo devem ser os mesmos já atribuídos a ele."}
             </p>
             <div className="grid-manejo" style={{ alignItems: "end" }}>
-              <div className="campo-leitura-linha-cheia-mobile">
-                <Field label="Identificação">
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
-                      onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
-                    <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
-                  </div>
-                </Field>
-              </div>
-              {avisoImediato && (
-                <div className="campo-leitura-linha-cheia-mobile" style={{ marginBottom: 4, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
-                  </div>
-                  {avisoImediato.avisos.map((a, i) => (
-                    <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
-                  ))}
-                  <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente; a confirmação final aparecerá ao registrar o animal.</p>
+              <Field label="Identificação">
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
+                    onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
+                  <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
                 </div>
-              )}
+              </Field>
               <Field label="Raça da matriz *">
                 <input style={inputStyle} list="racas-conhecidas" value={racaMatriz} onChange={(e) => { limparMsgSeSucesso(); setRacaMatriz(e.target.value); }} placeholder="Ex: Nelore" />
                 <datalist id="racas-conhecidas">
@@ -4824,6 +4811,19 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             </div>
 
             <LegendaCamposOpcionais />
+
+            {avisoImediato && (
+              <div style={{ marginBottom: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                </div>
+                {avisoImediato.avisos.map((a, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                ))}
+                <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Você ainda pode continuar preenchendo os demais campos normalmente; a confirmação final aparecerá ao registrar o animal.</p>
+              </div>
+            )}
 
             {pendente && (
               <div style={{ marginBottom: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
@@ -5104,9 +5104,10 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   const [avisoImediato, setAvisoImediato] = useState(null);
   const conferirAoLer = () => {
     const b = brinco.trim();
-    if (!b) return;
+    if (!b) return false;
     const { avisos } = calcularAvisos(b);
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
+    return avisos.length > 0;
   };
 
   const adicionar = () => {
@@ -5289,17 +5290,6 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   </div>
                 </Field>
               </div>
-              {avisoImediato && (
-                <div className="campo-leitura-linha-cheia-mobile" style={{ marginBottom: 4, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <EarTag size="sm">{avisoImediato.brinco}</EarTag>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
-                  </div>
-                  {avisoImediato.avisos.map((a, i) => (
-                    <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
-                  ))}
-                </div>
-              )}
               <div className="campo-leitura-linha-cheia-mobile" style={{ display: "flex", gap: 8, alignItems: "end", minWidth: 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Field label="Resultado">
@@ -5331,6 +5321,18 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 </div>
               )}
             </div>
+
+            {avisoImediato && (
+              <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <EarTag size="sm">{avisoImediato.brinco}</EarTag>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#8A3E15" }}>Atenção a este animal</span>
+                </div>
+                {avisoImediato.avisos.map((a, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: "#8A3E15", margin: "4px 0" }}>⚠ {a}</p>
+                ))}
+              </div>
+            )}
 
             {!editandoManejo && jaRegistradoNestaOrdem && (
               <p style={{ fontSize: 12.5, color: "#A32D2D", margin: "10px 0 0" }}>
@@ -7520,8 +7522,8 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa != null ? `${d.taxa}%` : "—"}</div>
             <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * alturaMaximaPx, 4) : 2}px`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
-          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, minHeight: compacto ? 22 : 27, wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
-          {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98" }}>n={d.n}</div>}
+          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, height: compacto ? 22 : 27, flexShrink: 0, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
+          {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98", flexShrink: 0 }}>n={d.n}</div>}
         </div>
       ))}
     </div>
