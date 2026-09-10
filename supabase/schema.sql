@@ -177,6 +177,7 @@ alter table manejos add column if not exists horario_final text;
 alter table manejos add column if not exists data_inicio date;
 alter table manejos add column if not exists data_fim date;
 alter table manejos add column if not exists destino_vazias text;
+alter table manejos add column if not exists raca_touro text;  -- Repasse: raça do(s) touro(s) usado(s), texto livre com memória (sugestões vêm do próprio histórico, sem cadastro à parte)
 
 -- garante que a restrição de "tipo" já aceite os manejos mais novos mesmo em
 -- bancos criados antes deles existirem (o nome da constraint é o padrão gerado pelo Postgres).
@@ -267,6 +268,25 @@ create table if not exists protocolos_padrao (
   criado_em timestamptz not null default now()
 );
 
+-- ---------- lápides (registro de exclusões) ----------
+-- Resolve um problema real de sincronizar vários aparelhos offline: sem isso, se o
+-- computador apaga um registro e sincroniza, mas o celular ainda tem esse mesmo registro
+-- guardado localmente (por ainda não ter sincronizado desde a exclusão), o celular acaba
+-- reenviando esse registro de volta pro servidor na sincronização dele — "ressuscitando"
+-- algo que já tinha sido apagado. Toda exclusão passa a deixar uma "lápide" aqui (o id
+-- original do registro apagado + de qual tabela), e cada aparelho consulta essa lista antes
+-- de enviar ou mesclar dados, pra nunca reenviar nem readicionar algo já apagado em outro lugar.
+create table if not exists exclusoes (
+  id text primary key,  -- o mesmo id que o registro apagado tinha na tabela de origem
+  tabela text not null,
+  apagado_em timestamptz not null default now()
+);
+
+alter table exclusoes enable row level security;
+drop policy if exists "exclusoes: leitura e escrita para autenticados" on exclusoes;
+create policy "exclusoes: leitura e escrita para autenticados" on exclusoes
+  for all using (auth.uid() is not null);
+
 -- ---------- agenda ----------
 create table if not exists agendamentos (
   id text primary key,
@@ -292,6 +312,7 @@ create table if not exists agendamentos (
 alter table agendamentos add column if not exists numero_animais integer;
 alter table agendamentos add column if not exists ordem_exibicao integer;
 alter table agendamentos add column if not exists categoria text;
+alter table agendamentos add column if not exists sugestoes_descartadas text[];  -- tipos de sugestão automática que o usuário já apagou a partir deste agendamento (evita recriar sozinho ao editar/confirmar)
 
 -- garante "criado_em" em TODAS as tabelas que precisam dele, mesmo nas que foram criadas
 -- há mais tempo (antes dessa coluna existir na definição de "create table" acima) — "create

@@ -47,6 +47,7 @@ const TABELAS = {
   sugestoesRessinc: "sugestoes_ressinc",
   sugestoesRepasse: "sugestoes_repasse",
   protocolosPadrao: "protocolos_padrao",
+  exclusoes: "exclusoes",
 };
 
 // campos que existem só no app (derivados/locais) e nunca devem ser enviados
@@ -220,19 +221,47 @@ export async function sincronizar(estado) {
   }
 
   const erros = [];
+
+  // busca as lápides ANTES de mais nada — precisa saber o que já foi apagado em outros
+  // aparelhos antes de enviar qualquer coleção, senão o envio mandaria de volta pro servidor
+  // algo que este aparelho ainda não sabe que foi apagado (a "ressurreição" que esse mecanismo
+  // inteiro existe pra evitar). idsApagados junta o que já sabíamos localmente com o que
+  // acabou de vir do servidor — nunca "esquece" uma lápide, só acumula.
+  const resultadoExclusoesBusca = await buscarColecao("exclusoes");
+  const exclusoesConhecidas = resultadoExclusoesBusca.ok
+    ? mesclarComLocal(estado.exclusoes, resultadoExclusoesBusca.itens)
+    : (estado.exclusoes || []);
+  if (!resultadoExclusoesBusca.ok) erros.push(`exclusoes: ${resultadoExclusoesBusca.erro}`);
+  const idsApagados = new Set(exclusoesConhecidas.map((e) => e.id));
+
   for (const colecao of Object.keys(TABELAS)) {
-    const resultado = await enviarColecao(colecao, estado[colecao]);
+    if (colecao === "exclusoes") { estado = { ...estado, exclusoes: exclusoesConhecidas }; continue; }
+    // nunca reenvia algo que já sabemos ter sido apagado (por este aparelho ou por outro)
+    const itensSemApagados = (estado[colecao] || []).filter((item) => !item.id || !idsApagados.has(item.id));
+    const resultado = await enviarColecao(colecao, itensSemApagados);
     if (!resultado.ok) erros.push(`${colecao}: ${resultado.erro}`);
   }
+  // envia as lápides por último — depois de já ter usado a lista mesclada pra filtrar o envio
+  // acima, evita qualquer condição de corrida entre "ler exclusões" e "enviar exclusões".
+  const resultadoExclusoesEnvio = await enviarColecao("exclusoes", exclusoesConhecidas);
+  if (!resultadoExclusoesEnvio.ok) erros.push(`exclusoes: ${resultadoExclusoesEnvio.erro}`);
 
   const resultadoAutorizEnvio = await enviarAutorizacoes(estado.usuarios);
   if (!resultadoAutorizEnvio.ok) (resultadoAutorizEnvio.erros || []).forEach((e) => erros.push(`autorizações: ${e}`));
 
-  const atualizado = {};
+  const atualizado = { exclusoes: exclusoesConhecidas };
   for (const colecao of Object.keys(TABELAS)) {
+    if (colecao === "exclusoes") continue;
     const resultado = await buscarColecao(colecao);
-    if (resultado.ok) atualizado[colecao] = mesclarComLocal(estado[colecao], resultado.itens);
-    else erros.push(`${colecao}: ${resultado.erro}`);
+    if (resultado.ok) {
+      const mesclado = mesclarComLocal(estado[colecao], resultado.itens);
+      // remove do resultado final qualquer item que, entre o momento em que lemos as lápides
+      // (lá em cima) e agora, tenha sido apagado — cobre o caso raro de a exclusão ter
+      // acontecido em outro aparelho bem no meio desta sincronização.
+      atualizado[colecao] = mesclado.filter((item) => !item.id || !idsApagados.has(item.id));
+    } else {
+      erros.push(`${colecao}: ${resultado.erro}`);
+    }
   }
 
   // aplica as autorizações atualizadas em cima dos usuários já buscados (e já mesclados
@@ -252,14 +281,19 @@ export async function sincronizar(estado) {
 // ---------- exclui um registro de verdade no Supabase (não só localmente) ----------
 // Necessário porque a sincronização (mesclarComLocal, acima) sempre preserva o que existe
 // só localmente — se um registro fosse só removido do estado local, sem avisar o servidor,
-// a próxima sincronização traria ele de volta (é exatamente o que protege contra perda de
-// dado sem querer, mas por isso mesmo uma exclusão de verdade precisa ser explícita aqui).
+// a próxima sincronização traria ele de volta. Além de apagar a linha, grava uma "lápide"
+// (tabela exclusoes) — é ela quem impede outro aparelho, que ainda tenha esse mesmo registro
+// guardado localmente, de reenviá-lo de volta na sincronização dele.
 export async function excluirRegistro(colecao, id) {
   if (!supabaseConfigurado) return { ok: true }; // nada pra apagar no servidor se não tem Supabase
   const tabela = TABELAS[colecao];
   if (!tabela) return { ok: true };
   const { error } = await supabase.from(tabela).delete().eq("id", id);
   if (error) return { ok: false, erro: error.message };
+  // a lápide é best-effort — se essa segunda escrita falhar (ex.: caiu a conexão bem nesse
+  // instante), a exclusão principal acima já valeu; a lápide em si também será reenviada
+  // normalmente na próxima sincronização (ela mora no estado local igual qualquer coleção).
+  await supabase.from("exclusoes").upsert({ id, tabela: colecao, apagado_em: new Date().toISOString() });
   return { ok: true };
 }
 

@@ -787,6 +787,13 @@ export default function App() {
   const [fazendaAtivaId, setFazendaAtivaId] = useState(seedFazendas[0]?.id || "");
   const [retiros, setRetiros] = useState([]);
   const [safras, setSafras] = useState([]);
+  // "lápides" — um registro de cada exclusão feita (id do registro apagado + de qual coleção).
+  // Sem isso, se este aparelho apagar algo e sincronizar, mas OUTRO aparelho ainda tiver esse
+  // mesmo dado guardado localmente (por não ter sincronizado desde a exclusão), esse outro
+  // aparelho reenviaria o dado de volta pro servidor na sincronização dele, "ressuscitando"
+  // algo que já tinha sido apagado. Cada aparelho consulta essa lista antes de enviar ou
+  // mesclar dados, pra nunca reenviar nem readicionar algo já apagado em outro lugar.
+  const [exclusoes, setExclusoes] = useState([]);
   const [safraAtivaId, setSafraAtivaId] = useState("");
   const [lotes, setLotes] = useState([]);
   const [insumos, setInsumos] = useState(seedInsumos);
@@ -822,6 +829,7 @@ export default function App() {
       aplicar(dados.sugestoesRepasse, setSugestoesRepasse);
       aplicar(dados.protocolosPadrao, setProtocolosPadrao);
       aplicar(dados.rascunhos, setRascunhos);
+      aplicar(dados.exclusoes, setExclusoes);
       // só a partir daqui a gravação automática é liberada — é crítico nunca marcar isso como
       // concluído sem ter, de fato, lido os dados com sucesso: as gravações automáticas
       // (useEffect logo abaixo) SEMPRE apagam a tabela antes de regravar, então se isso disparasse
@@ -998,6 +1006,7 @@ export default function App() {
   React.useEffect(() => { if (podeGravar) gravarColecao("fazendas", fazendas); }, [podeGravar, fazendas]);
   React.useEffect(() => { if (podeGravar) gravarColecao("retiros", retiros); }, [podeGravar, retiros]);
   React.useEffect(() => { if (podeGravar) gravarColecao("safras", safras); }, [podeGravar, safras]);
+  React.useEffect(() => { if (podeGravar) gravarColecao("exclusoes", exclusoes); }, [podeGravar, exclusoes]);
   React.useEffect(() => { if (podeGravar) gravarColecao("lotes", lotes); }, [podeGravar, lotes]);
   React.useEffect(() => { if (podeGravar) gravarColecao("insumos", insumos); }, [podeGravar, insumos]);
   React.useEffect(() => { if (podeGravar) gravarColecao("manejos", manejos); }, [podeGravar, manejos]);
@@ -1021,7 +1030,7 @@ export default function App() {
     if (!supabaseConfigurado) { setPendencias(0); return; }
     setSincronizando(true);
     setErroSincronizacao("");
-    const resultado = await sincronizar({ usuarios: users, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao });
+    const resultado = await sincronizar({ usuarios: users, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes });
     // aplica o que veio certo mesmo que outra tabela tenha falhado — nunca descarta dados
     // válidos só porque outra parte da sincronização deu erro.
     if (resultado.atualizado) {
@@ -1040,6 +1049,7 @@ export default function App() {
       if (a.sugestoesRessinc) setSugestoesRessinc(a.sugestoesRessinc);
       if (a.sugestoesRepasse) setSugestoesRepasse(a.sugestoesRepasse);
       if (a.protocolosPadrao) setProtocolosPadrao(a.protocolosPadrao);
+      if (a.exclusoes) setExclusoes(a.exclusoes);
     }
     if (resultado.ok) {
       setPendencias(0);
@@ -1103,6 +1113,16 @@ export default function App() {
     // agora mesmo (sem Supabase configurado, ou sem internet) — os dados já foram
     // salvos localmente (useEffects de persistência acima), então nada se perde.
     if (!online || !supabaseConfigurado) setPendencias((p) => p + 1);
+  };
+
+  // ponto único de exclusão de qualquer coleção — sempre exclui de verdade no Supabase E
+  // grava uma "lápide" local (ver comentário detalhado em /lib/sync.js), pra nenhum outro
+  // aparelho reenviar esse mesmo registro de volta antes de saber que ele foi apagado.
+  const excluirComLapide = async (colecao, id) => {
+    setExclusoes((a) => (a.some((e) => e.id === id) ? a : [...a, { id, tabela: colecao, apagadoEm: new Date().toISOString() }]));
+    const r = await excluirRegistro(colecao, id);
+    if (!r.ok) console.error(`Falha ao excluir "${colecao}" no Supabase:`, r.erro);
+    return r;
   };
 
   /* ---------- filtro global pela fazenda ativa ---------- */
@@ -1173,7 +1193,12 @@ export default function App() {
     marcaPendencia();
   };
   const addRetiro = (r) => { setRetiros((a) => [...a, { ...r, id: uid("ret"), criadoEm: new Date().toISOString() }]); marcaPendencia(); };
-  const removeRetiro = (id) => { setRetiros((a) => a.filter((r) => r.id !== id)); marcaPendencia(); };
+  const removeRetiro = async (id) => {
+    setRetiros((a) => a.filter((r) => r.id !== id));
+    marcaPendencia();
+    const r = await excluirComLapide("retiros", id);
+    if (!r.ok) console.error("Falha ao excluir retiro no Supabase:", r.erro);
+  };
   const addSafra = (fazendaId, ano) => { setSafras((a) => [...a, { id: uid("saf"), fazendaId, nome: `${ano}/${Number(ano) + 1}`, criadoEm: new Date().toISOString() }]); marcaPendencia(); };
   // remove uma fazenda de vez — inclusive no Supabase (não só localmente). Sem isso, a próxima
   // sincronização traria ela de volta, já que a sincronização sempre preserva o que existe só
@@ -1188,11 +1213,16 @@ export default function App() {
       : u));
     if (fazendaAtivaId === id) setFazendaAtivaId(null);
     marcaPendencia();
-    const r = await excluirRegistro("fazendas", id);
+    const r = await excluirComLapide("fazendas", id);
     if (!r.ok) return { ok: false, erro: `Removida deste aparelho, mas não foi possível apagar no Supabase agora (${r.erro}). Tente sincronizar novamente mais tarde.` };
     return { ok: true };
   };
-  const removeSafra = (id) => { setSafras((a) => a.filter((s) => s.id !== id)); marcaPendencia(); };
+  const removeSafra = async (id) => {
+    setSafras((a) => a.filter((s) => s.id !== id));
+    marcaPendencia();
+    const r = await excluirComLapide("safras", id);
+    if (!r.ok) console.error("Falha ao excluir safra no Supabase:", r.erro);
+  };
   // trava/destrava lançamentos (agendamentos, manejos, estoque) numa safra — pensada pra
   // evitar que alguém lance dado na safra errada por esquecimento (ex.: uma safra encerrada
   // que ainda aparece no seletor). Só o Administrador deve ter acesso a esse botão na tela.
@@ -1668,7 +1698,12 @@ export default function App() {
   const gerarPreAgendamentos = (m) => {
     const addDiasISO = (iso, n) => ymd(addDays(parseISODate(iso), n));
     const base = { loteNome: m.loteNome || "", retiroId: m.retiroId || null, ordem: m.ordem || null, categoria: m.categoria || null, origemAgendamentoId: m.origemAgendamentoId || null, numeroAnimais: m.numeroAnimais || null };
+    // se essa sugestão já tinha sido apagada manualmente antes (a partir desta MESMA origem),
+    // respeita a decisão e não recria — vale tanto pra quando a origem é editada (que recria
+    // tudo com os novos dados) quanto pra confirmação de um agendamento.
+    const origem = m.origemAgendamentoId ? agendamentos.find((ag) => ag.id === m.origemAgendamentoId) : null;
     const sugerir = (tipo, dias, dataBase = m.data) => {
+      if (origem?.sugestoesDescartadas?.includes(tipo)) return;
       const data = addDiasISO(dataBase, dias);
       criarPreAgendamento({ ...base, tipo, data, titulo: `${tipo} — ${base.loteNome}` });
     };
@@ -1713,8 +1748,12 @@ export default function App() {
     }
   };
 
-  const existeSugestaoDeInseminacao = (retiradaId) =>
-    agendamentos.some((ag) => ag.origemAgendamentoId === retiradaId && ag.tipo === "Inseminação" && ag.status !== "descartado");
+  const existeSugestaoDeInseminacao = (retiradaId) => {
+    const origem = agendamentos.find((ag) => ag.id === retiradaId);
+    // se a pessoa já apagou essa sugestão antes, respeita a decisão — não recria sozinho.
+    if (origem?.sugestoesDescartadas?.includes("Inseminação")) return true;
+    return agendamentos.some((ag) => ag.origemAgendamentoId === retiradaId && ag.tipo === "Inseminação" && ag.status !== "descartado");
+  };
 
   // Duplicidades (mesmo lote + mesma ordem + mesmo manejo) não são bloqueadas na criação: elas
   // aparecem normalmente e o próprio usuário decide qual manter, na seção "Agendamentos duplicados"
@@ -1745,7 +1784,17 @@ export default function App() {
   };
 
   const removerAgendamento = async (id) => {
-    setAgendamentos((a) => a.filter((ag) => ag.id !== id));
+    const ag = agendamentos.find((a) => a.id === id);
+    setAgendamentos((a) => a.filter((x) => x.id !== id));
+    // se o que está sendo apagado é uma sugestão automática (gerada a partir de outro
+    // agendamento), marca no agendamento de ORIGEM que essa sugestão não deve ser recriada —
+    // sem isso, confirmar a origem de novo (ou reprocessá-la) recriava exatamente o que acabou
+    // de ser apagado, porque a verificação de "já existe sugestão?" só olhava a lista atual.
+    if (ag?.origem === "automatico" && ag.origemAgendamentoId) {
+      setAgendamentos((a) => a.map((x) => x.id === ag.origemAgendamentoId
+        ? { ...x, sugestoesDescartadas: [...new Set([...(x.sugestoesDescartadas || []), ag.tipo])] }
+        : x));
+    }
     marcaPendencia();
     const r = await excluirRegistro("agendamentos", id);
     if (!r.ok) console.error("Falha ao excluir agendamento no Supabase:", r.erro);
@@ -5512,6 +5561,10 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
   const [numeroAnimais, setNumeroAnimais] = useState("");
   const [dataInicio, setDataInicio] = useState(todayISO());
   const [dataFim, setDataFim] = useState(todayISO());
+  const [racaTouro, setRacaTouro] = useState("");
+  // sugestões de raça de touro já digitadas antes, direto do próprio histórico de Repasse —
+  // sem precisar de uma tela de cadastro separada, igual já funciona com "Raça da matriz".
+  const racasTouroConhecidas = [...new Set(manejos.filter((m) => m.tipo === "repasse").map((m) => m.racaTouro).filter(Boolean))];
   const [sugestaoConfirmandoId, setSugestaoConfirmandoId] = useState(null);
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
@@ -5540,11 +5593,11 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
     registrarManejo({
       tipo: "repasse", loteId, loteNome: loteAtual?.nome || "", categoria: loteAtual?.categoria || null,
       retiroId: loteAtual?.retiroId || null, numeroAnimais: numBR(numeroAnimais), data: dataInicio,
-      dataInicio, dataFim, detalhes: [], animaisLidos: [], medicamentos: [],
+      dataInicio, dataFim, racaTouro: racaTouro.trim() || null, detalhes: [], animaisLidos: [], medicamentos: [],
     });
     if (sugestaoConfirmandoId) removerSugestaoRepasse(sugestaoConfirmandoId);
     setSugestaoConfirmandoId(null);
-    setNumeroAnimais(""); setDataInicio(todayISO()); setDataFim(todayISO());
+    setNumeroAnimais(""); setDataInicio(todayISO()); setDataFim(todayISO()); setRacaTouro("");
     setMsg("Repasse registrado. Um pré-agendamento de Diagnóstico - repasse foi criado 30 dias após o Fim do período.");
   };
 
@@ -5610,9 +5663,16 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
                 <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.retiroId ? nomeRetiro(loteAtual.retiroId) : "—"} readOnly />
               </Field>
               <Field label="Nº de animais em repasse"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
+              <Field label="Raça do(s) touro(s) *">
+                <input style={inputStyle} list="racas-touro-conhecidas" value={racaTouro} onChange={(e) => { limparMsgSeSucesso(); setRacaTouro(e.target.value); }} placeholder="Ex: Nelore" />
+                <datalist id="racas-touro-conhecidas">
+                  {racasTouroConhecidas.map((r) => <option key={r} value={r} />)}
+                </datalist>
+              </Field>
               <Field label="Início"><input style={inputStyle} type="date" value={dataInicio} onChange={(e) => { limparMsgSeSucesso(); setDataInicio(e.target.value); }} /></Field>
               <Field label="Fim"><input style={inputStyle} type="date" value={dataFim} onChange={(e) => { limparMsgSeSucesso(); setDataFim(e.target.value); }} /></Field>
             </div>
+            <LegendaCamposOpcionais />
             <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Ao registrar, um pré-agendamento de "Diagnóstico - repasse" é criado automaticamente na Agenda, 30 dias após o Fim do período.</p>
             {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: msg ? 0 : 12 }}><Plus size={15} /> Registrar Repasse</BtnPrimary>

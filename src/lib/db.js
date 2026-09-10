@@ -41,11 +41,18 @@ db.version(3).stores({
   sugestoesRepasse: "id, fazendaId",
 });
 
+// v4: "lápides" — registro de exclusões, pra sincronização entre vários aparelhos nunca
+// reenviar/readicionar um dado que já foi apagado em outro lugar (veja o comentário em
+// registrarExclusaoLocal, mais abaixo, e a tabela "exclusoes" no schema do Supabase).
+db.version(4).stores({
+  exclusoes: "id, tabela",
+});
+
 // ---------- leitura de tudo, usada uma vez ao abrir o app ----------
 export async function carregarTudo() {
   const [
     usuarios, fazendas, retiros, safras, lotes, insumos, manejos,
-    movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, rascunhosArr,
+    movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, rascunhosArr, exclusoes,
   ] = await Promise.all([
     db.usuarios.toArray(),
     db.fazendas.toArray(),
@@ -60,9 +67,10 @@ export async function carregarTudo() {
     db.sugestoesRepasse.toArray(),
     db.protocolosPadrao.toArray(),
     db.rascunhos.toArray(),
+    db.exclusoes.toArray(),
   ]);
   const rascunhos = Object.fromEntries(rascunhosArr.map((r) => [r.chave, r.valor]));
-  return { usuarios, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, rascunhos };
+  return { usuarios, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, rascunhos, exclusoes };
 }
 
 // ---------- grava uma coleção inteira (substitui o conteúdo da tabela) ----------
