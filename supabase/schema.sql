@@ -165,8 +165,11 @@ create table if not exists manejos (
   horario_inicial text, horario_final text,                         -- retirada (formato HH:MM, opcional)
   data_inicio date, data_fim date,                                  -- repasse (período em que os animais ficam em repasse)
   destino_vazias text check (destino_vazias is null or destino_vazias in ('Ressinc', 'Repasse', 'Descarte')), -- diagnóstico
-  criado_em timestamptz not null default now()
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()  -- muda a cada edição — usado pra decidir quem "ganha" quando dois aparelhos editam o MESMO manejo offline, sem depender de quem sincroniza primeiro
 );
+
+alter table manejos add column if not exists atualizado_em timestamptz not null default now();
 
 -- garante as colunas mais novas mesmo em bancos criados antes delas existirem
 alter table manejos add column if not exists inseminador text;

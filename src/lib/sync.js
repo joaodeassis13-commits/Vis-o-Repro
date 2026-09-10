@@ -92,6 +92,39 @@ function aplicarPadroesObrigatorios(colecao, itens) {
   });
 }
 
+// coleções onde dois aparelhos DIFERENTES podem editar o MESMO registro (por id) enquanto
+// ambos estão offline — sem isso, o sistema de sincronização usa "quem enviar por último
+// vence" simplesmente por ORDEM DE ENVIO, o que não tem nada a ver com qual edição é
+// realmente mais recente. Aqui comparamos pelo horário de fato de cada edição
+// ("atualizadoEm"), e quem editou por último de verdade é quem vence — não quem sincronizou
+// primeiro. Cada entrada aponta pro nome da coluna correspondente no banco.
+const COLECOES_COM_PROTECAO_DE_CONFLITO = {
+  manejos: "atualizado_em",
+};
+
+async function resolverConflitosPorTimestamp(colecao, itens) {
+  const colunaTimestamp = COLECOES_COM_PROTECAO_DE_CONFLITO[colecao];
+  if (!colunaTimestamp || !supabaseConfigurado) return { itens, conflitos: [] };
+  const ids = itens.map((item) => item.id).filter(Boolean);
+  if (ids.length === 0) return { itens, conflitos: [] };
+  const tabela = TABELAS[colecao];
+  const { data, error } = await supabase.from(tabela).select(`id, ${colunaTimestamp}`).in("id", ids);
+  if (error || !data) return { itens, conflitos: [] }; // se a checagem falhar, segue o envio normal — não trava a sincronização por causa disso
+  const timestampNoServidor = {};
+  data.forEach((linha) => { timestampNoServidor[linha.id] = linha[colunaTimestamp]; });
+  const conflitos = [];
+  const itensSemConflito = itens.filter((item) => {
+    const doServidor = timestampNoServidor[item.id];
+    const local = item.atualizadoEm;
+    // só é conflito de verdade se AMBOS os horários existirem e o do servidor for MAIS
+    // recente que o que este aparelho tinha quando editou — sem isso (item novo, ou
+    // servidor sem esse campo ainda), envia normalmente.
+    if (doServidor && local && new Date(doServidor) > new Date(local)) { conflitos.push(item.id); return false; }
+    return true;
+  });
+  return { itens: itensSemConflito, conflitos };
+}
+
 // ---------- envia (upsert) uma coleção inteira ----------
 async function enviarColecao(colecao, itens) {
   if (!supabaseConfigurado || !itens || itens.length === 0) return { ok: true, enviados: 0 };
@@ -138,11 +171,15 @@ async function enviarColecao(colecao, itens) {
       return { ...item, login: novoLogin };
     });
   }
+  // se outro aparelho editou o MESMO registro mais recentemente (enquanto ambos offline),
+  // não sobrescreve — a busca que acontece logo depois do envio já traz a versão mais nova.
+  const { itens: itensSemConflito, conflitos } = await resolverConflitosPorTimestamp(colecao, validos);
+  validos = itensSemConflito;
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
     : null;
   if (validos.length === 0) {
-    return avisoInvalidos ? { ok: false, erro: avisoInvalidos } : { ok: true, enviados: 0 };
+    return avisoInvalidos ? { ok: false, erro: avisoInvalidos, conflitos } : { ok: true, enviados: 0, conflitos };
   }
 
   const linhas = validos.map((item) => {
@@ -151,9 +188,9 @@ async function enviarColecao(colecao, itens) {
     return linhaParaSupabase(limpo);
   });
   const { error } = await supabase.from(tabela).upsert(linhas, { onConflict: "id" });
-  if (error) return { ok: false, erro: error.message };
-  if (avisoInvalidos) return { ok: false, enviados: linhas.length, erro: avisoInvalidos };
-  return { ok: true, enviados: linhas.length };
+  if (error) return { ok: false, erro: error.message, conflitos };
+  if (avisoInvalidos) return { ok: false, enviados: linhas.length, erro: avisoInvalidos, conflitos };
+  return { ok: true, enviados: linhas.length, conflitos };
 }
 
 // ---------- busca tudo que o usuário tem acesso (RLS já filtra por fazenda) ----------
@@ -248,12 +285,14 @@ export async function sincronizar(estado) {
   if (!resultadoExclusoesBusca.ok) erros.push(`exclusoes: ${resultadoExclusoesBusca.erro}`);
   const idsApagados = new Set(exclusoesConhecidas.map((e) => e.id));
 
+  const conflitosPorColecao = [];
   for (const colecao of Object.keys(TABELAS)) {
     if (colecao === "exclusoes") { estado = { ...estado, exclusoes: exclusoesConhecidas }; continue; }
     // nunca reenvia algo que já sabemos ter sido apagado (por este aparelho ou por outro)
     const itensSemApagados = (estado[colecao] || []).filter((item) => !item.id || !idsApagados.has(item.id));
     const resultado = await enviarColecao(colecao, itensSemApagados);
     if (!resultado.ok) erros.push(`${colecao}: ${resultado.erro}`);
+    if (resultado.conflitos?.length > 0) conflitosPorColecao.push(`${colecao} (${resultado.conflitos.length})`);
   }
   // envia as lápides por último — depois de já ter usado a lista mesclada pra filtrar o envio
   // acima, evita qualquer condição de corrida entre "ler exclusões" e "enviar exclusões".
@@ -289,7 +328,15 @@ export async function sincronizar(estado) {
     erros.push(`autorizações: ${resultadoAutorizBusca.erro}`);
   }
 
-  return { ok: erros.length === 0, erros, atualizado, sincronizadoEm: new Date().toISOString() };
+  return {
+    ok: erros.length === 0, erros, atualizado, sincronizadoEm: new Date().toISOString(),
+    // não é um erro — é o sistema funcionando: outro aparelho editou o(s) mesmo(s) registro(s)
+    // mais recentemente, então a versão dele foi mantida em vez de ser sobrescrita por esta
+    // sincronização. A busca acima já trouxe a versão mais nova pra este aparelho também.
+    aviso: conflitosPorColecao.length > 0
+      ? `Alguns registros foram editados por outro aparelho mais recentemente e não foram sobrescritos: ${conflitosPorColecao.join(", ")}.`
+      : null,
+  };
 }
 
 // ---------- exclui um registro de verdade no Supabase (não só localmente) ----------

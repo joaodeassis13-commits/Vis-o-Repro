@@ -1030,7 +1030,17 @@ export default function App() {
     if (!supabaseConfigurado) { setPendencias(0); return; }
     setSincronizando(true);
     setErroSincronizacao("");
-    const resultado = await sincronizar({ usuarios: users, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes });
+    // só um Administrador pode de fato ALTERAR quem tem acesso a qual fazenda (é a única tela
+    // que permite isso). Um aparelho logado como Inseminador/Supervisor não deve reenviar essa
+    // informação de jeito nenhum — mesmo sem querer mudar nada, reenviar o que ele SABE
+    // localmente (que pode estar desatualizado) sobrescrevia, no servidor, uma autorização mais
+    // recente que um Administrador tivesse acabado de conceder em outro aparelho, momentos
+    // antes deste sincronizar. Removendo o campo (em vez de mandar como está), a função que
+    // envia autorizações simplesmente pula esses usuários, sem apagar nada.
+    const usuariosParaEnviar = currentUser?.perfil === "Administrador"
+      ? users
+      : users.map((u) => { const { fazendasAutorizadas, ...resto } = u; return resto; });
+    const resultado = await sincronizar({ usuarios: usuariosParaEnviar, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes });
     // aplica o que veio certo mesmo que outra tabela tenha falhado — nunca descarta dados
     // válidos só porque outra parte da sincronização deu erro.
     if (resultado.atualizado) {
@@ -1043,8 +1053,10 @@ export default function App() {
       if (a.safras) setSafras(a.safras);
       if (a.lotes) setLotes(a.lotes);
       if (a.insumos) setInsumos(a.insumos);
-      if (a.manejos) setManejos(a.manejos);
       if (a.movimentos) setMovimentos(a.movimentos);
+      // roda a mesclagem DEPOIS de já ter aplicado "movimentos" (ela precisa poder realocar
+      // saídas de estoque pra cima da versão mais atual, não da anterior a esta sincronização).
+      if (a.manejos) setManejos(mesclarManejosDuplicados(a.manejos, a.movimentos || movimentos));
       if (a.agendamentos) setAgendamentos(a.agendamentos);
       if (a.sugestoesRessinc) setSugestoesRessinc(a.sugestoesRessinc);
       if (a.sugestoesRepasse) setSugestoesRepasse(a.sugestoesRepasse);
@@ -1054,6 +1066,9 @@ export default function App() {
     if (resultado.ok) {
       setPendencias(0);
       setUltimaSincronizacao(resultado.sincronizadoEm);
+      // não é uma falha — mostra na mesma linha, só pra avisar (a versão certa já foi
+      // trazida automaticamente, não precisa fazer nada a respeito disso).
+      if (resultado.aviso) setErroSincronizacao(resultado.aviso);
     } else {
       // mostra o motivo real em vez de falhar silenciosamente
       setErroSincronizacao(resultado.motivo || (resultado.erros || []).join(" · ") || "Falha desconhecida na sincronização.");
@@ -1668,7 +1683,7 @@ export default function App() {
     const id = uid("man");
     // respeita uma data escolhida na tela (permite registro retroativo); se nada for
     // enviado, usa a data de hoje como padrão.
-    const manejoCompleto = { ...manejo, id, data: manejo.data || todayISO(), operador: currentUser.nome, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, criadoEm: new Date().toISOString() };
+    const manejoCompleto = { ...manejo, id, data: manejo.data || todayISO(), operador: currentUser.nome, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() };
     setManejos((a) => [manejoCompleto, ...a]);
     marcaPendencia();
     gerarPreAgendamentos(manejoCompleto);
@@ -1676,7 +1691,7 @@ export default function App() {
   };
 
   const atualizarManejo = (id, campos) => {
-    setManejos((a) => a.map((m) => m.id === id ? { ...m, ...campos } : m));
+    setManejos((a) => a.map((m) => m.id === id ? { ...m, ...campos, atualizadoEm: new Date().toISOString() } : m));
     marcaPendencia();
   };
 
@@ -1696,6 +1711,66 @@ export default function App() {
     // ele de volta — a exclusão local sozinha nunca é o suficiente pra nada que já sincronizou.
     const r = await excluirRegistro("manejos", id);
     if (!r.ok) console.error("Falha ao excluir manejo no Supabase:", r.erro);
+  };
+
+  // TIPOS de manejo que só deveriam existir UMA vez por lote+ordem — se dois aparelhos,
+  // ambos offline, fizerem o MESMO tipo de manejo pro MESMO lote na MESMA ordem (cada um
+  // sem saber do outro), a sincronização não detecta conflito nenhum (são registros com id
+  // diferente) e os dois acabam existindo ao mesmo tempo, cada um com parte da leitura.
+  const TIPOS_UM_POR_LOTE_ORDEM = ["implantacao", "ressinc", "retirada", "inseminacao", "diagnostico"];
+
+  // roda depois de toda sincronização bem-sucedida: procura grupos de manejos duplicados
+  // (mesmo tipo + lote + ordem) e os funde num só — sem isso, a leitura de um dos dois
+  // aparelhos ficaria "invisível" pra qualquer parte do sistema que espera um único
+  // registro por lote+ordem (ex.: cálculo automático de Tempo de gestação no Diagnóstico).
+  const mesclarManejosDuplicados = (listaManejos, movimentosAtuais) => {
+    const grupos = {};
+    listaManejos.forEach((m) => {
+      if (!TIPOS_UM_POR_LOTE_ORDEM.includes(m.tipo) || !m.loteId || !m.ordem) return;
+      const chave = `${m.tipo}|${m.loteId}|${m.ordem}`;
+      (grupos[chave] = grupos[chave] || []).push(m);
+    });
+
+    const idsParaRemover = [];
+    let manejosFinal = listaManejos;
+    let movimentosRealocados = false;
+
+    Object.values(grupos).filter((g) => g.length > 1).forEach((grupo) => {
+      // o mais antigo (primeiro criado) é quem "sobrevive" — critério simples e previsível
+      const ordenado = [...grupo].sort((a, b) => (a.criadoEm || "").localeCompare(b.criadoEm || ""));
+      const sobrevivente = ordenado[0];
+      const duplicatas = ordenado.slice(1);
+
+      const brincosJaVistos = new Set((sobrevivente.detalhes || []).map((d) => d.brinco));
+      const detalhesFundidos = [...(sobrevivente.detalhes || [])];
+      duplicatas.forEach((dup) => {
+        (dup.detalhes || []).forEach((d) => {
+          if (!brincosJaVistos.has(d.brinco)) { brincosJaVistos.add(d.brinco); detalhesFundidos.push(d); }
+        });
+      });
+      const animaisLidosFundidos = [...new Set([...(sobrevivente.animaisLidos || []), ...duplicatas.flatMap((d) => d.animaisLidos || [])])];
+
+      manejosFinal = manejosFinal.map((m) => m.id === sobrevivente.id
+        ? { ...m, detalhes: detalhesFundidos, animaisLidos: animaisLidosFundidos, atualizadoEm: new Date().toISOString() }
+        : m
+      );
+      duplicatas.forEach((dup) => idsParaRemover.push(dup.id));
+
+      // realoca (não apaga) qualquer saída de estoque que apontava pra duplicata que vai sumir
+      // — o medicamento foi de fato usado; só a "etiqueta" de qual manejo ele pertence muda.
+      const idsDuplicatas = new Set(duplicatas.map((d) => d.id));
+      if (movimentosAtuais.some((mv) => idsDuplicatas.has(mv.manejoId))) {
+        movimentosRealocados = true;
+        setMovimentos((a) => a.map((mv) => idsDuplicatas.has(mv.manejoId) ? { ...mv, manejoId: sobrevivente.id } : mv));
+      }
+    });
+
+    if (idsParaRemover.length > 0) {
+      manejosFinal = manejosFinal.filter((m) => !idsParaRemover.includes(m.id));
+      marcaPendencia(); // garante que o manejo fundido (com a leitura completa) seja reenviado
+      idsParaRemover.forEach((id) => { excluirComLapide("manejos", id).then((r) => { if (!r.ok) console.error("Falha ao excluir manejo duplicado no Supabase:", r.erro); }); });
+    }
+    return manejosFinal;
   };
 
   /* ---------- pré-agendamentos automáticos, de acordo com o manejo (ou agendamento) de origem ---------- */
@@ -1853,6 +1928,7 @@ export default function App() {
 
   const NAV = currentUser?.perfil === "Supervisor"
     ? [
+        { key: "agenda", label: "Agenda", icon: Calendar },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
         { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
         { key: "exportacoes", label: "Exportações", icon: FileDown },
@@ -2304,7 +2380,7 @@ export default function App() {
             <AbaAgenda fazendaAtiva={fazendaAtiva} fazendas={fazendasVisiveis} lotes={lotesAtivos} retiros={retirosAtivos} agendamentos={agendamentosVisiveis}
               addAgendamento={addAgendamento} confirmarAgendamento={confirmarAgendamento}
               descartarAgendamento={descartarAgendamento} removerAgendamento={removerAgendamento} atualizarAgendamento={atualizarAgendamento}
-              reordenarAgendamentoNoDia={reordenarAgendamentoNoDia} />
+              reordenarAgendamentoNoDia={reordenarAgendamentoNoDia} somenteLeitura={currentUser?.perfil === "Supervisor"} />
           </div>
 
           <div style={{ display: section === "usuarios" ? "block" : "none" }}>
@@ -6415,7 +6491,7 @@ const CORES_TIPO = {
   "Inseminação": "#4A6FA5", "Diagnóstico": "#7A5C9E", "Diagnóstico - repasse": "#166336", "Outro": "#6B685E",
 };
 
-function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento, reordenarAgendamentoNoDia }) {
+function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento, reordenarAgendamentoNoDia, somenteLeitura }) {
   // versão compacta do calendário só no celular — no computador, nada muda
   const [isMobileCalendario, setIsMobileCalendario] = useState(typeof window !== "undefined" ? window.innerWidth < 860 : false);
   React.useEffect(() => {
@@ -6600,16 +6676,20 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
     return (
       <div style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
-          <button onClick={() => reordenarAgendamentoNoDia(a.id, "cima")} disabled={ehPrimeiro}
-            title="Mover pra cima" aria-label="Mover pra cima"
-            style={{ background: "none", border: "none", cursor: ehPrimeiro ? "default" : "pointer", color: ehPrimeiro ? "#DDDDDD" : "#6B685E", padding: 2, display: "flex" }}>
-            <ChevronUp size={16} />
-          </button>
-          <button onClick={() => reordenarAgendamentoNoDia(a.id, "baixo")} disabled={ehUltimo}
-            title="Mover pra baixo" aria-label="Mover pra baixo"
-            style={{ background: "none", border: "none", cursor: ehUltimo ? "default" : "pointer", color: ehUltimo ? "#DDDDDD" : "#6B685E", padding: 2, display: "flex" }}>
-            <ChevronDown size={16} />
-          </button>
+          {!somenteLeitura && (
+            <>
+              <button onClick={() => reordenarAgendamentoNoDia(a.id, "cima")} disabled={ehPrimeiro}
+                title="Mover pra cima" aria-label="Mover pra cima"
+                style={{ background: "none", border: "none", cursor: ehPrimeiro ? "default" : "pointer", color: ehPrimeiro ? "#DDDDDD" : "#6B685E", padding: 2, display: "flex" }}>
+                <ChevronUp size={16} />
+              </button>
+              <button onClick={() => reordenarAgendamentoNoDia(a.id, "baixo")} disabled={ehUltimo}
+                title="Mover pra baixo" aria-label="Mover pra baixo"
+                style={{ background: "none", border: "none", cursor: ehUltimo ? "default" : "pointer", color: ehUltimo ? "#DDDDDD" : "#6B685E", padding: 2, display: "flex" }}>
+                <ChevronDown size={16} />
+              </button>
+            </>
+          )}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -6637,14 +6717,18 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
           })()}
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          <BtnGhost onClick={() => iniciarEdicao(a)}><Pencil size={13} /></BtnGhost>
-          {a.status === "pendente" ? (
+          {!somenteLeitura && (
             <>
-              <BtnGhost onClick={() => confirmarAgendamento(a.id)}><Check size={13} /></BtnGhost>
-              <BtnGhost danger onClick={() => descartarAgendamento(a.id)}><XCircle size={13} /></BtnGhost>
+              <BtnGhost onClick={() => iniciarEdicao(a)}><Pencil size={13} /></BtnGhost>
+              {a.status === "pendente" ? (
+                <>
+                  <BtnGhost onClick={() => confirmarAgendamento(a.id)}><Check size={13} /></BtnGhost>
+                  <BtnGhost danger onClick={() => descartarAgendamento(a.id)}><XCircle size={13} /></BtnGhost>
+                </>
+              ) : (
+                <button onClick={() => window.confirm("Excluir este agendamento?") && removerAgendamento(a.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button>
+              )}
             </>
-          ) : (
-            <button onClick={() => window.confirm("Excluir este agendamento?") && removerAgendamento(a.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button>
           )}
         </div>
       </div>
@@ -6719,64 +6803,66 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
             )}
           </div>
 
-          <div style={{ ...cardStyle, marginBottom: 26 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Adicionar agendamento</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, alignItems: "end" }}>
-              <Field label="Retiro">
-                <select style={inputStyle} value={form.retiroId} onChange={set("retiroId")}>
-                  <option value="">Selecione um retiro</option>
-                  {retiros.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
-                </select>
-              </Field>
-              <Field label="Lote">
-                <input style={inputStyle} value={form.loteNome} onChange={set("loteNome")} placeholder="Nome do lote" list="lotes-existentes" />
-                <datalist id="lotes-existentes">
-                  {lotes.map((l) => <option key={l.id} value={l.nome} />)}
-                </datalist>
-              </Field>
-              <Field label="Categoria">
-                <select style={inputStyle} value={form.categoria} onChange={set("categoria")}>
-                  <option value="">Selecione a categoria</option>
-                  {CATEGORIAS_LOTE.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </Field>
-              <Field label="Manejo">
-                <select style={inputStyle} value={form.tipo} onChange={set("tipo")}>
-                  {TIPOS_AGENDAMENTO.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </Field>
-              <Field label="Ordem">
-                <select style={inputStyle} value={form.ordem} onChange={set("ordem")}>
-                  <option value="">Selecione a ordem</option>
-                  {ORDENS_IATF.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </Field>
-              <Field label="Data"><input style={inputStyle} type="date" value={form.data} onChange={set("data")} /></Field>
-              <Field label="Nº de animais *"><input style={inputStyle} type="number" min="0" value={form.numeroAnimais} onChange={set("numeroAnimais")} placeholder="0" /></Field>
-              {form.tipo === "D0" && (
-                <>
-                  <Field label="Número de manejos">
-                    <select style={inputStyle} value={form.tipoManejo} onChange={(e) => {
-                      const novo = e.target.value;
-                      setForm((f) => ({ ...f, tipoManejo: novo, protocolo: protocolosPara(novo).includes(f.protocolo) ? f.protocolo : protocolosPara(novo)[0] }));
-                    }}>
-                      {TIPOS_MANEJO_IMPLANTACAO.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Protocolo">
-                    <select style={inputStyle} value={form.protocolo} onChange={set("protocolo")}>
-                      {protocolosPara(form.tipoManejo).map((p) => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </Field>
-                </>
-              )}
-              <BtnPrimary disabled={!canSave} onClick={salvar}>
-                <Plus size={15} /> Adicionar
-              </BtnPrimary>
+          {!somenteLeitura && (
+            <div style={{ ...cardStyle, marginBottom: 26 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Adicionar agendamento</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, alignItems: "end" }}>
+                <Field label="Retiro">
+                  <select style={inputStyle} value={form.retiroId} onChange={set("retiroId")}>
+                    <option value="">Selecione um retiro</option>
+                    {retiros.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
+                  </select>
+                </Field>
+                <Field label="Lote">
+                  <input style={inputStyle} value={form.loteNome} onChange={set("loteNome")} placeholder="Nome do lote" list="lotes-existentes" />
+                  <datalist id="lotes-existentes">
+                    {lotes.map((l) => <option key={l.id} value={l.nome} />)}
+                  </datalist>
+                </Field>
+                <Field label="Categoria">
+                  <select style={inputStyle} value={form.categoria} onChange={set("categoria")}>
+                    <option value="">Selecione a categoria</option>
+                    {CATEGORIAS_LOTE.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </Field>
+                <Field label="Manejo">
+                  <select style={inputStyle} value={form.tipo} onChange={set("tipo")}>
+                    {TIPOS_AGENDAMENTO.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </Field>
+                <Field label="Ordem">
+                  <select style={inputStyle} value={form.ordem} onChange={set("ordem")}>
+                    <option value="">Selecione a ordem</option>
+                    {ORDENS_IATF.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </Field>
+                <Field label="Data"><input style={inputStyle} type="date" value={form.data} onChange={set("data")} /></Field>
+                <Field label="Nº de animais *"><input style={inputStyle} type="number" min="0" value={form.numeroAnimais} onChange={set("numeroAnimais")} placeholder="0" /></Field>
+                {form.tipo === "D0" && (
+                  <>
+                    <Field label="Número de manejos">
+                      <select style={inputStyle} value={form.tipoManejo} onChange={(e) => {
+                        const novo = e.target.value;
+                        setForm((f) => ({ ...f, tipoManejo: novo, protocolo: protocolosPara(novo).includes(f.protocolo) ? f.protocolo : protocolosPara(novo)[0] }));
+                      }}>
+                        {TIPOS_MANEJO_IMPLANTACAO.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Protocolo">
+                      <select style={inputStyle} value={form.protocolo} onChange={set("protocolo")}>
+                        {protocolosPara(form.tipoManejo).map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </Field>
+                  </>
+                )}
+                <BtnPrimary disabled={!canSave} onClick={salvar}>
+                  <Plus size={15} /> Adicionar
+                </BtnPrimary>
+              </div>
+              {msg && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 10 }}>{msg}</p>}
+              <LegendaCamposOpcionais />
             </div>
-            {msg && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 10 }}>{msg}</p>}
-            <LegendaCamposOpcionais />
-          </div>
+          )}
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 16 }}>
             {TIPOS_AGENDAMENTO.map((t) => (
