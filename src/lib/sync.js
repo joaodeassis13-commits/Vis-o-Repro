@@ -124,6 +124,20 @@ async function enviarColecao(colecao, itens) {
     });
   }
   validos = aplicarPadroesObrigatorios(colecao, validos);
+  // "usuarios.login" é único no banco — se dois usuários (criados em aparelhos diferentes,
+  // antes de sincronizar entre si) acabaram com o mesmo login (ex.: e-mails com o mesmo
+  // prefixo antes do @), o envio inteiro falhava. Desempata na hora do envio, sem apagar
+  // nem misturar os dois usuários — só o login duplicado (o mais recente) ganha um sufixo.
+  if (colecao === "usuarios") {
+    const loginsVistos = new Set();
+    validos = [...validos].sort((a, b) => (a.criadoEm || "").localeCompare(b.criadoEm || "")).map((item) => {
+      if (!item.login || !loginsVistos.has(item.login)) { loginsVistos.add(item.login); return item; }
+      let novoLogin = `${item.login}.${Math.random().toString(36).slice(2, 7)}`;
+      while (loginsVistos.has(novoLogin)) novoLogin = `${item.login}.${Math.random().toString(36).slice(2, 7)}`;
+      loginsVistos.add(novoLogin);
+      return { ...item, login: novoLogin };
+    });
+  }
   const avisoInvalidos = invalidos.length > 0
     ? `${invalidos.length} usuário(s) com id inválido não sincronizado(s): ${invalidos.map((u) => u.nome || u.id).join(", ")}. Exclua e recrie esse(s) usuário(s).`
     : null;

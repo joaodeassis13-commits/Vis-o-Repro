@@ -1423,9 +1423,14 @@ export default function App() {
   // de teste, escolhendo o nome numa lista). A coluna no banco continua exigindo um valor único,
   // então geramos algo razoável a partir do e-mail (ou do nome, se não houver e-mail).
   const derivarLogin = (nome, email) => {
-    if (email) return email.split("@")[0].toLowerCase();
-    const base = (nome || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "");
-    return `${base || "usuario"}.${Math.random().toString(36).slice(2, 7)}`;
+    const base = email
+      ? email.split("@")[0].toLowerCase()
+      : (nome || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "usuario";
+    // se esse login já existir em outro usuário (ex.: dois e-mails com o mesmo prefixo antes do
+    // @, como "joao@fazenda1.com" e "joao@outraempresa.com"), acrescenta um sufixo curto — sem
+    // isso, o Supabase rejeitava a sincronização inteira por violar a restrição de login único.
+    if (!users.some((u) => u.login === base)) return base;
+    return `${base}.${Math.random().toString(36).slice(2, 7)}`;
   };
 
   const addUsuario = async (u) => {
