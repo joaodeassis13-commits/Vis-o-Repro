@@ -8132,6 +8132,25 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
             </div>
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Custo</div>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
+                {Object.entries(OPCOES_CUSTO).map(([key, op]) => (
+                  <button key={key} onClick={() => setVisaoCusto(key)}
+                    style={{
+                      padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      background: visaoCusto === key ? "#166336" : "transparent", color: visaoCusto === key ? "#FFFFFF" : "#6B685E",
+                    }}>{op.label}</button>
+                ))}
+              </div>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_CUSTO[visaoCusto].descricao}</p>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <BarrasCusto dados={dadosCusto} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].tituloCompleto || `Concepção por ${OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}`}</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%" }}>
                 {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
@@ -8147,9 +8166,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                 <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} compacto />
               </div>
             </div>
-          </div>
 
-          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
             <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por {OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].label.toLowerCase()}</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
@@ -8167,7 +8184,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
               </div>
             </div>
 
-            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column", gridColumn: "span 2" }}>
+            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por Touro</div>
               {racasTouroDisponiveis.length > 0 && (
                 <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
@@ -8187,40 +8204,25 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
             </div>
           </div>
 
-          <div style={{ ...cardStyle, marginBottom: 20, height: 300, display: "flex", flexDirection: "column" }}>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Custo</div>
-            <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
-              {Object.entries(OPCOES_CUSTO).map(([key, op]) => (
-                <button key={key} onClick={() => setVisaoCusto(key)}
-                  style={{
-                    padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                    background: visaoCusto === key ? "#166336" : "transparent", color: visaoCusto === key ? "#FFFFFF" : "#6B685E",
-                  }}>{op.label}</button>
-              ))}
-            </div>
-            <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_CUSTO[visaoCusto].descricao}</p>
-            <div style={{ flex: 1, overflow: "hidden" }}>
-              <BarrasCusto dados={dadosCusto} />
-            </div>
-          </div>
-
-          <div style={{ ...cardStyle, marginBottom: 20, height: 300, display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por partida</div>
-              {tourosDisponiveisPartida.length > 0 && (
-                <select style={{ ...inputStyle, width: "auto", fontSize: 12.5, padding: "6px 10px" }}
-                  value={touroPartidaSelecionado} onChange={(e) => setTouroPartidaSelecionado(e.target.value)}>
-                  {tourosDisponiveisPartida.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              )}
-            </div>
-            <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por partida (data) do sêmen do touro selecionado.</p>
-            <div style={{ flex: 1, overflow: "hidden" }}>
-              {tourosDisponiveisPartida.length === 0 ? (
-                <EmptyState text="Nenhum touro com dados de concepção ainda." />
-              ) : (
-                <BarrasConcepcao dados={porPartida} compacto />
-              )}
+          <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por partida</div>
+                {tourosDisponiveisPartida.length > 0 && (
+                  <select style={{ ...inputStyle, width: "auto", fontSize: 12.5, padding: "6px 10px" }}
+                    value={touroPartidaSelecionado} onChange={(e) => setTouroPartidaSelecionado(e.target.value)}>
+                    {tourosDisponiveisPartida.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
+              </div>
+              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por partida (data) do sêmen do touro selecionado.</p>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                {tourosDisponiveisPartida.length === 0 ? (
+                  <EmptyState text="Nenhum touro com dados de concepção ainda." />
+                ) : (
+                  <BarrasConcepcao dados={porPartida} compacto />
+                )}
+              </div>
             </div>
           </div>
 
