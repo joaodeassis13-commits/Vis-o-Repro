@@ -8121,11 +8121,6 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                     }}>{label}</button>
                 ))}
               </div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>
-                {visaoGeral === "concepcao"
-                  ? "Percentual de Prenhas sobre o total de animais com Inseminação e Diagnóstico cruzados."
-                  : "Percentual de Prenhas sobre o total de animais submetidos."}
-              </p>
               <div style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
                 <BarrasConcepcao dados={visaoGeral === "concepcao" ? geralComCategoria : fertilidadeComCategoria} compacto />
               </div>
@@ -8142,15 +8137,14 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                     }}>{op.label}</button>
                 ))}
               </div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_CUSTO[visaoCusto].descricao}</p>
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <BarrasCusto dados={dadosCusto} />
+                <BarrasCusto dados={dadosCusto} compacto />
               </div>
             </div>
           </div>
 
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
-            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].tituloCompleto || `Concepção por ${OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}`}</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%" }}>
                 {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
@@ -8161,13 +8155,12 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                     }}>{op.label}</button>
                 ))}
               </div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].descricao}</p>
               <div style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
                 <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} compacto />
               </div>
             </div>
 
-            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por {OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].label.toLowerCase()}</div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
                 {Object.entries(OPCOES_PROTOCOLO_CONCEPCAO).map(([key, op]) => (
@@ -8178,13 +8171,12 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                     }}>{op.label}</button>
                 ))}
               </div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].descricao}</p>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 <BarrasConcepcao dados={OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].dados} compacto />
               </div>
             </div>
 
-            <div style={{ ...cardStyle, height: 260, display: "flex", flexDirection: "column" }}>
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por Touro</div>
               {racasTouroDisponiveis.length > 0 && (
                 <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
@@ -8197,7 +8189,6 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                   ))}
                 </div>
               )}
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por touro/partida usada na Inseminação, do maior para o menor.</p>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc compacto />
               </div>
@@ -8215,7 +8206,6 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                   </select>
                 )}
               </div>
-              <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por partida (data) do sêmen do touro selecionado.</p>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {tourosDisponiveisPartida.length === 0 ? (
                   <EmptyState text="Nenhum touro com dados de concepção ainda." />
@@ -8224,24 +8214,23 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                 )}
               </div>
             </div>
-          </div>
 
-          <div style={{ ...cardStyle, marginBottom: 20, height: 320, display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
-                {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
-                  <button key={key} onClick={() => setVisaoData(key)}
-                    style={{
-                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                      background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
-                    }}>{label}</button>
-                ))}
+            <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column", gridColumn: "span 2" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+                <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+                  {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
+                    <button key={key} onClick={() => setVisaoData(key)}
+                      style={{
+                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                        background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
+                      }}>{label}</button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <p style={{ fontSize: 12, color: "#9B9686", margin: "0 0 12px" }}>Taxa de concepção agrupada pela data em que a Inseminação foi feita.</p>
-            <div style={{ flex: 1, overflow: "hidden" }}>
-              <LinhaConcepcao dados={porData} agruparPorMes={visaoData === "dia"} />
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <LinhaConcepcao dados={porData} agruparPorMes={visaoData === "dia"} />
+              </div>
             </div>
           </div>
 
@@ -8376,14 +8365,14 @@ function BarrasCusto({ dados, compacto }) {
   const maiorValor = Math.max(...dados.map((d) => d.valor || 0), 1);
   const alturaMaximaPx = compacto ? 90 : 140;
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
+    <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%" }}>
       {dados.map((d, i) => (
-        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 56 : 76, flexShrink: 0 }}>
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4, whiteSpace: "nowrap" }}>{fmtMoedaCurta(d.valor)}</div>
             <div style={{ width: compacto ? 28 : 44, height: `${d.valor != null ? Math.max((d.valor / maiorValor) * alturaMaximaPx, 4) : 2}px`, background: d.valor != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
-          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 70 : 90, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
+          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, height: compacto ? 22 : 27, flexShrink: 0, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
         </div>
       ))}
     </div>
