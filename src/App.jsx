@@ -4590,11 +4590,12 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // desta lista — e só volta a aparecer se uma Retirada for registrada na próxima ordem.
   // EXCEÇÃO: o próprio lote sendo reaberto para edição continua aparecendo, senão não daria
   // pra selecioná-lo de volta pra continuar a leitura.
-  const lotesComRetirada = lotes.filter((l) =>
-    l.id === editandoManejo?.loteId ||
-    (manejos.some((m) => m.tipo === "retirada" && m.loteId === l.id && m.ordem === l.ordem) &&
-     !manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem))
-  );
+  const lotesComRetirada = editandoManejo
+    ? lotes.filter((l) => l.id === editandoManejo.loteId)
+    : lotes.filter((l) =>
+        manejos.some((m) => m.tipo === "retirada" && m.loteId === l.id && m.ordem === l.ordem) &&
+        !manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem)
+      );
   const [lotesSelecionados, setLotesSelecionados] = useState(lotesComRetirada[0] ? [lotesComRetirada[0].id] : []);
   const [msgLote, setMsgLote] = useState("");
   const [dataManejo, setDataManejo] = useState(todayISO());
@@ -5196,11 +5197,12 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   // só entram lotes que já tiveram Inseminação registrada para a ordem ATUAL do lote e que ainda
   // não tiveram Diagnóstico registrado nessa mesma ordem.
   // EXCEÇÃO: o próprio lote sendo reaberto para edição continua aparecendo.
-  const lotesComInseminacao = lotes.filter((l) =>
-    l.id === editandoManejo?.loteId ||
-    (manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem) &&
-     !manejos.some((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === l.ordem))
-  );
+  const lotesComInseminacao = editandoManejo
+    ? lotes.filter((l) => l.id === editandoManejo.loteId)
+    : lotes.filter((l) =>
+        manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem) &&
+        !manejos.some((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === l.ordem)
+      );
 
   const [lotesSelecionados, setLotesSelecionados] = useState(lotesComInseminacao[0] ? [lotesComInseminacao[0].id] : []);
   const [msgLote, setMsgLote] = useState("");
