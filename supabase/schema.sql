@@ -131,6 +131,7 @@ create table if not exists insumos (
   vigor_final smallint check (vigor_final is null or (vigor_final >= 1 and vigor_final <= 5)),
   tipo_medicamento text,  -- quando categoria = 'Medicamento'
   unidade text,           -- quando categoria = 'Utensílio'
+  dose_media numeric,     -- Hormônio/Medicamento: quanto (em mL/unidade) é gasto por animal em cada aplicação
   criado_em timestamptz not null default now()
 );
 
@@ -141,6 +142,7 @@ alter table insumos add column if not exists vigor_inicial smallint;
 alter table insumos add column if not exists motilidade_final numeric;
 alter table insumos add column if not exists vigor_final smallint;
 alter table insumos add column if not exists quantidade numeric;
+alter table insumos add column if not exists dose_media numeric;
 
 -- ---------- manejo (indução, D0, ressinc, retirada, inseminação, diagnóstico) ----------
 -- precisa vir ANTES de "movimentos", que referencia manejo_id

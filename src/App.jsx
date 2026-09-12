@@ -1739,7 +1739,13 @@ export default function App() {
     if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação principal já avisou
     if (fazendaAtivaNaoLicenciada) return; // idem
     const item = insumos.find((i) => i.id === insumoId);
-    setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, estoque: Math.max(0, i.estoque - quantidade) } : i));
+    // "quantidade" aqui vem em mL/unidades realmente usadas no manejo (dose × nº de animais) —
+    // mas o "estoque" do insumo é sempre medido em Nº DE EMBALAGENS. Pra descontar certo,
+    // converte pra embalagens equivalentes (pode ser fracionário — um frasco parcialmente
+    // usado). Sêmen e Utensílio não têm "tamanho de embalagem" (já compram por dose/unidade),
+    // então a quantidade já está na mesma unidade do estoque, sem precisar converter.
+    const quantidadeEmEmbalagens = item?.tamanhoEmbalagem ? quantidade / item.tamanhoEmbalagem : quantidade;
+    setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, estoque: Math.max(0, i.estoque - quantidadeEmEmbalagens) } : i));
     setMovimentos((a) => [{ id: uid("mov"), tipo: "saida", insumoId, quantidade, data: todayISO(), manejoId, tipoManejo, local: item?.local || "fazenda", fazendaId: fazendaAtivaId, criadoEm: new Date().toISOString() }, ...a]);
   };
 
@@ -6682,7 +6688,16 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
 
             {categoriaInterna === "Sêmen" && (
               <div className="grid-form-3">
-                <Field label="Touro"><input style={inputStyle} value={form.touro} onChange={set("touro")} placeholder="Ex: Touro Zeus FIV" /></Field>
+                <Field label="Touro">
+                  <input style={inputStyle} list="touros-cadastrados-insumo" value={form.touro} onChange={(e) => {
+                    const valor = e.target.value;
+                    const conhecido = insumos.find((i) => i.categoria === "Sêmen" && i.touro && i.touro.trim().toLowerCase() === valor.trim().toLowerCase());
+                    setForm((f) => ({ ...f, touro: valor, raca: conhecido?.raca ? conhecido.raca : f.raca }));
+                  }} placeholder="Selecione ou digite o touro" />
+                  <datalist id="touros-cadastrados-insumo">
+                    {[...new Set(insumos.filter((i) => i.categoria === "Sêmen" && i.touro).map((i) => i.touro))].map((t) => <option key={t} value={t} />)}
+                  </datalist>
+                </Field>
                 <Field label="Raça">
                   <input style={inputStyle} list="racas-padrao-insumo" value={form.raca} onChange={set("raca")} placeholder="Selecione ou digite a raça" />
                   <datalist id="racas-padrao-insumo">
@@ -6921,11 +6936,13 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
 function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
   const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
   const formatarDoses = (n) => Math.round(n * 10) / 10;
-  // estoque e valor unitário em doses (Hormônio/Medicamento): a quantidade é lançada na unidade
-  // de embalagem (ex.: mL), então "estoque em doses" = estoque / Dose média, e o valor unitário
-  // por dose = custo por mL/unidade (valor da embalagem ÷ tamanho da embalagem) × Dose média —
-  // sem dose média cadastrada, mostra bruto.
-  const estoqueEmDoses = (i) => i.doseMedia ? formatarDoses(i.estoque / i.doseMedia) : i.estoque;
+  // estoque e valor em doses (Hormônio/Medicamento): a "Quantidade"/estoque é lançada em Nº DE
+  // EMBALAGENS (não em mL nem em doses) — então o total em mL/unidades é estoque × Tamanho da
+  // embalagem, e "estoque em doses" = esse total ÷ Dose média. O valor unitário por dose é o
+  // custo por mL/unidade (valor da embalagem ÷ tamanho dela) × Dose média. Já o Valor total do
+  // estoque é sempre estoque × valor unitário direto (os dois já estão na mesma unidade —
+  // "por embalagem" — não precisa envolver Tamanho da embalagem nem Dose média nessa conta).
+  const estoqueEmDoses = (i) => i.doseMedia ? formatarDoses((i.estoque * (i.tamanhoEmbalagem || 1)) / i.doseMedia) : i.estoque;
   const valorUnitarioPorDose = (i) => {
     const custoPorUnidade = custoPorUnidadeInsumo(i);
     return i.doseMedia && custoPorUnidade != null ? custoPorUnidade * i.doseMedia : custoPorUnidade;
@@ -6941,7 +6958,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
     { categoria: "Utensílio", titulo: "Utensílios" },
   ];
 
-  const valorTotalGeral = insumosDoLocal.reduce((s, i) => s + (custoPorUnidadeInsumo(i) != null ? i.estoque * custoPorUnidadeInsumo(i) : 0), 0);
+  const valorTotalGeral = insumosDoLocal.reduce((s, i) => s + (i.valorUnitario != null ? i.estoque * i.valorUnitario : 0), 0);
 
   return (
     <div>
@@ -6957,7 +6974,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
 
       {grupos.map(({ categoria, titulo }) => {
         const itens = insumosDoLocal.filter((i) => i.categoria === categoria);
-        const valorTotalGrupo = itens.reduce((s, i) => s + (custoPorUnidadeInsumo(i) != null ? i.estoque * custoPorUnidadeInsumo(i) : 0), 0);
+        const valorTotalGrupo = itens.reduce((s, i) => s + (i.valorUnitario != null ? i.estoque * i.valorUnitario : 0), 0);
         return (
           <div key={categoria} style={{ marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
@@ -7020,7 +7037,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                         <td>{categoria === "Hormônio" ? i.hormonio : i.tipoMedicamento}</td>
                         <td>{estoqueEmDoses(i)}</td>
                         <td>{fmtMoeda(valorUnitarioPorDose(i))}</td>
-                        <td>{fmtMoeda(custoPorUnidadeInsumo(i) != null ? i.estoque * custoPorUnidadeInsumo(i) : null)}</td>
+                        <td>{fmtMoeda(i.valorUnitario != null ? i.estoque * i.valorUnitario : null)}</td>
                       </tr>
                     ))}
                   </tbody>
