@@ -2646,9 +2646,25 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
 }
 
 const CATEGORIAS_LOTE = ["Nulípara", "Primípara", "Multípara"];
+const RACAS_PADRAO = [
+  "Aberdeen Angus", "Asturiana", "Bonsmara", "Braford", "Brahman", "Brangus", "Canchim", "Caracu",
+  "Charolês", "Chianina", "Devon", "Gir leiteiro", "Girolando", "Guzerá", "Hereford", "Holandês",
+  "Holstein-Frísia", "Indubrasil", "Jersey", "Limousin", "Marchigiana", "Nelore PO", "Nelore CEIP",
+  "Nelore mocho", "Nelore pintado", "Pardo-suíço", "Red Angus", "Red Brangus", "Rubia Gallega",
+  "Senepol", "Simbrasil", "Simental", "Sindi", "Tabapuã", "Wagyu",
+];
 
 
 const HORMONIOS = ["Progesterona", "Progesterona injetável", "Prostaglandina", "Cipionato", "Benzoato", "GnRH", "ECG", "HCG"];
+const PRODUTOS_HORMONIO_PADRAO = [
+  "Benzoato HC", "Bioestrogen", "Chorulon", "Ciclase DL", "CIDR", "Cipion", "Cipionato HC", "Ciosin",
+  "Croni-CIP", "Croniben", "DIB", "Ecegon", "eCGen", "E.C.P", "Fertagyl", "Fertigon",
+  "Fertilcare Implante 1200", "Fertilcare Implante 600", "Fertilcare ovulação", "Fertilcare sincronização",
+  "Foli-rec", "Folligon", "Gestavet", "Gonadiol", "Gonaxal", "Induscio", "Lutalyse", "Luteglan",
+  "Maxrelin", "Novormon", "Ovalyse", "Pluset", "Prociclar", "Progestar", "Repro neo", "Repro one",
+  "Repro one Novilhas", "Repro sync", "Sincrocio", "SincroCP", "Sincrodiol", "Sincro eCg", "Sincroforte",
+  "Sincrogest", "Sincrogest injetável", "Sincromais", "Sincrorrelin", "Syncrogen", "Zimbria",
+];
 const UNIDADES_EMBALAGEM = ["unid", "mL"];
 const TIPOS_MEDICAMENTO = ["Suplemento", "Vermífugo", "Vacina", "Outro"];
 const CATEGORIAS_ESTOQUE = ["Hormônios", "Sêmen", "Medicamentos", "Utensílios"];
@@ -2884,7 +2900,7 @@ const TITULOS_MANEJO = {
 
 function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addLote, atualizarManejo, removerManejo }) {
   const [localEstoque, setLocalEstoque] = useState("fazenda");
-  const produtosTodos = insumos.filter((i) => i.categoria === "Hormônio" && i.hormonio === "Progesterona injetável");
+  const produtosTodos = insumos.filter((i) => i.categoria === "Hormônio" && (i.hormonio === "Progesterona injetável" || i.hormonio === "Progesterona"));
   const produtos = produtosTodos.filter((i) => i.local === localEstoque);
 
   const [novoNome, setNovoNome] = useState("");
@@ -2937,7 +2953,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
     if (submetendoRef.current) return;
     const qtd = numBR(quantidade);
     if (nomeDuplicado) { setMsg("Já existe um lote com este nome nesta fazenda/safra. Use um nome diferente."); return; }
-    if (!canSave) { setMsg("Preencha o lote, o retiro, o nº de animais, a progesterona injetável e uma quantidade válida."); return; }
+    if (!canSave) { setMsg("Preencha o lote, o retiro, o nº de animais, a progesterona e uma quantidade válida."); return; }
     submetendoRef.current = true;
 
     const idDoLote = addLote({ retiroId: novoRetiroId, nome: novoNome, categoria, numeroAnimais: numBR(numeroAnimais), raca: null, mesParicao: null });
@@ -2978,7 +2994,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
       ) : bloqueadoSemPreRequisitos === "safra" ? (
         <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos. Todo manejo e lote precisa pertencer a uma safra." />
       ) : bloqueadoSemPreRequisitos === "produto" ? (
-        <EmptyState text="Cadastre ao menos um produto comercial de Progesterona injetável (Estoque > Entrada > Hormônios) desta fazenda antes de registrar este manejo." />
+        <EmptyState text="Cadastre ao menos um produto comercial de Progesterona (injetável ou implante) (Estoque > Entrada > Hormônios) desta fazenda antes de registrar este manejo." />
       ) : bloqueadoSemPreRequisitos === "retiro" ? (
         <EmptyState text="Esta fazenda ainda não tem retiros cadastrados. Adicione um retiro no cadastro de Fazenda antes de criar um lote por aqui." />
       ) : (
@@ -2987,7 +3003,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
             <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
             {produtos.length === 0 && (
-              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Nenhuma progesterona injetável cadastrada neste local de estoque.</p>
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Nenhuma progesterona cadastrada neste local de estoque.</p>
             )}
             {nomeDuplicado && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Já existe um lote com este nome neste retiro. Use um nome diferente.</p>
@@ -3008,7 +3024,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <CampoProdutoDose
-                labelProduto="Progesterona injetável"
+                labelProduto="Progesterona"
                 produto={
                   <select style={inputStyle} value={produtoId} onChange={(e) => { limparMsgSeSucesso(); setProdutoId(e.target.value); }}>
                     {produtos.map((p) => <option key={p.id} value={p.id}>{p.produtoComercial}</option>)}
@@ -3079,7 +3095,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                     <th>Lote</th>
                     <th>Categoria</th>
                     <th>Nº animais</th>
-                    <th>Progesterona injetável</th>
+                    <th>Progesterona</th>
                     <th>Medicamentos</th>
                     <th>Local</th>
                     <th>Data</th>
@@ -4507,11 +4523,10 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // "Raça da matriz": por animal (a fêmea), não por sessão como Touro/Partida. Se o animal já
   // teve uma raça atribuída antes (em qualquer Inseminação anterior), ela é reaproveitada
   // automaticamente ao ler o brinco; senão, fica livre para digitar e atribuir pela 1ª vez.
-  // O cadastro de sugestões (datalist) também vem do próprio histórico, sem tela separada.
+  // As sugestões (datalist) vêm da lista padrão de raças (RACAS_PADRAO); quem digitar algo
+  // fora da lista pode usar normalmente, sem travar o campo.
   const [racaMatriz, setRacaMatriz] = useState("");
-  const racasConhecidas = [...new Set(
-    manejos.filter((m) => m.tipo === "inseminacao").flatMap((m) => (m.detalhes || []).map((d) => d.racaMatriz).filter(Boolean))
-  )];
+  const racasConhecidas = RACAS_PADRAO;
   const buscarRacaConhecida = (b) => {
     const comRaca = manejos
       .filter((m) => m.tipo === "inseminacao")
@@ -4901,7 +4916,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 </div>
               </Field>
               <Field label="Raça da matriz *">
-                <input style={inputStyle} list="racas-conhecidas" value={racaMatriz} onChange={(e) => { limparMsgSeSucesso(); setRacaMatriz(e.target.value); }} placeholder="Ex: Nelore" />
+                <input style={inputStyle} list="racas-conhecidas" value={racaMatriz} onChange={(e) => { limparMsgSeSucesso(); setRacaMatriz(e.target.value); }} placeholder="Selecione ou digite a raça" />
                 <datalist id="racas-conhecidas">
                   {racasConhecidas.map((r) => <option key={r} value={r} />)}
                 </datalist>
@@ -4950,7 +4965,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             <LegendaCamposOpcionais />
 
-            {avisoImediato && (
+            {avisoImediato && !pendente && (
               <div style={{ marginBottom: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <EarTag size="sm">{avisoImediato.brinco}</EarTag>
@@ -5460,7 +5475,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               )}
             </div>
 
-            {avisoImediato && (
+            {avisoImediato && !pendente && (
               <div style={{ marginTop: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                   <EarTag size="sm">{avisoImediato.brinco}</EarTag>
@@ -5651,9 +5666,8 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
   const [dataInicio, setDataInicio] = useState(todayISO());
   const [dataFim, setDataFim] = useState(todayISO());
   const [racaTouro, setRacaTouro] = useState("");
-  // sugestões de raça de touro já digitadas antes, direto do próprio histórico de Repasse —
-  // sem precisar de uma tela de cadastro separada, igual já funciona com "Raça da matriz".
-  const racasTouroConhecidas = [...new Set(manejos.filter((m) => m.tipo === "repasse").map((m) => m.racaTouro).filter(Boolean))];
+  // sugestões vêm da lista padrão de raças (RACAS_PADRAO), igual já funciona com "Raça da matriz".
+  const racasTouroConhecidas = RACAS_PADRAO;
   const [sugestaoConfirmandoId, setSugestaoConfirmandoId] = useState(null);
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
@@ -5753,7 +5767,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
               </Field>
               <Field label="Nº de animais em repasse"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Raça do(s) touro(s) *">
-                <input style={inputStyle} list="racas-touro-conhecidas" value={racaTouro} onChange={(e) => { limparMsgSeSucesso(); setRacaTouro(e.target.value); }} placeholder="Ex: Nelore" />
+                <input style={inputStyle} list="racas-touro-conhecidas" value={racaTouro} onChange={(e) => { limparMsgSeSucesso(); setRacaTouro(e.target.value); }} placeholder="Selecione ou digite a raça" />
                 <datalist id="racas-touro-conhecidas">
                   {racasTouroConhecidas.map((r) => <option key={r} value={r} />)}
                 </datalist>
@@ -5861,6 +5875,24 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
   };
   const diasEntre = (dataA, dataB) => Math.round((parseISODate(dataB) - parseISODate(dataA)) / 86400000);
 
+  const dgFinalResolvido = resolverDG(dgFinalInput);
+  // quando o Resultado for Prenha, pré-preenche o Tempo de gestação informado com o valor já
+  // calculado a partir do histórico (mesmo padrão da aba Diagnóstico) — a pessoa ainda pode
+  // digitar um valor diferente depois, se o tempo real não bater com o esperado.
+  React.useEffect(() => {
+    if (dgFinalResolvido === "Prenha" && consultaAtual?.tempoCalculado != null) {
+      setTempoInformadoInput(String(consultaAtual.tempoCalculado));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dgFinalResolvido, consultaAtual]);
+  // Origem da prenhez ao vivo: segue a mesma regra usada ao registrar (compara o tempo
+  // informado com o tempo calculado a partir do histórico), em vez do valor histórico fixo.
+  const tempoInformadoNumAtual = tempoInformadoInput.trim() !== "" ? numBR(tempoInformadoInput) : null;
+  const tempoEfetivoAtual = tempoInformadoNumAtual != null && !Number.isNaN(tempoInformadoNumAtual) ? tempoInformadoNumAtual : consultaAtual?.tempoCalculado;
+  const origemPrenhezAtual = (dgFinalResolvido === "Prenha" && consultaAtual?.tempoCalculado != null && tempoEfetivoAtual != null)
+    ? (tempoEfetivoAtual < consultaAtual.tempoCalculado ? "Repasse" : "Inseminação")
+    : null;
+
   const limparCampos = () => {
     setBrinco(""); setDgFinalInput(""); setTempoInformadoInput(""); setConsultaAtual(null); setMsg("");
     brincoInputRef.current?.focus();
@@ -5913,8 +5945,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
     const tempoEfetivo = tempoInformadoNum != null && !Number.isNaN(tempoInformadoNum) ? tempoInformadoNum : consultaAtual.tempoCalculado;
     let origem = "—";
     if (consultaAtual.tempoCalculado != null && tempoEfetivo != null) {
-      if (tempoEfetivo === consultaAtual.tempoCalculado) origem = "Inseminação";
-      else if (consultaAtual.tempoCalculado < tempoEfetivo) origem = "Repasse";
+      origem = tempoEfetivo < consultaAtual.tempoCalculado ? "Repasse" : "Inseminação";
     }
     setRegistros((a) => [...a, {
       ...consultaAtual, dgFinal: dgFinal || "—", tempoInformado: tempoInformadoNum, tempoEfetivo, origem,
@@ -5978,7 +6009,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} />
                 </div>
               </Field>
-              <Field label="DG Final">
+              <Field label="Resultado">
                 <input ref={dgFinalInputRef} style={inputStyle} value={dgFinalInput} placeholder="P ou V" disabled={!consultaAtual}
                   onChange={(e) => setDgFinalInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); tempoInformadoInputRef.current?.focus(); } }} />
@@ -6000,7 +6031,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
               <div style={{ marginTop: 16, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <EarTag size="sm">{consultaAtual.brinco}</EarTag>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4A473E" }}>Dados encontrados — confira e complete DG Final / Tempo informado, depois Enter para registrar</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#4A473E" }}>Dados encontrados — confira e complete Resultado / Tempo informado, depois Enter para registrar</span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, fontSize: 12.5, color: "#4A473E" }}>
                   <div><strong>Categoria:</strong> {consultaAtual.categoria}</div>
@@ -6014,7 +6045,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                   ))}
                   <div><strong>Tempo de gestação calculado:</strong> {consultaAtual.tempoCalculado != null ? `${consultaAtual.tempoCalculado} dia(s)` : "—"}</div>
                   <div><strong>Touro da prenhez:</strong> {consultaAtual.touroDaPrenhez || "—"}</div>
-                  <div><strong>Origem da prenhez:</strong> <span style={{ fontWeight: consultaAtual.origemDaPrenhez === "Repasse" ? 700 : 400, color: consultaAtual.origemDaPrenhez === "Repasse" ? "#166336" : "#4A473E" }}>{consultaAtual.origemDaPrenhez || "—"}</span></div>
+                  <div><strong>Origem da prenhez:</strong> <span style={{ fontWeight: origemPrenhezAtual === "Repasse" ? 700 : 400, color: origemPrenhezAtual === "Repasse" ? "#166336" : "#4A473E" }}>{origemPrenhezAtual || "—"}</span></div>
                 </div>
               </div>
             )}
@@ -6043,7 +6074,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                     <th>DG 2º IATF</th>
                     <th>Data 3º IATF</th>
                     <th>DG 3º IATF</th>
-                    <th>DG Final</th>
+                    <th>Resultado</th>
                     <th>Tempo de gestação calculado</th>
                     <th>Touro da prenhez</th>
                     <th>Tempo de gestação informado</th>
@@ -6071,7 +6102,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                       <td style={{ fontWeight: r.origem !== "—" ? 600 : 400, color: r.origem === "Repasse" ? "#166336" : r.origem === "Inseminação" ? "#166336" : "#6B685E" }}>{r.origem}</td>
                       <td>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <button onClick={() => editarRegistro(r)} title="Editar (corrigir DG Final / Tempo informado)" style={{ background: "none", border: "none", cursor: "pointer", color: "#4A473E" }}><Pencil size={14} /></button>
+                          <button onClick={() => editarRegistro(r)} title="Editar (corrigir Resultado / Tempo informado)" style={{ background: "none", border: "none", cursor: "pointer", color: "#4A473E" }}><Pencil size={14} /></button>
                           <button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button>
                         </div>
                       </td>
@@ -6194,7 +6225,12 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             {categoriaInterna === "Hormônio" && (
               <div className="grid-form-3">
-                <Field label="Produto comercial"><input style={inputStyle} value={form.produtoComercial} onChange={set("produtoComercial")} placeholder="Ex: Sincrogest" /></Field>
+                <Field label="Produto comercial">
+                  <input style={inputStyle} list="produtos-hormonio-padrao" value={form.produtoComercial} onChange={set("produtoComercial")} placeholder="Selecione ou digite o produto" />
+                  <datalist id="produtos-hormonio-padrao">
+                    {PRODUTOS_HORMONIO_PADRAO.map((p) => <option key={p} value={p} />)}
+                  </datalist>
+                </Field>
                 <Field label="Hormônio">
                   <select style={inputStyle} value={form.hormonio} onChange={set("hormonio")}>
                     {HORMONIOS.map((h) => <option key={h} value={h}>{h}</option>)}
@@ -6219,7 +6255,12 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
             {categoriaInterna === "Sêmen" && (
               <div className="grid-form-3">
                 <Field label="Touro"><input style={inputStyle} value={form.touro} onChange={set("touro")} placeholder="Ex: Touro Zeus FIV" /></Field>
-                <Field label="Raça"><input style={inputStyle} value={form.raca} onChange={set("raca")} placeholder="Ex: Nelore" /></Field>
+                <Field label="Raça">
+                  <input style={inputStyle} list="racas-padrao-insumo" value={form.raca} onChange={set("raca")} placeholder="Selecione ou digite a raça" />
+                  <datalist id="racas-padrao-insumo">
+                    {RACAS_PADRAO.map((r) => <option key={r} value={r} />)}
+                  </datalist>
+                </Field>
                 <Field label="Partida"><input style={inputStyle} type="date" value={form.partida} onChange={set("partida")} /></Field>
                 <Field label="Quantidade de doses"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
@@ -8040,7 +8081,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
   const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
   const safraAtual = usaFiltroAdmin ? (safras.find((s) => s.id === filtroSafraId) || null) : safraAtiva;
 
-  const [escopo, setEscopo] = useState("grupo"); // "grupo" | "sistema"
+  const [escopo, setEscopo] = useState(perfil === "Administrador" ? "grupo" : "sistema"); // "grupo" | "sistema" | "ladoAlado"
   const [visaoResumo, setVisaoResumo] = useState("matrizes"); // "matrizes" | "inseminacoes" | "prenhas"
   // "Prenhas" não existe em "Lado a lado" (só Matrizes/Inseminações) — se a pessoa estava
   // nessa aba e troca pra "Lado a lado", volta pra "Matrizes" em vez de deixar o alternador
@@ -8175,7 +8216,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
       ) : (
         <>
           <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content" }}>
-            {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"], ...(perfil === "Administrador" ? [["ladoAlado", "Lado a lado"]] : [])].map(([key, label]) => (
+            {[...(perfil === "Administrador" ? [["grupo", "Meu Grupo"]] : []), ["sistema", "Geral do Sistema"], ...(perfil === "Administrador" ? [["ladoAlado", "Lado a lado"]] : [])].map(([key, label]) => (
               <button key={key} onClick={() => setEscopo(key)}
                 style={{
                   padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
