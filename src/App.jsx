@@ -1686,6 +1686,24 @@ export default function App() {
     const manejoCompleto = { ...manejo, id, data: manejo.data || todayISO(), operador: currentUser.nome, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() };
     setManejos((a) => [manejoCompleto, ...a]);
     marcaPendencia();
+
+    // se já existia um agendamento (pendente ou confirmado) pra este mesmo manejo, lote e dia,
+    // o manejo recém-registrado passa a ser a origem "oficial" da cadeia daqui pra frente — os
+    // agendamentos que já tinham sido derivados daquele agendamento são descartados, pra não
+    // conviver com os que gerarPreAgendamentos está prestes a criar a partir do manejo de verdade.
+    const tipoAgenda = TIPO_MANEJO_PARA_AGENDAMENTO[manejo.tipo];
+    if (tipoAgenda && manejoCompleto.loteNome) {
+      const agendamentoCorrespondente = agendamentos.find((ag) =>
+        ag.fazendaId === fazendaAtivaId && ag.tipo === tipoAgenda && ag.data === manejoCompleto.data &&
+        (ag.status === "pendente" || ag.status === "confirmado") &&
+        ag.loteNome && ag.loteNome.trim().toLowerCase() === manejoCompleto.loteNome.trim().toLowerCase()
+      );
+      if (agendamentoCorrespondente) {
+        const idsRemover = new Set(coletarDescendentesIds(agendamentoCorrespondente.id, agendamentos));
+        if (idsRemover.size > 0) setAgendamentos((a) => a.filter((ag) => !idsRemover.has(ag.id)));
+      }
+    }
+
     gerarPreAgendamentos(manejoCompleto);
     return id;
   };
@@ -1774,6 +1792,53 @@ export default function App() {
   };
 
   /* ---------- pré-agendamentos automáticos, de acordo com o manejo (ou agendamento) de origem ---------- */
+
+  // regra de diferença de dias entre manejos (a mesma usada em gerarPreAgendamentos), mas em
+  // formato de consulta pura — usada pra recalcular datas de uma cadeia já existente, sem criar
+  // nem apagar nada. Recebe um agendamento (precisa de tipo, data, e tipoManejo/protocolo quando
+  // for um D0) e devolve a(s) próxima(s) etapa(s) esperada(s) com a data já calculada.
+  const calcularProximasEtapas = (ag) => {
+    const addDiasISO = (iso, n) => ymd(addDays(parseISODate(iso), n));
+    if (!ag?.data) return [];
+    if (ag.tipo === "Indução") return [{ tipo: "D0", data: addDiasISO(ag.data, 30) }];
+    if (ag.tipo === "D0") {
+      if (ag.tipoManejo === "3 manejos") {
+        const x = parseInt((ag.protocolo || "").replace(/\D/g, ""), 10);
+        return x ? [{ tipo: "Retirada", data: addDiasISO(ag.data, x) }] : [];
+      }
+      if (ag.tipoManejo === "4 manejos") {
+        return [{ tipo: "PGF 5", data: addDiasISO(ag.data, 7) }, { tipo: "Retirada", data: addDiasISO(ag.data, 9) }];
+      }
+      return [];
+    }
+    if (ag.tipo === "Retirada") return [{ tipo: "Inseminação", data: addDiasISO(ag.data, 2) }];
+    if (ag.tipo === "Inseminação") return [{ tipo: "Diagnóstico", data: addDiasISO(ag.data, 30) }];
+    return [];
+  };
+
+  // ids de TODOS os agendamentos que derivam de `id`, em qualquer profundidade (filhos, netos...).
+  const coletarDescendentesIds = (id, lista) => {
+    const diretos = lista.filter((ag) => ag.origemAgendamentoId === id).map((ag) => ag.id);
+    return diretos.reduce((acc, dId) => [...acc, dId, ...coletarDescendentesIds(dId, lista)], []);
+  };
+
+  // percorre recursivamente a cadeia de agendamentos que já derivam de `id` (em qualquer
+  // profundidade) e corrige a data de cada um, seguindo a mesma regra de diferença de dias —
+  // preserva id/status de cada um, só ajusta a data, então nada precisa ser reconfirmado.
+  const recalcularCadeiaDerivada = (id, lista) => {
+    const origem = lista.find((ag) => ag.id === id);
+    if (!origem) return lista;
+    const proximas = calcularProximasEtapas(origem);
+    let nova = lista;
+    lista.filter((ag) => ag.origemAgendamentoId === id).forEach((filho) => {
+      const esperado = proximas.find((p) => p.tipo === filho.tipo);
+      if (esperado && filho.data !== esperado.data) {
+        nova = nova.map((ag) => ag.id === filho.id ? { ...ag, data: esperado.data } : ag);
+      }
+      nova = recalcularCadeiaDerivada(filho.id, nova);
+    });
+    return nova;
+  };
 
   const gerarPreAgendamentos = (m) => {
     const addDiasISO = (iso, n) => ymd(addDays(parseISODate(iso), n));
@@ -1881,23 +1946,44 @@ export default function App() {
   };
 
   const atualizarAgendamento = (id, campos) => {
-    const atual = agendamentos.find((ag) => ag.id === id);
-    const atualizado = atual ? { ...atual, ...campos } : null;
+    setAgendamentos((a) => {
+      const atual = a.find((ag) => ag.id === id);
+      if (!atual) return a;
+      const atualizado = { ...atual, ...campos };
+      let nova = a.map((ag) => ag.id === id ? atualizado : ag);
 
-    // atualiza o agendamento e remove os agendamentos que haviam sido sugeridos a partir dele,
-    // já que os critérios (data, número de manejos, protocolo etc.) podem ter mudado
-    setAgendamentos((a) => a.map((ag) => ag.id === id ? { ...ag, ...campos } : ag).filter((ag) => ag.origemAgendamentoId !== id));
-    marcaPendencia();
-
-    if (atualizado) {
       const tipoInterno = TIPO_AGENDAMENTO_PARA_MANEJO[atualizado.tipo];
       if (tipoInterno) {
-        gerarPreAgendamentos({
-          tipo: tipoInterno, data: atualizado.data, loteNome: atualizado.loteNome, retiroId: atualizado.retiroId, ordem: atualizado.ordem, categoria: atualizado.categoria,
-          tipoManejo: atualizado.tipoManejo, protocolo: atualizado.protocolo, origemAgendamentoId: id, numeroAnimais: atualizado.numeroAnimais || null,
+        const proximas = calcularProximasEtapas(atualizado);
+        const tiposEsperados = proximas.map((p) => p.tipo);
+        // remove os filhos diretos que não fazem mais parte da regra atual (ex.: protocolo do D0
+        // mudou de "4 manejos" pra "3 manejos", eliminando o PGF 5) — junto com a descendência deles.
+        nova.filter((ag) => ag.origemAgendamentoId === id && !tiposEsperados.includes(ag.tipo)).forEach((f) => {
+          const idsRemover = new Set([f.id, ...coletarDescendentesIds(f.id, nova)]);
+          nova = nova.filter((ag) => !idsRemover.has(ag.id));
+        });
+        // pra cada etapa esperada: se já existe (foi derivada antes), mantém id/status e só
+        // corrige a data — preservando toda a descendência dela; senão, cria a sugestão normalmente.
+        proximas.forEach((prox) => {
+          const filho = nova.find((ag) => ag.origemAgendamentoId === id && ag.tipo === prox.tipo);
+          if (filho) {
+            if (filho.data !== prox.data) nova = nova.map((ag) => ag.id === filho.id ? { ...ag, data: prox.data } : ag);
+          } else if (!(atualizado.sugestoesDescartadas || []).includes(prox.tipo)) {
+            nova = [...nova, {
+              loteNome: atualizado.loteNome || "", retiroId: atualizado.retiroId || null, ordem: atualizado.ordem || null,
+              categoria: atualizado.categoria || null, numeroAnimais: atualizado.numeroAnimais || null,
+              origemAgendamentoId: id, tipo: prox.tipo, data: prox.data, titulo: `${prox.tipo} — ${atualizado.loteNome || ""}`,
+              id: uid("ag"), fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString(),
+            }];
+          }
         });
       }
-    }
+
+      // com os filhos diretos já corretos, recalcula em cascata toda a descendência mais
+      // profunda (netos, bisnetos...), seguindo a mesma regra de diferença de dias entre manejos.
+      return recalcularCadeiaDerivada(id, nova);
+    });
+    marcaPendencia();
   };
 
   // move um agendamento pra cima/baixo dentro do MESMO dia — só muda a ordem de exibição,
@@ -2396,7 +2482,7 @@ export default function App() {
               fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} movimentosTodos={movimentos} />
           </div>
           <div style={{ display: section === "auditoria" ? "block" : "none" }}>
-            <AbaAuditoria fazendaAtiva={fazendaAtiva} />
+            <AbaAuditoria fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} manejos={manejosAtivos} />
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
             <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
@@ -2647,9 +2733,9 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
 
 const CATEGORIAS_LOTE = ["Nulípara", "Primípara", "Multípara"];
 const RACAS_PADRAO = [
-  "Aberdeen Angus", "Asturiana", "Bonsmara", "Braford", "Brahman", "Brangus", "Canchim", "Caracu",
+  "Aberdeen Angus", "Anelorado", "Asturiana", "Bonsmara", "Braford", "Brahman", "Brangus", "Canchim", "Caracu",
   "Charolês", "Chianina", "Devon", "Gir leiteiro", "Girolando", "Guzerá", "Hereford", "Holandês",
-  "Holstein-Frísia", "Indubrasil", "Jersey", "Limousin", "Marchigiana", "Nelore PO", "Nelore CEIP",
+  "Holstein-Frísia", "Indubrasil", "Jersey", "Limousin", "Marchigiana", "Nelore", "Nelore PO", "Nelore CEIP",
   "Nelore mocho", "Nelore pintado", "Pardo-suíço", "Red Angus", "Red Brangus", "Rubia Gallega",
   "Senepol", "Simbrasil", "Simental", "Sindi", "Tabapuã", "Wagyu",
 ];
@@ -6363,6 +6449,31 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
     return i.categoria === "Sêmen" ? `${i.touro} — ${i.raca}` : i.produtoComercial;
   };
   const categoriaDoInsumo = (id) => insumos.find((x) => x.id === id)?.categoria;
+  const doseMediaDoInsumo = (id) => insumos.find((x) => x.id === id)?.doseMedia || null;
+
+  // Hormônio e Medicamento: a "Quantidade" da saída (que é lançada na unidade de embalagem,
+  // ex.: ml) vira número de doses, dividindo pela Dose média informada na entrada de estoque
+  // daquele produto. Sem dose média cadastrada (insumo antigo), mostra a quantidade bruta mesmo.
+  const emDoses = (categoria) => categoria === "Hormônio" || categoria === "Medicamento";
+  const formatarDoses = (n) => Math.round(n * 10) / 10;
+  const quantidadeExibida = (insumoId, quantidadeBruta, categoria) => {
+    if (!emDoses(categoria)) return quantidadeBruta;
+    const doseMedia = doseMediaDoInsumo(insumoId);
+    return doseMedia ? formatarDoses(quantidadeBruta / doseMedia) : quantidadeBruta;
+  };
+
+  // Hormônio e Sêmen: uma linha por produto, somando todas as saídas dele (não importa a
+  // origem/manejo) — as demais categorias continuam mostrando uma linha por saída, com a origem.
+  const agruparPorInsumo = (lista) => {
+    const mapa = new Map();
+    lista.forEach((m) => {
+      if (!mapa.has(m.insumoId)) mapa.set(m.insumoId, { insumoId: m.insumoId, quantidade: 0, ultimaData: m.data });
+      const g = mapa.get(m.insumoId);
+      g.quantidade += m.quantidade;
+      if (m.data > g.ultimaData) g.ultimaData = m.data;
+    });
+    return [...mapa.values()];
+  };
 
   const grupos = [
     { categoria: "Hormônio", titulo: "Hormônios" },
@@ -6380,20 +6491,38 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
 
       {grupos.map(({ categoria, titulo }) => {
         const itens = saidas.filter((m) => categoriaDoInsumo(m.insumoId) === categoria);
+        const agregarPorProduto = categoria === "Hormônio" || categoria === "Sêmen";
+        const itensAgrupados = agregarPorProduto ? agruparPorInsumo(itens) : null;
+        const rotuloQuantidade = emDoses(categoria) ? "Quantidade (doses)" : "Quantidade";
         return (
           <div key={categoria} style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>{titulo}</div>
             {itens.length === 0 ? (
               <EmptyState text={`Nenhuma saída de ${titulo.toLowerCase()} registrada ainda — ela ocorre automaticamente ao registrar um manejo.`} />
+            ) : agregarPorProduto ? (
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+                <table>
+                  <thead><tr><th>Insumo</th><th>{rotuloQuantidade}</th><th>Última saída</th></tr></thead>
+                  <tbody>
+                    {itensAgrupados.map((g) => (
+                      <tr key={g.insumoId}>
+                        <td style={{ fontWeight: 700 }}>{nomeInsumo(g.insumoId)}</td>
+                        <td>{quantidadeExibida(g.insumoId, g.quantidade, categoria)}</td>
+                        <td>{fmtDate(g.ultimaData)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
-                  <thead><tr><th>Insumo</th><th>Quantidade</th><th>Origem (manejo)</th><th>Data</th></tr></thead>
+                  <thead><tr><th>Insumo</th><th>{rotuloQuantidade}</th><th>Origem (manejo)</th><th>Data</th></tr></thead>
                   <tbody>
                     {itens.map((m) => (
                       <tr key={m.id}>
                         <td style={{ fontWeight: 700 }}>{nomeInsumo(m.insumoId)}</td>
-                        <td>{m.quantidade}</td>
+                        <td>{quantidadeExibida(m.insumoId, m.quantidade, categoria)}</td>
                         <td style={{ textTransform: "capitalize" }}>{m.tipoManejo}</td>
                         <td>{fmtDate(m.data)}</td>
                       </tr>
@@ -6411,6 +6540,12 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
 
 function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
   const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
+  const formatarDoses = (n) => Math.round(n * 10) / 10;
+  // estoque e valor unitário em doses (Hormônio/Medicamento): a quantidade é lançada na unidade
+  // de embalagem (ex.: mL), então "estoque em doses" = estoque / Dose média, e o valor unitário
+  // por dose = valor unitário (por mL) × Dose média — sem dose média cadastrada, mostra bruto.
+  const estoqueEmDoses = (i) => i.doseMedia ? formatarDoses(i.estoque / i.doseMedia) : i.estoque;
+  const valorUnitarioPorDose = (i) => i.doseMedia && i.valorUnitario != null ? i.valorUnitario * i.doseMedia : i.valorUnitario;
 
   const [localTab, setLocalTab] = useState("fazenda");
   const insumosDoLocal = insumos.filter((i) => i.local === localTab);
@@ -6489,8 +6624,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                     <tr>
                       <th>Produto</th>
                       <th>{categoria === "Hormônio" ? "Hormônio" : "Tipo"}</th>
-                      <th>Estoque</th>
-                      <th>Unidade</th>
+                      <th>Estoque (doses)</th>
                       <th>Valor unitário</th>
                       <th>Valor total</th>
                     </tr>
@@ -6500,9 +6634,8 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                       <tr key={i.id}>
                         <td style={{ fontWeight: 700 }}>{i.produtoComercial}</td>
                         <td>{categoria === "Hormônio" ? i.hormonio : i.tipoMedicamento}</td>
-                        <td>{i.estoque}</td>
-                        <td>{i.unidadeEmbalagem || "—"}</td>
-                        <td>{fmtMoeda(i.valorUnitario)}</td>
+                        <td>{estoqueEmDoses(i)}</td>
+                        <td>{fmtMoeda(valorUnitarioPorDose(i))}</td>
                         <td>{fmtMoeda(i.valorUnitario != null ? i.estoque * i.valorUnitario : null)}</td>
                       </tr>
                     ))}
@@ -6525,6 +6658,10 @@ const TIPOS_AGENDAMENTO = ["Indução", "D0", "Retirada", "PGF 5", "Inseminaçã
 const TIPO_AGENDAMENTO_PARA_MANEJO = {
   "Indução": "inducao", "D0": "implantacao", "Retirada": "retirada",
   "Inseminação": "inseminacao", "Diagnóstico": "diagnostico",
+};
+const TIPO_MANEJO_PARA_AGENDAMENTO = {
+  inducao: "Indução", implantacao: "D0", retirada: "Retirada",
+  inseminacao: "Inseminação", diagnostico: "Diagnóstico",
 };
 const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const NOMES_MES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -7256,6 +7393,11 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
     if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.raca) return insumo.raca; }
     return null;
   };
+  const partidaDoSemen = (semenId) => {
+    if (!semenId) return null;
+    const insumo = insumos.find((i) => i.id === semenId);
+    return insumo?.partida || null;
+  };
 
   const registros = [];
   inseminacoes.forEach((insem) => {
@@ -7277,7 +7419,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
         categoria: insem.categoria || null, retiroId: insem.retiroId || null, fazendaId: insem.fazendaId,
         ecc: detIns.ecc || null, inseminador: insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
-        racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
+        racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro), partida: partidaDoSemen(detIns.semenId),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
         numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo || null,
@@ -7389,6 +7531,18 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     visaoRacaTouro === "todas" ? registros : registros.filter((r) => r.racaTouro === visaoRacaTouro),
     (r) => r.touro
   );
+  // Concepção por partida: sempre filtrada por um touro específico (sem opção "todos"), já que
+  // partida só faz sentido comparada dentro do mesmo touro.
+  const [touroPartidaSelecionado, setTouroPartidaSelecionado] = useState("");
+  const tourosDisponiveisPartida = [...new Set(registros.map((r) => r.touro).filter(Boolean))].sort();
+  React.useEffect(() => {
+    if (!tourosDisponiveisPartida.includes(touroPartidaSelecionado)) setTouroPartidaSelecionado(tourosDisponiveisPartida[0] || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourosDisponiveisPartida.join(",")]);
+  const porPartida = agruparConcepcao(
+    registros.filter((r) => r.touro === touroPartidaSelecionado),
+    (r) => r.partida
+  ).sort((a, b) => (a.label < b.label ? -1 : 1)).map((d) => ({ ...d, label: fmtDate(d.label) }));
   // reordena especificamente pela safra agrícola (julho a junho) — os outros agrupamentos
   // (ordem, categoria, retiro, etc.) usam a ordem natural em que aparecem nos dados mesmo.
   const ORDEM_MESES_SAFRA = ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"];
@@ -7610,6 +7764,26 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
               <div style={{ flex: 1, overflow: "hidden" }}>
                 <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc compacto />
               </div>
+            </div>
+          </div>
+
+          <div style={{ ...cardStyle, marginBottom: 20, height: 300, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por partida</div>
+              {tourosDisponiveisPartida.length > 0 && (
+                <select style={{ ...inputStyle, width: "auto", fontSize: 12.5, padding: "6px 10px" }}
+                  value={touroPartidaSelecionado} onChange={(e) => setTouroPartidaSelecionado(e.target.value)}>
+                  {tourosDisponiveisPartida.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
+            </div>
+            <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>Taxa de concepção por partida (data) do sêmen do touro selecionado.</p>
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              {tourosDisponiveisPartida.length === 0 ? (
+                <EmptyState text="Nenhum touro com dados de concepção ainda." />
+              ) : (
+                <BarrasConcepcao dados={porPartida} compacto />
+              )}
             </div>
           </div>
 
@@ -8215,15 +8389,17 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
         <EmptyState text="Selecione uma fazenda ativa para comparar." />
       ) : (
         <>
-          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content" }}>
-            {[...(perfil === "Administrador" ? [["grupo", "Meu Grupo"]] : []), ["sistema", "Geral do Sistema"], ...(perfil === "Administrador" ? [["ladoAlado", "Lado a lado"]] : [])].map(([key, label]) => (
-              <button key={key} onClick={() => setEscopo(key)}
-                style={{
-                  padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                  background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
-                }}>{label}</button>
-            ))}
-          </div>
+          {perfil === "Administrador" && (
+            <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content" }}>
+              {[["grupo", "Meu Grupo"], ["sistema", "Geral do Sistema"], ["ladoAlado", "Lado a lado"]].map(([key, label]) => (
+                <button key={key} onClick={() => setEscopo(key)}
+                  style={{
+                    padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                    background: escopo === key ? "#166336" : "transparent", color: escopo === key ? "#FFFFFF" : "#6B685E",
+                  }}>{label}</button>
+              ))}
+            </div>
+          )}
           <p style={{ fontSize: 11.5, color: "#9B9686", marginBottom: 18 }}>
             {safraAtual ? `Mostrando dados da safra ${safraAtual.nome}.` : "Nenhuma safra ativa selecionada — mostrando todo o histórico."}
           </p>
@@ -8380,12 +8556,201 @@ function AbaNovosAnimais({ fazendaAtiva }) {
    ainda serão definidas e implementadas depois.
 ========================================================= */
 
-function AbaAuditoria({ fazendaAtiva }) {
+function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos }) {
+  const [filtroRetiroId, setFiltroRetiroId] = useState("");
+  const [filtroLoteId, setFiltroLoteId] = useState("");
+  const lotesDoRetiroFiltro = lotes.filter((l) => !filtroRetiroId || l.retiroId === filtroRetiroId);
+  React.useEffect(() => {
+    if (filtroLoteId && !lotesDoRetiroFiltro.some((l) => l.id === filtroLoteId)) setFiltroLoteId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroRetiroId]);
+
+  const nomeLote = (id) => lotes.find((l) => l.id === id)?.nome || "—";
+  const ordemIdx = (o) => { const i = ORDENS_IATF.indexOf(o); return i === -1 ? 999 : i; };
+
+  /* ---------- busca de animais faltantes num manejo específico ---------- */
+  const [buscaLoteId, setBuscaLoteId] = useState("");
+  const [buscaOrdem, setBuscaOrdem] = useState("");
+  const [buscaManejo, setBuscaManejo] = useState("");
+
+  const GRUPOS_MANEJO_BUSCA = [
+    { tipos: ["inducao"], label: "Indução" },
+    { tipos: ["implantacao", "ressinc"], label: "D0" },
+    { tipos: ["retirada"], label: "Retirada" },
+    { tipos: ["inseminacao"], label: "Inseminação" },
+    { tipos: ["diagnostico"], label: "Diagnóstico" },
+  ];
+  // só entram como opção os manejos que realmente tiveram leitura individual de animal
+  // (animaisLidos) para o lote+ordem escolhidos.
+  const opcoesManejoBusca = useMemo(() => {
+    if (!buscaLoteId || !buscaOrdem) return [];
+    return GRUPOS_MANEJO_BUSCA
+      .filter(({ tipos }) => manejos.some((m) =>
+        m.loteId === buscaLoteId && m.ordem === buscaOrdem && tipos.includes(m.tipo) && (m.animaisLidos || []).length > 0
+      ))
+      .map((g) => g.label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buscaLoteId, buscaOrdem, manejos]);
+  React.useEffect(() => {
+    if (buscaManejo && !opcoesManejoBusca.includes(buscaManejo)) setBuscaManejo("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opcoesManejoBusca.join(",")]);
+
+  const brincosLidosEm = (tipos, loteId, ordem) => {
+    const set = new Set();
+    manejos.filter((m) => m.loteId === loteId && m.ordem === ordem && tipos.includes(m.tipo))
+      .forEach((m) => (m.animaisLidos || []).forEach((b) => set.add(b)));
+    return set;
+  };
+  // animais indicados pra Ressinc no Diagnóstico de uma ordem: resultado "Vazia" nos manejos de
+  // Diagnóstico daquela ordem em que o destino escolhido para as vazias foi "Ressinc".
+  const brincosIndicadosRessinc = (loteId, ordem) => {
+    const set = new Set();
+    manejos.filter((m) => m.tipo === "diagnostico" && m.loteId === loteId && m.ordem === ordem && m.destinoVazias === "Ressinc")
+      .forEach((m) => (m.detalhes || []).forEach((d) => { if (d.resultado === "Vazia") set.add(d.brinco); }));
+    return set;
+  };
+
+  // null = filtros incompletos; "sem-regra" = combinação sem comparação definida; array = resultado
+  const animaisFaltantes = useMemo(() => {
+    if (!buscaLoteId || !buscaOrdem || !buscaManejo) return null;
+    if (buscaManejo === "Diagnóstico") {
+      const lidosInsem = brincosLidosEm(["inseminacao"], buscaLoteId, buscaOrdem);
+      const lidosDiag = brincosLidosEm(["diagnostico"], buscaLoteId, buscaOrdem);
+      return [...lidosInsem].filter((b) => !lidosDiag.has(b));
+    }
+    if (buscaManejo === "Inseminação" && buscaOrdem === "2º IATF") {
+      const indicados = brincosIndicadosRessinc(buscaLoteId, "1º IATF");
+      const lidosInsem2 = brincosLidosEm(["inseminacao"], buscaLoteId, "2º IATF");
+      return [...indicados].filter((b) => !lidosInsem2.has(b));
+    }
+    if (buscaManejo === "Inseminação" && buscaOrdem === "3º IATF") {
+      const indicados = brincosIndicadosRessinc(buscaLoteId, "2º IATF");
+      const lidosInsem3 = brincosLidosEm(["inseminacao"], buscaLoteId, "3º IATF");
+      return [...indicados].filter((b) => !lidosInsem3.has(b));
+    }
+    return "sem-regra";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buscaLoteId, buscaOrdem, buscaManejo, manejos]);
+
+  // uma linha por lote+ordem, com o nº de animais informado em cada etapa do protocolo. Indução
+  // não tem "ordem" própria (acontece antes da 1ª IATF do lote), então seu total entra na linha
+  // da menor ordem já registrada pra aquele lote — ou numa linha própria (sem ordem), se o lote
+  // ainda não tiver nenhuma outra etapa registrada.
+  const linhas = useMemo(() => {
+    const porLoteOrdem = new Map();
+    const linha = (loteId, ordem) => {
+      const k = `${loteId}|${ordem || ""}`;
+      if (!porLoteOrdem.has(k)) porLoteOrdem.set(k, { loteId, ordem: ordem || null, inducao: 0, d0: 0, retirada: 0, inseminacao: 0, diagnostico: 0 });
+      return porLoteOrdem.get(k);
+    };
+
+    manejos.forEach((m) => {
+      if (!m.loteId) return;
+      if (m.tipo === "implantacao" || m.tipo === "ressinc") linha(m.loteId, m.ordem).d0 += m.numeroAnimais || 0;
+      else if (m.tipo === "retirada") linha(m.loteId, m.ordem).retirada += m.numeroAnimais || 0;
+      else if (m.tipo === "inseminacao") linha(m.loteId, m.ordem).inseminacao += (m.animaisLidos || []).length;
+      else if (m.tipo === "diagnostico") linha(m.loteId, m.ordem).diagnostico += (m.animaisLidos || []).length;
+    });
+
+    manejos.filter((m) => m.tipo === "inducao" && m.loteId).forEach((m) => {
+      const linhasDoLote = [...porLoteOrdem.values()].filter((l) => l.loteId === m.loteId);
+      const alvo = linhasDoLote.length > 0
+        ? linhasDoLote.reduce((menor, atual) => (ordemIdx(atual.ordem) < ordemIdx(menor.ordem) ? atual : menor))
+        : linha(m.loteId, null);
+      alvo.inducao += m.numeroAnimais || 0;
+    });
+
+    return [...porLoteOrdem.values()].sort((a, b) => {
+      const nomeA = nomeLote(a.loteId), nomeB = nomeLote(b.loteId);
+      if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
+      return ordemIdx(a.ordem) - ordemIdx(b.ordem);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manejos, lotes]);
+
+  const linhasFiltradas = linhas.filter((l) => {
+    if (filtroLoteId && l.loteId !== filtroLoteId) return false;
+    if (filtroRetiroId) {
+      const lote = lotes.find((x) => x.id === l.loteId);
+      if (lote?.retiroId !== filtroRetiroId) return false;
+    }
+    return true;
+  });
+
   return (
     <div>
-      <SectionTitle icon={Search} title="Auditoria" subtitle="Em construção — as ferramentas desta aba ainda serão definidas." />
+      <SectionTitle icon={Search} title="Auditoria" subtitle="Compare o nº de animais informado em cada etapa do protocolo, lote a lote." />
       <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
-      <EmptyState text="Nada por aqui ainda. Essa aba está reservada para futuras funções de auditoria." />
+
+      <div style={{ ...cardStyle, marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Buscar animais faltantes</div>
+        <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 12px" }}>Selecione lote, ordem e manejo para ver quais animais deveriam ter sido lidos ali e ficaram de fora.</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+          <select value={buscaLoteId} onChange={(e) => { setBuscaLoteId(e.target.value); setBuscaOrdem(""); setBuscaManejo(""); }}
+            style={{ ...inputStyle, width: "auto", minWidth: 170, padding: "7px 10px", fontSize: 12.5 }}>
+            <option value="">Selecione o lote</option>
+            {lotes.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+          </select>
+          <select value={buscaOrdem} onChange={(e) => { setBuscaOrdem(e.target.value); setBuscaManejo(""); }} disabled={!buscaLoteId}
+            style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
+            <option value="">Selecione a ordem</option>
+            {ORDENS_IATF.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <select value={buscaManejo} onChange={(e) => setBuscaManejo(e.target.value)} disabled={opcoesManejoBusca.length === 0}
+            style={{ ...inputStyle, width: "auto", minWidth: 170, padding: "7px 10px", fontSize: 12.5 }}>
+            <option value="">{buscaLoteId && buscaOrdem && opcoesManejoBusca.length === 0 ? "Nenhum manejo com leitura" : "Selecione o manejo"}</option>
+            {opcoesManejoBusca.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        {animaisFaltantes === null ? (
+          <p style={{ fontSize: 12.5, color: "#9B9686" }}>Selecione lote, ordem e manejo pra ver a relação de animais faltantes.</p>
+        ) : animaisFaltantes === "sem-regra" ? (
+          <EmptyState text="Não há regra de comparação de faltantes definida para esse manejo nessa ordem." />
+        ) : animaisFaltantes.length === 0 ? (
+          <EmptyState text="Nenhum animal faltante encontrado — tudo certo por aqui." />
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {animaisFaltantes.map((b) => <EarTag key={b}>{b}</EarTag>)}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
+        <select value={filtroRetiroId} onChange={(e) => setFiltroRetiroId(e.target.value)}
+          style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
+          <option value="">Todos os retiros</option>
+          {retiros.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
+        </select>
+        <select value={filtroLoteId} onChange={(e) => setFiltroLoteId(e.target.value)}
+          style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
+          <option value="">Todos os lotes</option>
+          {lotesDoRetiroFiltro.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+        </select>
+      </div>
+
+      {linhasFiltradas.length === 0 ? (
+        <EmptyState text="Nenhum manejo registrado ainda para os filtros selecionados." />
+      ) : (
+        <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+          <table>
+            <thead><tr><th>Lote</th><th>Ordem</th><th>Indução</th><th>D0</th><th>Retirada</th><th>Inseminação</th><th>Diagnóstico</th></tr></thead>
+            <tbody>
+              {linhasFiltradas.map((l, i) => (
+                <tr key={`${l.loteId}-${l.ordem}-${i}`}>
+                  <td style={{ fontWeight: 700 }}>{nomeLote(l.loteId)}</td>
+                  <td>{l.ordem || "—"}</td>
+                  <td>{l.inducao || "—"}</td>
+                  <td>{l.d0 || "—"}</td>
+                  <td>{l.retirada || "—"}</td>
+                  <td>{l.inseminacao || "—"}</td>
+                  <td>{l.diagnostico || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
