@@ -151,7 +151,7 @@ create table if not exists manejos (
   lote_id text references lotes (id),
   lote_nome text,
   retiro_id text references retiros (id),
-  tipo text not null check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse', 'diagnostico_repasse')),
+  tipo text not null check (tipo in ('novos_animais', 'inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse', 'diagnostico_repasse')),
   categoria text,
   ordem text,
   numero_animais integer,
@@ -198,7 +198,7 @@ alter table manejos add column if not exists raca_touro text;  -- Repasse: raça
 -- bancos criados antes deles existirem (o nome da constraint é o padrão gerado pelo Postgres).
 alter table manejos drop constraint if exists manejos_tipo_check;
 alter table manejos add constraint manejos_tipo_check
-  check (tipo in ('inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse', 'diagnostico_repasse'));
+  check (tipo in ('novos_animais', 'inducao', 'implantacao', 'ressinc', 'retirada', 'inseminacao', 'diagnostico', 'repasse', 'diagnostico_repasse'));
 
 -- ---------- movimento de estoque (entrada / saída) — depende de manejos ----------
 create table if not exists movimentos (

@@ -21,6 +21,7 @@ import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario, pedirRedef
 import logoImg from "./assets/logo.png";
 import logoBannerImg from "./assets/logo-banner.png";
 import logoBannerLoginImg from "./assets/logo-banner-login.png";
+import logoVareproPdfImg from "./assets/logo-varepro-pdf.png";
 import logoVisaoAgropecuariaImg from "./assets/logo-visao-agropecuaria.png";
 
 /* ---------------------------------------------------------------
@@ -2528,7 +2529,7 @@ export default function App() {
           </div>
 
           <div style={{ display: section === "manejo" && sub === "novos_animais" ? "block" : "none" }}>
-            <AbaNovosAnimais fazendaAtiva={fazendaAtiva} />
+            <AbaNovosAnimais fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} manejos={manejosAtivos} registrarManejo={registrarManejo} removerManejo={removerManejo} />
           </div>
           <div style={{ display: section === "manejo" && sub === "inducao" ? "block" : "none" }}>
             <AbaManejoSimples tipo="inducao" fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos}
@@ -9062,12 +9063,197 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
    ainda serão definidas e implementadas depois.
 ========================================================= */
 
-function AbaNovosAnimais({ fazendaAtiva }) {
+const OPCOES_STATUS_PRENHEZ = ["Prenha", "Vazia"];
+const COLUNAS_NOVOS_ANIMAIS = ["Identificação", "Raça da Matriz", "ECC", "Peso", "Status de prenhez", "Observações"];
+
+function AbaNovosAnimais({ fazendaAtiva, safraAtiva, manejos, registrarManejo, removerManejo }) {
+  const empty = { brinco: "", raca: "", ecc: "", peso: "", statusPrenhez: "", observacoes: "" };
+  const [form, setForm] = useState(empty);
+  const [pendentes, setPendentes] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [arquivoNome, setArquivoNome] = useState("");
+  const [erroImport, setErroImport] = useState("");
+  const inputRef = React.useRef(null);
+  const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+
+  const adicionarPendente = () => {
+    const brinco = form.brinco.trim();
+    if (!brinco) { setMsg("Informe a identificação do animal."); return; }
+    if (pendentes.some((p) => p.brinco === brinco)) { setMsg(`"${brinco}" já está na lista abaixo.`); return; }
+    if (!form.statusPrenhez) { setMsg("Selecione o status de prenhez (P ou V)."); return; }
+    setPendentes((a) => [...a, { brinco, raca: form.raca.trim() || null, ecc: form.ecc || null, peso: form.peso ? numBR(form.peso) : null, statusPrenhez: form.statusPrenhez, observacoes: form.observacoes.trim() || null }]);
+    setForm(empty);
+    setMsg("");
+  };
+  const removerPendente = (brinco) => setPendentes((a) => a.filter((p) => p.brinco !== brinco));
+
+  const registrarTudo = () => {
+    if (pendentes.length === 0) return;
+    registrarManejo({
+      tipo: "novos_animais", data: todayISO(),
+      animaisLidos: pendentes.map((p) => p.brinco), detalhes: pendentes,
+    });
+    setPendentes([]);
+    setMsg(`${pendentes.length} animal(is) registrado(s).`);
+  };
+
+  const baixarModeloAnimais = () => {
+    const dadosModelo = [
+      { "Identificação": "1234", "Raça da Matriz": "Nelore mocho", "ECC": "3,00", "Peso": "420", "Status de prenhez": "Prenha", "Observações": "" },
+      { "Identificação": "1235", "Raça da Matriz": "Nelore mocho", "ECC": "2,75", "Peso": "", "Status de prenhez": "Vazia", "Observações": "Casqueamento em dia" },
+    ];
+    const ws = XLSX.utils.json_to_sheet(dadosModelo);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Modelo");
+    XLSX.writeFile(wb, "modelo-novos-animais.xlsx");
+  };
+
+  const processarArquivoImportacao = (file) => {
+    setErroImport(""); setMsg("");
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: "array" });
+        const linhasBrutas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+        if (linhasBrutas.length === 0) { setErroImport("A planilha está vazia."); return; }
+        const cabecalhos = Object.keys(linhasBrutas[0]);
+        const achar = (nome) => cabecalhos.find((c) => normalizarCabecalho(c) === normalizarCabecalho(nome));
+        const colBrinco = achar("Identificação") || achar("Brinco");
+        if (!colBrinco) { setErroImport('Não encontrei a coluna "Identificação". Baixe o modelo abaixo para conferir os nomes esperados.'); return; }
+        const colRaca = achar("Raça da Matriz") || achar("Raça");
+        const colEcc = achar("ECC");
+        const colPeso = achar("Peso");
+        const colStatus = achar("Status de prenhez") || achar("Status");
+        const colObs = achar("Observações");
+
+        const novos = [];
+        const brincosJaNaLista = new Set(pendentes.map((p) => p.brinco));
+        let semStatus = 0;
+        linhasBrutas.forEach((linha) => {
+          const brinco = String(linha[colBrinco] ?? "").trim();
+          if (!brinco || brincosJaNaLista.has(brinco)) return;
+          const statusBruto = String(linha[colStatus] ?? "").trim().toUpperCase();
+          const statusPrenhez = statusBruto.startsWith("P") ? "Prenha" : statusBruto.startsWith("V") ? "Vazia" : "";
+          if (!statusPrenhez) { semStatus++; return; }
+          brincosJaNaLista.add(brinco);
+          novos.push({
+            brinco, raca: colRaca ? String(linha[colRaca] ?? "").trim() || null : null,
+            ecc: colEcc ? String(linha[colEcc] ?? "").trim() || null : null,
+            peso: colPeso && linha[colPeso] !== "" ? numBR(String(linha[colPeso])) : null,
+            statusPrenhez, observacoes: colObs ? String(linha[colObs] ?? "").trim() || null : null,
+          });
+        });
+        if (novos.length === 0) { setErroImport("Nenhuma linha válida encontrada (confira a Identificação e o Status de prenhez de cada linha)."); return; }
+        setPendentes((a) => [...a, ...novos]);
+        setArquivoNome(file.name);
+        setMsg(`${novos.length} animal(is) da planilha adicionado(s) à lista abaixo — confira e clique em "Registrar" para salvar.${semStatus > 0 ? ` (${semStatus} linha(s) ignorada(s) por falta de Status de prenhez.)` : ""}`);
+      } catch (err) {
+        setErroImport("Não consegui ler esse arquivo. Confirme que é um .xlsx válido.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const historico = manejos.filter((m) => m.tipo === "novos_animais").sort((a, b) => (a.data < b.data ? 1 : -1));
+
   return (
     <div>
-      <SectionTitle icon={Tag} title="Novos animais" subtitle="Em construção — as funções desta aba ainda serão definidas." />
+      <SectionTitle icon={Tag} title="Novos animais" subtitle="Cadastre animais novos na fazenda ou avalie os já existentes antes do início de uma estação — não é pré-requisito de nenhum outro manejo e não entra em relatório nenhum." />
       <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
-      <EmptyState text="Nada por aqui ainda. Essa aba está reservada para futuras funções." />
+
+      {!fazendaAtiva ? (
+        <EmptyState text="Selecione uma fazenda ativa." />
+      ) : (
+        <>
+          <div style={{ ...cardStyle, marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Adicionar animal</div>
+            <div className="grid-form-3">
+              <Field label="Identificação *">
+                <input style={inputStyle} value={form.brinco} onChange={set("brinco")} placeholder="Ex: 1234"
+                  onKeyDown={(e) => e.key === "Enter" && adicionarPendente()} />
+              </Field>
+              <Field label="Raça da matriz">
+                <input style={inputStyle} list="racas-novos-animais" value={form.raca} onChange={set("raca")} placeholder="Selecione ou digite a raça" />
+                <datalist id="racas-novos-animais">{RACAS_PADRAO.map((r) => <option key={r} value={r} />)}</datalist>
+              </Field>
+              <Field label="ECC">
+                <select style={inputStyle} value={form.ecc} onChange={set("ecc")}>
+                  <option value="">— não informado —</option>
+                  {OPCOES_ECC.map((e) => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </Field>
+              <Field label="Peso (kg)"><input style={inputStyle} type="number" min="0" value={form.peso} onChange={set("peso")} placeholder="Ex: 420" /></Field>
+              <Field label="Status de prenhez *">
+                <select style={inputStyle} value={form.statusPrenhez} onChange={set("statusPrenhez")}>
+                  <option value="">Selecione</option>
+                  {OPCOES_STATUS_PRENHEZ.map((o) => <option key={o} value={o}>{o === "Prenha" ? "Prenha (P)" : "Vazia (V)"}</option>)}
+                </select>
+              </Field>
+              <Field label="Observações"><input style={inputStyle} value={form.observacoes} onChange={set("observacoes")} placeholder="Opcional" /></Field>
+            </div>
+            <div style={{ marginTop: 14 }}><BtnPrimary onClick={adicionarPendente}><Plus size={15} /> Adicionar à lista</BtnPrimary></div>
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrado") || msg.includes("adicionado") ? "#166336" : "#A32D2D", marginTop: 10 }}>{msg}</p>}
+          </div>
+
+          <div style={{ ...cardStyle, marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Ou importar animais por planilha</div>
+            <p style={{ fontSize: 12.5, color: "#6B685E", margin: "0 0 12px" }}>Colunas esperadas: {COLUNAS_NOVOS_ANIMAIS.join(", ")} (só Identificação e Status de prenhez são obrigatórias).</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f) processarArquivoImportacao(f); }} style={{ ...inputStyle, maxWidth: 320 }} />
+              <BtnGhost onClick={baixarModeloAnimais}><Download size={14} /> Baixar modelo</BtnGhost>
+            </div>
+            {erroImport && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 10 }}>⚠ {erroImport}</p>}
+          </div>
+
+          {pendentes.length > 0 && (
+            <div style={{ ...cardStyle, marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase" }}>Animais na lista ({pendentes.length})</div>
+                <BtnPrimary onClick={registrarTudo}><Save size={15} /> Registrar</BtnPrimary>
+              </div>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+                <table>
+                  <thead><tr><th>Identificação</th><th>Raça</th><th>ECC</th><th>Peso</th><th>Status</th><th>Observações</th><th></th></tr></thead>
+                  <tbody>
+                    {pendentes.map((p) => (
+                      <tr key={p.brinco}>
+                        <td><EarTag size="sm">{p.brinco}</EarTag></td>
+                        <td>{p.raca || "—"}</td>
+                        <td>{p.ecc || "—"}</td>
+                        <td>{p.peso ?? "—"}</td>
+                        <td>{p.statusPrenhez}</td>
+                        <td>{p.observacoes || "—"}</td>
+                        <td><button onClick={() => removerPendente(p.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><X size={14} /></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Histórico de registros</div>
+          {historico.length === 0 ? (
+            <EmptyState text="Nenhum animal registrado por aqui ainda." />
+          ) : (
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+              <table>
+                <thead><tr><th>Data</th><th>Animais</th><th>Operador</th><th></th></tr></thead>
+                <tbody>
+                  {historico.map((m) => (
+                    <tr key={m.id}>
+                      <td>{fmtDate(m.data)}</td>
+                      <td>{(m.detalhes || []).map((d) => d.brinco).join(", ")}</td>
+                      <td>{m.operador || "—"}</td>
+                      <td><button onClick={() => removerManejo(m.id)} title="Excluir este registro" style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -9580,7 +9766,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
 
   const gerarRelatorioDetalhadoPDF = async () => {
     const [logoVarepro, logoVisao] = await Promise.all([
-      carregarImagemBase64(logoBannerImg),
+      carregarImagemBase64(logoVareproPdfImg),
       carregarImagemBase64(logoVisaoAgropecuariaImg),
     ]);
 
@@ -9601,7 +9787,14 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     doc.text(`RELATÓRIO DETALHADO SAFRA ${safraExibida?.nome || "—"}`, largPagina / 2, y, { align: "center" });
     y += 22;
     doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-    doc.text(`Fazenda: ${fazendaExibida?.nome || "—"}    Município: ${fazendaExibida?.municipio || "—"}    Proprietário: ${fazendaExibida?.proprietario || "—"}    Responsável: ${fazendaExibida?.responsavel || "—"}`, margemEsq, y);
+    const larguraUtil = largPagina - margemEsq * 2;
+    const colunasInfo = [
+      { x: margemEsq, texto: `Fazenda: ${fazendaExibida?.nome || "—"}` },
+      { x: margemEsq + larguraUtil * 0.28, texto: `Município: ${fazendaExibida?.municipio || "—"}` },
+      { x: margemEsq + larguraUtil * 0.54, texto: `Proprietário: ${fazendaExibida?.proprietario || "—"}` },
+      { x: margemEsq + larguraUtil * 0.79, texto: `Responsável: ${fazendaExibida?.responsavel || "—"}` },
+    ];
+    colunasInfo.forEach((c) => doc.text(c.texto, c.x, y));
     y += 18;
 
     const opcoesTabela = { margin: { left: margemEsq, right: margemEsq }, styles: { fontSize: 8, cellPadding: 3, halign: "center" }, headStyles: { fillColor: [22, 99, 54], textColor: 255, fontStyle: "bold", halign: "center" } };
