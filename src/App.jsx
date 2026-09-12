@@ -1508,6 +1508,41 @@ export default function App() {
     setLotes((a) => a.map((l) => l.id === loteId ? { ...l, animais: l.animais.filter((b) => b !== brinco) } : l));
   };
 
+  // "Atribuir histórico a nova identificação" (Auditoria): quando um animal ganha um novo brinco
+  // (reidentificação), transfere pra essa nova identificação tudo que já existia gravado sob a
+  // identificação anterior — nos lotes (array de animais) e em todo o histórico de manejos
+  // (animaisLidos e detalhes), em qualquer lote/ordem/tipo de manejo. A nova identificação pode
+  // já ter registros próprios (ex.: a reidentificação só foi lançada no sistema depois que um
+  // manejo já tinha sido feito no campo com o número novo) — nesse caso, mescla em vez de duplicar.
+  const atribuirHistoricoAnimal = (anterior, nova) => {
+    setLotes((a) => a.map((l) => {
+      if (!(l.animais || []).includes(anterior)) return l;
+      const semAnterior = l.animais.filter((b) => b !== anterior);
+      return { ...l, animais: semAnterior.includes(nova) ? semAnterior : [...semAnterior, nova] };
+    }));
+    setManejos((a) => a.map((m) => {
+      const temAnteriorLido = (m.animaisLidos || []).includes(anterior);
+      const temAnteriorDetalhe = (m.detalhes || []).some((d) => d.brinco === anterior);
+      if (!temAnteriorLido && !temAnteriorDetalhe) return m;
+      let animaisLidos = m.animaisLidos;
+      if (temAnteriorLido) {
+        const semAnterior = m.animaisLidos.filter((b) => b !== anterior);
+        animaisLidos = semAnterior.includes(nova) ? semAnterior : [...semAnterior, nova];
+      }
+      let detalhes = m.detalhes;
+      if (temAnteriorDetalhe) {
+        const jaTemDetalheDaNova = (m.detalhes || []).some((d) => d.brinco === nova);
+        // se esse manejo já tem um registro próprio da nova identificação, mantém esse e
+        // descarta o da anterior (evita duas linhas do "mesmo" animal no mesmo manejo).
+        detalhes = jaTemDetalheDaNova
+          ? m.detalhes.filter((d) => d.brinco !== anterior)
+          : m.detalhes.map((d) => (d.brinco === anterior ? { ...d, brinco: nova } : d));
+      }
+      return { ...m, animaisLidos, detalhes };
+    }));
+    marcaPendencia();
+  };
+
   // Ao ser identificado na leitura da 1º IATF, o animal passa a "herdar" retroativamente os
   // manejos que já haviam sido feitos no lote (Indução, D0, Retirada) antes dele ser identificado
   // individualmente — necessário para permitir análises futuras por animal, além de por lote.
@@ -2482,7 +2517,7 @@ export default function App() {
               fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} movimentosTodos={movimentos} />
           </div>
           <div style={{ display: section === "auditoria" ? "block" : "none" }}>
-            <AbaAuditoria fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} manejos={manejosAtivos} />
+            <AbaAuditoria fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} manejos={manejosAtivos} atribuirHistoricoAnimal={atribuirHistoricoAnimal} />
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
             <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
@@ -4591,7 +4626,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // EXCEÇÃO: o próprio lote sendo reaberto para edição continua aparecendo, senão não daria
   // pra selecioná-lo de volta pra continuar a leitura.
   const lotesComRetirada = editandoManejo
-    ? lotes.filter((l) => l.id === editandoManejo.loteId)
+    ? lotes.filter((l) => l.id === editandoManejo.loteId).map((l) => ({ ...l, ordem: editandoManejo.ordem }))
     : lotes.filter((l) =>
         manejos.some((m) => m.tipo === "retirada" && m.loteId === l.id && m.ordem === l.ordem) &&
         !manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem)
@@ -4652,7 +4687,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     setMsg("Progresso salvo. Você pode continuar depois.");
   };
 
-  const lotesSelecionadosObjs = lotes.filter((l) => lotesSelecionados.includes(l.id));
+  const lotesSelecionadosObjs = lotesComRetirada.filter((l) => lotesSelecionados.includes(l.id));
   const ordemComum = lotesSelecionadosObjs[0]?.ordem || null;
   const loteAtual = lotesSelecionadosObjs.length === 1 ? lotesSelecionadosObjs[0] : null;
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || "—";
@@ -5198,7 +5233,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   // não tiveram Diagnóstico registrado nessa mesma ordem.
   // EXCEÇÃO: o próprio lote sendo reaberto para edição continua aparecendo.
   const lotesComInseminacao = editandoManejo
-    ? lotes.filter((l) => l.id === editandoManejo.loteId)
+    ? lotes.filter((l) => l.id === editandoManejo.loteId).map((l) => ({ ...l, ordem: editandoManejo.ordem }))
     : lotes.filter((l) =>
         manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem) &&
         !manejos.some((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === l.ordem)
@@ -5237,7 +5272,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     setMsg("Progresso salvo. Você pode continuar depois.");
   };
 
-  const lotesSelecionadosObjs = lotes.filter((l) => lotesSelecionados.includes(l.id));
+  const lotesSelecionadosObjs = lotesComInseminacao.filter((l) => lotesSelecionados.includes(l.id));
   const ordemComum = lotesSelecionadosObjs[0]?.ordem || null;
 
   const toggleLote = (id) => {
@@ -8558,7 +8593,7 @@ function AbaNovosAnimais({ fazendaAtiva }) {
    ainda serão definidas e implementadas depois.
 ========================================================= */
 
-function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos }) {
+function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistoricoAnimal }) {
   const [filtroRetiroId, setFiltroRetiroId] = useState("");
   const [filtroLoteId, setFiltroLoteId] = useState("");
   const lotesDoRetiroFiltro = lotes.filter((l) => !filtroRetiroId || l.retiroId === filtroRetiroId);
@@ -8634,6 +8669,34 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos }) {
     return "sem-regra";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buscaLoteId, buscaOrdem, buscaManejo, manejos]);
+
+  /* ---------- atribuir histórico a nova identificação ---------- */
+  // identificações que já têm alguma leitura/registro no sistema (lotes + qualquer manejo) —
+  // só essas podem ser escolhidas como "Identificação anterior".
+  const brincosConhecidos = useMemo(() => {
+    const set = new Set();
+    lotes.forEach((l) => (l.animais || []).forEach((b) => set.add(b)));
+    manejos.forEach((m) => {
+      (m.animaisLidos || []).forEach((b) => set.add(b));
+      (m.detalhes || []).forEach((d) => { if (d.brinco) set.add(d.brinco); });
+    });
+    return [...set].sort();
+  }, [lotes, manejos]);
+
+  const [novaIdentificacao, setNovaIdentificacao] = useState("");
+  const [identificacaoAnterior, setIdentificacaoAnterior] = useState("");
+  const [msgAtribuicao, setMsgAtribuicao] = useState("");
+
+  const registrarAtribuicao = () => {
+    const nova = novaIdentificacao.trim();
+    if (!nova) { setMsgAtribuicao("Informe a nova identificação."); return; }
+    if (!identificacaoAnterior) { setMsgAtribuicao("Selecione a identificação anterior."); return; }
+    if (nova === identificacaoAnterior) { setMsgAtribuicao("A nova identificação precisa ser diferente da anterior."); return; }
+    atribuirHistoricoAnimal(identificacaoAnterior, nova);
+    setMsgAtribuicao(`Histórico de "${identificacaoAnterior}" atribuído a "${nova}".`);
+    setNovaIdentificacao("");
+    setIdentificacaoAnterior("");
+  };
 
   // uma linha por lote+ordem, com o nº de animais informado em cada etapa do protocolo. Indução
   // não tem "ordem" própria (acontece antes da 1ª IATF do lote), então seu total entra na linha
@@ -8715,6 +8778,32 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {animaisFaltantes.map((b) => <EarTag key={b}>{b}</EarTag>)}
           </div>
+        )}
+      </div>
+
+      <div style={{ ...cardStyle, marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Atribuir histórico a nova identificação</div>
+        <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 12px" }}>Use quando um animal ganhou um novo número de identificação — todo o histórico gravado na identificação anterior passa a valer para a nova. A nova identificação pode até já ter registros próprios (ex.: um manejo feito no campo já com o número novo); nesse caso os históricos são mesclados.</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 6 }}>
+          <div style={{ minWidth: 170 }}>
+            <Field label="Nova identificação">
+              <input style={inputStyle} value={novaIdentificacao} onChange={(e) => { setNovaIdentificacao(e.target.value); setMsgAtribuicao(""); }} placeholder="Ex: 1234" />
+            </Field>
+          </div>
+          <div style={{ minWidth: 170 }}>
+            <Field label="Identificação anterior">
+              <select style={inputStyle} value={identificacaoAnterior} onChange={(e) => { setIdentificacaoAnterior(e.target.value); setMsgAtribuicao(""); }}>
+                <option value="">Selecione o animal</option>
+                {brincosConhecidos.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <BtnPrimary onClick={registrarAtribuicao}>Registrar</BtnPrimary>
+          </div>
+        </div>
+        {msgAtribuicao && (
+          <p style={{ fontSize: 12.5, color: msgAtribuicao.startsWith("Histórico") ? "#166336" : "#A32D2D", margin: 0 }}>{msgAtribuicao}</p>
         )}
       </div>
 
