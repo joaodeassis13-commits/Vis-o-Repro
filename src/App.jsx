@@ -8092,11 +8092,11 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20, alignItems: "stretch" }}>
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Resumo</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content" }}>
                 {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoResumo(key)}
                     style={{
-                      padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
                       background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
                     }}>{op.label}</button>
                 ))}
@@ -8112,33 +8112,33 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
                 {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
               </div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content" }}>
                 {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
                   <button key={key} onClick={() => setVisaoGeral(key)}
                     style={{
-                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                      padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
                       background: visaoGeral === key ? "#166336" : "transparent", color: visaoGeral === key ? "#FFFFFF" : "#6B685E",
                     }}>{label}</button>
                 ))}
               </div>
               <div style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
-                <BarrasConcepcao dados={visaoGeral === "concepcao" ? geralComCategoria : fertilidadeComCategoria} compacto />
+                <BarrasConcepcao dados={visaoGeral === "concepcao" ? geralComCategoria : fertilidadeComCategoria} />
               </div>
             </div>
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Custo</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content" }}>
                 {Object.entries(OPCOES_CUSTO).map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoCusto(key)}
                     style={{
-                      padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
                       background: visaoCusto === key ? "#166336" : "transparent", color: visaoCusto === key ? "#FFFFFF" : "#6B685E",
                     }}>{op.label}</button>
                 ))}
               </div>
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <BarrasCusto dados={dadosCusto} compacto />
+                <BarrasCusto dados={dadosCusto} />
               </div>
             </div>
           </div>
@@ -8156,41 +8156,41 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                 ))}
               </div>
               <div style={{ flex: 1, display: "flex", alignItems: "center", overflow: "hidden" }}>
-                <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} compacto />
+                <BarrasConcepcao dados={OPCOES_BARRA_CONCEPCAO[visaoBarra].dados} />
               </div>
             </div>
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por {OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].label.toLowerCase()}</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
                 {Object.entries(OPCOES_PROTOCOLO_CONCEPCAO).map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoProtocolo(key)}
                     style={{
-                      padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                      padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
                       background: visaoProtocolo === key ? "#166336" : "transparent", color: visaoProtocolo === key ? "#FFFFFF" : "#6B685E",
                     }}>{op.label}</button>
                 ))}
               </div>
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <BarrasConcepcao dados={OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].dados} compacto />
+                <BarrasConcepcao dados={OPCOES_PROTOCOLO_CONCEPCAO[visaoProtocolo].dados} />
               </div>
             </div>
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Concepção por Touro</div>
               {racasTouroDisponiveis.length > 0 && (
-                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 8, width: "fit-content", flexWrap: "wrap" }}>
                   {["todas", ...racasTouroDisponiveis].map((raca) => (
                     <button key={raca} onClick={() => setVisaoRacaTouro(raca)}
                       style={{
-                        padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+                        padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
                         background: visaoRacaTouro === raca ? "#166336" : "transparent", color: visaoRacaTouro === raca ? "#FFFFFF" : "#6B685E",
                       }}>{raca === "todas" ? "Todas as raças" : raca}</button>
                   ))}
                 </div>
               )}
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc compacto />
+                <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc />
               </div>
             </div>
           </div>
@@ -8210,7 +8210,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                 {tourosDisponiveisPartida.length === 0 ? (
                   <EmptyState text="Nenhum touro com dados de concepção ainda." />
                 ) : (
-                  <BarrasConcepcao dados={porPartida} compacto />
+                  <BarrasConcepcao dados={porPartida} />
                 )}
               </div>
             </div>
@@ -8218,11 +8218,11 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column", gridColumn: "span 2" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 4 }}>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520" }}>Concepção por data de inseminação</div>
-                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2 }}>
+                <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1 }}>
                   {[["dia", "Por dia"], ["mes", "Por mês"]].map(([key, label]) => (
                     <button key={key} onClick={() => setVisaoData(key)}
                       style={{
-                        padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                        padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
                         background: visaoData === key ? "#166336" : "transparent", color: visaoData === key ? "#FFFFFF" : "#6B685E",
                       }}>{label}</button>
                   ))}
