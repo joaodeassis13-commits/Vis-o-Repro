@@ -8341,14 +8341,18 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   // altura em pixels fixos (não porcentagem) — dentro de contêineres flex aninhados, uma altura
   // em "%" às vezes não consegue se basear numa altura definida do pai, e todas as barras acabam
   // saindo do mesmo tamanho. Em pixel fixo, a altura de cada barra sempre reflete o valor dela.
-  const alturaMaximaPx = compacto ? 90 : 140;
+  // No modo não-compacto, a largura da coluna varia conforme o nº de colunas do gráfico (padrão
+  // do Benchmarking): até 4 colunas = 64px, 5 colunas = 51px, 6 ou mais = 42px — altura máxima
+  // sempre 120px. O modo compacto (usado no "lado a lado" do Benchmarking) mantém seu tamanho fixo.
+  const larguraColuna = compacto ? 28 : (lista.length <= 4 ? 64 : lista.length === 5 ? 51 : 42);
+  const alturaMaximaPx = compacto ? 90 : 120;
   return (
     <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: lista.length > (compacto ? 6 : 8) ? "flex-start" : "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
       {lista.map((d, i) => (
-        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa != null ? `${d.taxa}%` : "—"}</div>
-            <div style={{ width: compacto ? 28 : 44, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * alturaMaximaPx, 4) : 2}px`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
+            <div style={{ width: larguraColuna, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * alturaMaximaPx, 4) : 2}px`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, height: compacto ? 22 : 27, flexShrink: 0, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
           {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98", flexShrink: 0 }}>n={d.n}</div>}
@@ -8363,14 +8367,15 @@ function BarrasCusto({ dados, compacto }) {
   const fmtMoedaCurta = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
   if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorValor = Math.max(...dados.map((d) => d.valor || 0), 1);
-  const alturaMaximaPx = compacto ? 90 : 140;
+  const larguraColuna = compacto ? 28 : (dados.length <= 4 ? 64 : dados.length === 5 ? 51 : 42);
+  const alturaMaximaPx = compacto ? 90 : 120;
   return (
     <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%" }}>
       {dados.map((d, i) => (
-        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 44 : 64, flexShrink: 0 }}>
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4, whiteSpace: "nowrap" }}>{fmtMoedaCurta(d.valor)}</div>
-            <div style={{ width: compacto ? 28 : 44, height: `${d.valor != null ? Math.max((d.valor / maiorValor) * alturaMaximaPx, 4) : 2}px`, background: d.valor != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
+            <div style={{ width: larguraColuna, height: `${d.valor != null ? Math.max((d.valor / maiorValor) * alturaMaximaPx, 4) : 2}px`, background: d.valor != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, height: compacto ? 22 : 27, flexShrink: 0, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
         </div>
