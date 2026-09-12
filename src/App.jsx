@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   Users, Home, Building2, Layers, FlaskConical, Droplet, Syringe,
   ClipboardList, Stethoscope, Warehouse, ArrowDownToLine, ArrowUpFromLine,
@@ -2601,8 +2603,8 @@ export default function App() {
               perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveisLicenciadas} />
           </div>
           <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
-            <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} perfil={currentUser.perfil}
-              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} />
+            <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil}
+              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} movimentosTodos={movimentos} />
           </div>
         </div>
       </main>
@@ -6778,6 +6780,20 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
   );
 }
 
+// custo por mL/unidade de um insumo de Hormônio ou Medicamento: o "Valor unitário" cadastrado na
+// entrada de estoque é o preço da EMBALAGEM inteira (ex.: um frasco de 10 mL), não de 1 mL/unidade
+// — então o custo por mL/unidade é valorUnitario ÷ tamanhoEmbalagem. Sêmen (vendido já por dose) e
+// Utensílio (vendido por unidade/caixa) não têm embalagem com "x mL/unid", então o valor unitário
+// deles já é o custo direto, sem essa divisão. Usada em Saída de estoque, Saldo e nos custos dos
+// Relatórios — em qualquer lugar que hoje usa valorUnitario de Hormônio/Medicamento, deve usar isto.
+function custoPorUnidadeInsumo(insumo) {
+  if (!insumo || insumo.valorUnitario == null) return null;
+  if (["Hormônio", "Medicamento"].includes(insumo.categoria) && insumo.tamanhoEmbalagem) {
+    return insumo.valorUnitario / insumo.tamanhoEmbalagem;
+  }
+  return insumo.valorUnitario;
+}
+
 function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
   const [localTab, setLocalTab] = useState("fazenda");
   const saidas = movimentos.filter((m) => m.tipo === "saida" && m.local === localTab);
@@ -6788,7 +6804,7 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
   };
   const categoriaDoInsumo = (id) => insumos.find((x) => x.id === id)?.categoria;
   const doseMediaDoInsumo = (id) => insumos.find((x) => x.id === id)?.doseMedia || null;
-  const valorUnitarioDoInsumo = (id) => insumos.find((x) => x.id === id)?.valorUnitario ?? null;
+  const custoPorUnidadeDoInsumo = (id) => custoPorUnidadeInsumo(insumos.find((x) => x.id === id));
   const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
 
   // Hormônio e Medicamento: a "Quantidade" da saída (que é lançada na unidade de embalagem,
@@ -6801,16 +6817,17 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
     const doseMedia = doseMediaDoInsumo(insumoId);
     return doseMedia ? Math.round(quantidadeBruta / doseMedia) : quantidadeBruta;
   };
-  // valor unitário por dose = valor unitário (por mL/unidade) × Dose média; valor total usa
-  // sempre a quantidade bruta, então não muda com o arredondamento das doses.
+  // valor unitário por dose = custo por mL/unidade (valor da embalagem ÷ tamanho da embalagem) ×
+  // Dose média; valor total usa sempre a quantidade bruta, então não muda com o arredondamento
+  // das doses.
   const valorUnitarioPorDoseExibido = (insumoId) => {
     const doseMedia = doseMediaDoInsumo(insumoId);
-    const valorUnitario = valorUnitarioDoInsumo(insumoId);
-    return doseMedia && valorUnitario != null ? valorUnitario * doseMedia : valorUnitario;
+    const custoPorUnidade = custoPorUnidadeDoInsumo(insumoId);
+    return doseMedia && custoPorUnidade != null ? custoPorUnidade * doseMedia : custoPorUnidade;
   };
   const valorTotalExibido = (insumoId, quantidadeBruta) => {
-    const valorUnitario = valorUnitarioDoInsumo(insumoId);
-    return valorUnitario != null ? quantidadeBruta * valorUnitario : null;
+    const custoPorUnidade = custoPorUnidadeDoInsumo(insumoId);
+    return custoPorUnidade != null ? quantidadeBruta * custoPorUnidade : null;
   };
 
   // Hormônio, Medicamento e Sêmen: uma linha por produto, somando todas as saídas dele (não
@@ -6904,9 +6921,13 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
   const formatarDoses = (n) => Math.round(n * 10) / 10;
   // estoque e valor unitário em doses (Hormônio/Medicamento): a quantidade é lançada na unidade
   // de embalagem (ex.: mL), então "estoque em doses" = estoque / Dose média, e o valor unitário
-  // por dose = valor unitário (por mL) × Dose média — sem dose média cadastrada, mostra bruto.
+  // por dose = custo por mL/unidade (valor da embalagem ÷ tamanho da embalagem) × Dose média —
+  // sem dose média cadastrada, mostra bruto.
   const estoqueEmDoses = (i) => i.doseMedia ? formatarDoses(i.estoque / i.doseMedia) : i.estoque;
-  const valorUnitarioPorDose = (i) => i.doseMedia && i.valorUnitario != null ? i.valorUnitario * i.doseMedia : i.valorUnitario;
+  const valorUnitarioPorDose = (i) => {
+    const custoPorUnidade = custoPorUnidadeInsumo(i);
+    return i.doseMedia && custoPorUnidade != null ? custoPorUnidade * i.doseMedia : custoPorUnidade;
+  };
 
   const [localTab, setLocalTab] = useState("fazenda");
   const insumosDoLocal = insumos.filter((i) => i.local === localTab);
@@ -6918,7 +6939,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
     { categoria: "Utensílio", titulo: "Utensílios" },
   ];
 
-  const valorTotalGeral = insumosDoLocal.reduce((s, i) => s + (i.valorUnitario != null ? i.estoque * i.valorUnitario : 0), 0);
+  const valorTotalGeral = insumosDoLocal.reduce((s, i) => s + (custoPorUnidadeInsumo(i) != null ? i.estoque * custoPorUnidadeInsumo(i) : 0), 0);
 
   return (
     <div>
@@ -6934,7 +6955,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
 
       {grupos.map(({ categoria, titulo }) => {
         const itens = insumosDoLocal.filter((i) => i.categoria === categoria);
-        const valorTotalGrupo = itens.reduce((s, i) => s + (i.valorUnitario != null ? i.estoque * i.valorUnitario : 0), 0);
+        const valorTotalGrupo = itens.reduce((s, i) => s + (custoPorUnidadeInsumo(i) != null ? i.estoque * custoPorUnidadeInsumo(i) : 0), 0);
         return (
           <div key={categoria} style={{ marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
@@ -6997,7 +7018,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                         <td>{categoria === "Hormônio" ? i.hormonio : i.tipoMedicamento}</td>
                         <td>{estoqueEmDoses(i)}</td>
                         <td>{fmtMoeda(valorUnitarioPorDose(i))}</td>
-                        <td>{fmtMoeda(i.valorUnitario != null ? i.estoque * i.valorUnitario : null)}</td>
+                        <td>{fmtMoeda(custoPorUnidadeInsumo(i) != null ? i.estoque * custoPorUnidadeInsumo(i) : null)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -7745,11 +7766,13 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, re
 // retiro, ECC, inseminador, data e touro, já que esses dados vivem na Inseminação, não no
 // Diagnóstico. Animais do lote "Desconhecidos" são sempre ignorados. Um animal inseminado
 // mas ainda sem diagnóstico correspondente também fica de fora (resultado ainda não existe).
-function construirRegistrosConcepcao(manejos, lotes, insumos) {
+function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
   const idsDesconhecidos = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
   const inseminacoes = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidos.has(m.loteId));
   const diagnosticos = manejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId));
   const d0Ressinc = manejos.filter((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && !idsDesconhecidos.has(m.loteId));
+  const retiradas = manejos.filter((m) => m.tipo === "retirada" && !idsDesconhecidos.has(m.loteId));
+  const inducoes = manejos.filter((m) => m.tipo === "inducao" && !idsDesconhecidos.has(m.loteId));
 
   const nomeTouro = (semenId, touroInformado) => {
     if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.touro) return insumo.touro; }
@@ -7765,13 +7788,44 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
     const insumo = insumos.find((i) => i.id === semenId);
     return insumo?.partida || null;
   };
+  // custo do sêmen usado NESSE animal específico: o valor unitário do sêmen já É o preço por
+  // dose (não tem "embalagem" pra dividir) — 1 palheta usada = 1 dose gasta com esse animal.
+  const custoSemenDoAnimal = (semenId) => {
+    if (!semenId) return 0;
+    return custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0;
+  };
+  // custo de Hormônio de UM manejo (Indução/D0/Retirada), dividido pelo nº de animais daquele
+  // manejo — dá o custo hormonal "por cabeça" daquele evento específico, que depois é somado
+  // entre Indução (só na 1ª IATF) + D0 + Retirada pra chegar no custo hormonal daquele animal
+  // naquela ordem.
+  const custoHormonioPorAnimalDoManejo = (manejo) => {
+    if (!manejo || !manejo.numeroAnimais) return 0;
+    const gasto = movimentos
+      .filter((mv) => mv.tipo === "saida" && mv.manejoId === manejo.id)
+      .reduce((soma, mv) => {
+        const insumo = insumos.find((i) => i.id === mv.insumoId);
+        const custoPorUnidade = custoPorUnidadeInsumo(insumo);
+        if (!insumo || insumo.categoria !== "Hormônio" || custoPorUnidade == null) return soma;
+        return soma + mv.quantidade * custoPorUnidade;
+      }, 0);
+    return gasto / manejo.numeroAnimais;
+  };
 
   const registros = [];
   inseminacoes.forEach((insem) => {
-    // D0/Ressinc mais recente do mesmo lote+ordem, feito até a data da Inseminação — é dali que
-    // vêm o protocolo padrão usado, a duração do protocolo e o número de manejos (3/4 manejos).
+    // D0/Ressinc e Retirada mais recentes do mesmo lote+ordem, feitos até a data da Inseminação
+    // — é dali que vêm o protocolo padrão usado, a duração do protocolo, o número de manejos
+    // (3/4 manejos) e o custo hormonal atribuído a essa ordem.
     const candidatosD0 = d0Ressinc.filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.data <= insem.data);
     const d0MaisRecente = candidatosD0.length > 0 ? candidatosD0.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)) : null;
+    const candidatosRetirada = retiradas.filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.data <= insem.data);
+    const retiradaMaisRecente = candidatosRetirada.length > 0 ? candidatosRetirada.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)) : null;
+    // Indução só existe uma vez na vida do lote (antes da 1ª IATF) — só entra no custo hormonal
+    // quando a ordem desta inseminação for mesmo a 1ª IATF.
+    const inducaoDoLote = insem.ordem === ORDENS_IATF[0]
+      ? inducoes.filter((m) => m.loteId === insem.loteId && m.data <= insem.data).reduce((mais, atual) => (!mais || atual.data > mais.data ? atual : mais), null)
+      : null;
+    const custoHormonioOrdem = custoHormonioPorAnimalDoManejo(inducaoDoLote) + custoHormonioPorAnimalDoManejo(d0MaisRecente) + custoHormonioPorAnimalDoManejo(retiradaMaisRecente);
 
     (insem.detalhes || []).forEach((detIns) => {
       const candidatas = diagnosticos.filter((d) =>
@@ -7784,6 +7838,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
       registros.push({
         brinco: detIns.brinco, prenha: detDiag.resultado === "Prenha", ordem: insem.ordem,
         categoria: insem.categoria || null, retiroId: insem.retiroId || null, fazendaId: insem.fazendaId,
+        loteId: insem.loteId || null, loteNome: lotes.find((l) => l.id === insem.loteId)?.nome || null,
         ecc: detIns.ecc || null, inseminador: insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro), partida: partidaDoSemen(detIns.semenId),
@@ -7791,6 +7846,10 @@ function construirRegistrosConcepcao(manejos, lotes, insumos) {
         protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
         numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo || null,
         duracaoProtocolo: insem.protocolo || d0MaisRecente?.protocolo || null,
+        // custo real gasto NESSE animal (sêmen usado nele + a fração do hormônio do
+        // protocolo daquela ordem) — usado pra calcular custo por Inseminador/Mês/Raça/ECC.
+        custoSemenAnimal: custoSemenDoAnimal(detIns.semenId),
+        custoHormonioAnimal: custoHormonioOrdem,
       });
     });
   });
@@ -7992,8 +8051,9 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
       .filter((m) => m.tipo === "saida" && m.manejoId && idsManejosSubset.has(m.manejoId))
       .reduce((soma, m) => {
         const insumo = insumos.find((i) => i.id === m.insumoId);
-        if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || insumo.valorUnitario == null) return soma;
-        return soma + m.quantidade * insumo.valorUnitario;
+        const custoPorUnidade = custoPorUnidadeInsumo(insumo);
+        if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || custoPorUnidade == null) return soma;
+        return soma + m.quantidade * custoPorUnidade;
       }, 0);
     const custoAnimal = totalAnimaisSubset > 0 ? gastoSubset / totalAnimaisSubset : null;
     const custoInseminacao = totalInseminacoesSubset > 0 ? gastoSubset / totalInseminacoesSubset : null;
@@ -9272,7 +9332,7 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
   );
 }
 
-function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: retirosProp, insumos: insumosProp, manejos: manejosProp, perfil, fazendasVisiveis, safras, lotesTodos, retirosTodos, insumosTodos, manejosTodos }) {
+function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: retirosProp, insumos: insumosProp, manejos: manejosProp, movimentos: movimentosProp, perfil, fazendasVisiveis, safras, lotesTodos, retirosTodos, insumosTodos, manejosTodos, movimentosTodos }) {
   const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtiva?.id || "");
   const [filtroSafraId, setFiltroSafraId] = useState("");
   const usaFiltroAdmin = perfil === "Administrador";
@@ -9282,6 +9342,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
   const retiros = usaFiltroAdmin ? retirosTodos.filter((r) => r.fazendaId === filtroFazendaId) : retirosProp;
   const insumos = usaFiltroAdmin ? insumosTodos.filter((i) => i.fazendaId === filtroFazendaId) : insumosProp;
   const manejos = usaFiltroAdmin ? manejosTodos.filter((m) => m.fazendaId === filtroFazendaId && (filtroSafraId ? m.safraId === filtroSafraId : true)) : manejosProp;
+  const movimentos = usaFiltroAdmin ? movimentosTodos.filter((m) => m.fazendaId === filtroFazendaId) : movimentosProp;
 
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || "—";
   const nomeInsumo = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "—";
@@ -9420,6 +9481,263 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     baixarPlanilha("Lotes", ws, `visaorepro_lotes_${sufixoArquivo()}.xlsx`);
   };
 
+  /* ---------- Relatório Detalhado (PDF) ---------- */
+  // Primeira versão — estrutura e dados reais (nada de placeholder), mas algumas contas (Nº de
+  // IATF por matriz e o custo nas dimensões que não têm um recorte de lote limpo — Inseminador,
+  // Mês de parição, Raça do touro e ECC, que usam o custo da fazenda/safra inteira) ainda vão ser
+  // revisadas juntos antes de considerar definitivas.
+  const idsDesconhecidosPDF = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  const registrosPDF = useMemo(() => construirRegistrosConcepcao(manejos, lotes, insumos, movimentos), [manejos, lotes, insumos, movimentos]);
+  const contarPrenhasDetPDF = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length, 0);
+
+  const calcularCustosPDF = (idsLotesEscopo) => {
+    const manejosEscopo = idsLotesEscopo ? manejos.filter((m) => idsLotesEscopo.has(m.loteId)) : manejos;
+    const idsManejosEscopo = new Set(manejosEscopo.map((m) => m.id));
+    const gasto = movimentos
+      .filter((m) => m.tipo === "saida" && m.manejoId && idsManejosEscopo.has(m.manejoId))
+      .reduce((soma, m) => {
+        const insumo = insumos.find((i) => i.id === m.insumoId);
+        const custoPorUnidade = custoPorUnidadeInsumo(insumo);
+        if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || custoPorUnidade == null) return soma;
+        return soma + m.quantidade * custoPorUnidade;
+      }, 0);
+    const lotesEscopo = idsLotesEscopo ? lotes.filter((l) => idsLotesEscopo.has(l.id)) : lotes;
+    const totalAnimaisEscopo = lotesEscopo.reduce((s, l) => s + (l.animais || []).length, 0);
+    const insemManejos = manejosEscopo.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidosPDF.has(m.loteId));
+    const totalInseminacoes = insemManejos.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+    const diagManejos = manejosEscopo.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidosPDF.has(m.loteId));
+    const diagRepasseManejos = manejosEscopo.filter((m) => m.tipo === "diagnostico_repasse" && !idsDesconhecidosPDF.has(m.loteId));
+    const totalPrenhas = contarPrenhasDetPDF(diagManejos) + contarPrenhasDetPDF(diagRepasseManejos);
+    const totalDiagnosticados = diagManejos.reduce((s, m) => s + (m.detalhes || []).length, 0) + diagRepasseManejos.reduce((s, m) => s + (m.detalhes || []).length, 0);
+    const custoAnimal = totalAnimaisEscopo > 0 ? gasto / totalAnimaisEscopo : null;
+    const custoInseminacao = totalInseminacoes > 0 ? gasto / totalInseminacoes : null;
+    const custoPrenhez = (custoInseminacao != null && totalPrenhas > 0) ? (custoInseminacao * totalDiagnosticados) / totalPrenhas : null;
+    return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
+  };
+  // custo por Inseminador/Mês de parição/Raça de touro/ECC: soma o que foi realmente usado
+  // (sêmen específico de cada animal + a fração do protocolo hormonal daquela ordem) nos
+  // animais do grupo — não o custo do lote inteiro, já que esses recortes cruzam vários lotes.
+  const custosPorRegistrosPDF = (registrosGrupo) => {
+    const gastoTotal = registrosGrupo.reduce((s, r) => s + (r.custoSemenAnimal || 0) + (r.custoHormonioAnimal || 0), 0);
+    const animaisDistintos = new Set(registrosGrupo.map((r) => r.brinco)).size;
+    const totalInseminacoes = registrosGrupo.length;
+    const prenhas = registrosGrupo.filter((r) => r.prenha).length;
+    const custoAnimal = animaisDistintos > 0 ? gastoTotal / animaisDistintos : null;
+    const custoInseminacao = totalInseminacoes > 0 ? gastoTotal / totalInseminacoes : null;
+    const custoPrenhez = (custoInseminacao != null && prenhas > 0) ? (custoInseminacao * totalInseminacoes) / prenhas : null;
+    return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
+  };
+
+  const statsGrupoPDF = (lista) => {
+    const n = lista.length;
+    const prenhas = lista.filter((r) => r.prenha).length;
+    return { inseminados: n, prenhas, vazias: n - prenhas, concepcao: n > 0 ? (prenhas / n) * 100 : null };
+  };
+  const iatfPorMatrizPDF = (idsLotesEscopo) => {
+    const insemEscopo = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidosPDF.has(m.loteId) && (!idsLotesEscopo || idsLotesEscopo.has(m.loteId)));
+    const totalInsem = insemEscopo.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+    const matrizes = new Set();
+    insemEscopo.forEach((m) => (m.animaisLidos || []).forEach((b) => matrizes.add(b)));
+    return matrizes.size > 0 ? totalInsem / matrizes.size : null;
+  };
+  const fmtPctPDF = (v) => v == null || isNaN(v) ? "—" : `${v.toFixed(1)}%`;
+  const fmtMoedaPDF = (v) => v == null ? "—" : `R$ ${v.toFixed(0)}`;
+  const linhaCustosPDF = (c) => [fmtMoedaPDF(c.animal), fmtMoedaPDF(c.inseminacao), fmtMoedaPDF(c.prenhez)];
+
+  const gerarRelatorioDetalhadoPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const margemEsq = 30;
+    let y = 40;
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+    doc.text("VArepro", margemEsq, y);
+    doc.setFontSize(14);
+    doc.text(`RELATÓRIO DETALHADO SAFRA ${safraExibida?.nome || "—"}`, doc.internal.pageSize.getWidth() / 2, y, { align: "center" });
+    y += 22;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    doc.text(`Fazenda: ${fazendaExibida?.nome || "—"}    Município: ${fazendaExibida?.municipio || "—"}    Proprietário: ${fazendaExibida?.proprietario || "—"}    Responsável: ${fazendaExibida?.responsavel || "—"}`, margemEsq, y);
+    y += 18;
+
+    const opcoesTabela = { margin: { left: margemEsq, right: margemEsq }, styles: { fontSize: 8, cellPadding: 3 }, headStyles: { fillColor: [22, 99, 54], textColor: 255, fontStyle: "bold" } };
+    const novaSecao = (titulo) => { doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(titulo, margemEsq, y); y += 6; };
+
+    // 1) Resumo zootécnico geral (Categoria × Ordem, com Repasse)
+    novaSecao("Resumo zootécnico geral:");
+    const linhasResumo = [];
+    CATEGORIAS_RESUMO.forEach((cat) => {
+      const idsLotesCat = new Set(lotes.filter((l) => l.categoria === cat).map((l) => l.id));
+      const registrosCat = registrosPDF.filter((r) => r.categoria === cat);
+      const custosCat = calcularCustosPDF(idsLotesCat);
+      const totalCat = statsGrupoPDF(registrosCat);
+      const totalAnimaisCat = lotes.filter((l) => l.categoria === cat).reduce((s, l) => s + (l.animais || []).length, 0);
+      const fertilidadeCat = totalAnimaisCat > 0 ? (totalCat.prenhas / totalAnimaisCat) * 100 : null;
+      const iatfCat = iatfPorMatrizPDF(idsLotesCat);
+      ORDENS_IATF.forEach((ordem) => {
+        const st = statsGrupoPDF(registrosCat.filter((r) => r.ordem === ordem));
+        linhasResumo.push([cat, ordem, st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalCat.concepcao), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
+      });
+      const repasseManejosCat = manejos.filter((m) => m.tipo === "repasse" && idsLotesCat.has(m.loteId));
+      const diagRepasseCat = manejos.filter((m) => m.tipo === "diagnostico_repasse" && idsLotesCat.has(m.loteId));
+      const insemRepasse = repasseManejosCat.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+      const prenhasRepasse = contarPrenhasDetPDF(diagRepasseCat);
+      const totalDiagRepasse = diagRepasseCat.reduce((s, m) => s + (m.detalhes || []).length, 0);
+      linhasResumo.push(["", "Repasse", insemRepasse || "—", prenhasRepasse, totalDiagRepasse - prenhasRepasse,
+        fmtPctPDF(totalDiagRepasse > 0 ? (prenhasRepasse / totalDiagRepasse) * 100 : null),
+        fmtPctPDF(totalCat.concepcao), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      head: [["Categoria", "Ordem", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: linhasResumo,
+    });
+    y = doc.lastAutoTable.finalY + 20;
+
+    // 2) Detalhamento por retiro
+    novaSecao("Detalhamento por retiro:");
+    const linhasRetiro = [];
+    retiros.forEach((ret) => {
+      const idsLotesRet = new Set(lotes.filter((l) => l.retiroId === ret.id).map((l) => l.id));
+      if (idsLotesRet.size === 0) return;
+      const custosRet = calcularCustosPDF(idsLotesRet);
+      const totalRet = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId)));
+      const iatfRet = iatfPorMatrizPDF(idsLotesRet);
+      CATEGORIAS_RESUMO.forEach((cat) => {
+        const st = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat));
+        if (st.inseminados === 0) return;
+        linhasRetiro.push([ret.nome, cat, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalRet.concepcao), iatfRet != null ? iatfRet.toFixed(2) : "—", ...linhaCustosPDF(custosRet)]);
+      });
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      head: [["Retiro", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: linhasRetiro,
+    });
+    y = doc.lastAutoTable.finalY + 20;
+
+    // 3) Detalhamento por lotes trabalhados
+    novaSecao("Detalhamento por lotes trabalhados:");
+    const linhasLote = [];
+    lotes.filter((l) => !idsDesconhecidosPDF.has(l.id)).forEach((lote) => {
+      const idsLoteUnico = new Set([lote.id]);
+      const registrosLote = registrosPDF.filter((r) => r.loteId === lote.id);
+      if (registrosLote.length === 0) return;
+      const custosLote = calcularCustosPDF(idsLoteUnico);
+      const totalLote = statsGrupoPDF(registrosLote);
+      const iatfLote = iatfPorMatrizPDF(idsLoteUnico);
+      ORDENS_IATF.forEach((ordem) => {
+        const st = statsGrupoPDF(registrosLote.filter((r) => r.ordem === ordem));
+        if (st.inseminados === 0) return;
+        linhasLote.push([lote.nome, lote.categoria || "—", ordem, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalLote.concepcao), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
+      });
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      head: [["Lote", "Categoria", "Ordem", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: linhasLote,
+    });
+    y = doc.lastAutoTable.finalY + 20;
+    if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
+
+    // 4) Detalhamento por inseminador (custo = sêmen + fração do hormônio realmente usados
+    // nos animais que passaram por aquele inseminador)
+    novaSecao("Detalhamento por inseminador:");
+    const inseminadores = [...new Set(registrosPDF.map((r) => r.inseminador).filter(Boolean))];
+    const linhasInseminador = [];
+    inseminadores.forEach((nome) => {
+      const registrosIns = registrosPDF.filter((r) => r.inseminador === nome);
+      const totalIns = statsGrupoPDF(registrosIns);
+      const custosIns = custosPorRegistrosPDF(registrosIns);
+      CATEGORIAS_RESUMO.forEach((cat) => {
+        const st = statsGrupoPDF(registrosIns.filter((r) => r.categoria === cat));
+        if (st.inseminados === 0) return;
+        linhasInseminador.push([nome, cat, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalIns.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosIns)]);
+      });
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      head: [["Inseminador", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: linhasInseminador,
+    });
+    y = doc.lastAutoTable.finalY + 20;
+
+    // 5) Detalhamento por mês de parição (custo = sêmen + fração do hormônio dos animais
+    // daquele mês; só considera os meses informados — mês de parição é opcional)
+    novaSecao("Detalhamento por mês de parição:");
+    const meses = [...new Set(registrosPDF.map((r) => r.mesParicao).filter(Boolean))].sort((a, b) => NOMES_MES.indexOf(a) - NOMES_MES.indexOf(b));
+    const linhasMes = [];
+    meses.forEach((mes) => {
+      const registrosMes = registrosPDF.filter((r) => r.mesParicao === mes);
+      const totalMes = statsGrupoPDF(registrosMes);
+      const custosMes = custosPorRegistrosPDF(registrosMes);
+      CATEGORIAS_RESUMO.forEach((cat) => {
+        const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat));
+        if (st.inseminados === 0) return;
+        linhasMes.push([mes, cat, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalMes.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosMes)]);
+      });
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      head: [["Mês", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: linhasMes,
+    });
+    y = doc.lastAutoTable.finalY + 20;
+    if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
+
+    // 6) Detalhamento por raça de touro usado na inseminação (custo = sêmen + fração do
+    // hormônio dos animais inseminados com aquele touro)
+    novaSecao("Detalhamento por raça de touro usado na inseminação:");
+    const racas = [...new Set(registrosPDF.map((r) => r.racaTouro).filter(Boolean))];
+    const linhasRaca = [];
+    racas.forEach((raca) => {
+      const registrosRaca = registrosPDF.filter((r) => r.racaTouro === raca);
+      const totalRaca = statsGrupoPDF(registrosRaca);
+      const touros = [...new Set(registrosRaca.map((r) => r.touro).filter(Boolean))];
+      touros.forEach((touro) => {
+        const registrosTouro = registrosRaca.filter((r) => r.touro === touro);
+        const st = statsGrupoPDF(registrosTouro);
+        if (st.inseminados === 0) return;
+        linhasRaca.push([raca, touro, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalRaca.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorRegistrosPDF(registrosTouro))]);
+      });
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      head: [["Raça", "Touro", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: linhasRaca,
+    });
+    y = doc.lastAutoTable.finalY + 20;
+    if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
+
+    // 7) Detalhamento por ECC (custo = sêmen + fração do hormônio dos animais daquele ECC;
+    // só considera os ECC informados — é um campo opcional)
+    novaSecao("Detalhamento por ECC:");
+    const linhasEcc = [];
+    CATEGORIAS_RESUMO.forEach((cat) => {
+      const registrosCat = registrosPDF.filter((r) => r.categoria === cat && r.ecc != null);
+      if (registrosCat.length === 0) return;
+      const totalCat = statsGrupoPDF(registrosCat);
+      const eccs = [...new Set(registrosCat.map((r) => r.ecc))].sort();
+      eccs.forEach((ecc) => {
+        const registrosEcc = registrosCat.filter((r) => r.ecc === ecc);
+        const st = statsGrupoPDF(registrosEcc);
+        linhasEcc.push([cat, ecc, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalCat.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorRegistrosPDF(registrosEcc))]);
+      });
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      head: [["Categoria", "ECC", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: linhasEcc,
+    });
+
+    doc.save(`visaorepro_relatorio-detalhado_${sufixoArquivo()}.pdf`);
+  };
+
   const totalAnimais = lotes.reduce((s, l) => s + (l.animais?.length || 0), 0);
 
   return (
@@ -9432,6 +9750,13 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         <EmptyState text="Selecione uma fazenda ativa para exportar planilhas." />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+          <div style={cardStyle}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 6 }}>Relatório Detalhado</div>
+            <p style={{ fontSize: 12.5, color: "#6B685E", margin: "0 0 14px" }}>
+              Um PDF com tabelas prontas para apresentar: resumo zootécnico geral e detalhamento por retiro, lote, inseminador, mês de parição, raça de touro e ECC — com Concepção, Fertilidade, Nº de IATF por matriz e Custos por animal/inseminação/prenhez.
+            </p>
+            <BtnPrimary onClick={gerarRelatorioDetalhadoPDF} disabled={lotes.length === 0}><FileDown size={15} /> Exportar Relatório Detalhado (.pdf)</BtnPrimary>
+          </div>
           <div style={cardStyle}>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 6 }}>Exportação por Animal</div>
             <p style={{ fontSize: 12.5, color: "#6B685E", margin: "0 0 14px" }}>
