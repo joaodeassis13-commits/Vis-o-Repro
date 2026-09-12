@@ -22,8 +22,13 @@ create table if not exists fazendas (
   proprietario text,
   responsavel text,
   telefone text,
+  licenciada boolean not null default true,
   criado_em timestamptz not null default now()
 );
+
+-- "create table if not exists" não adiciona coluna nova a uma tabela já existente — garante
+-- que "licenciada" exista mesmo em bancos antigos, sem apagar fazenda nenhuma.
+alter table fazendas add column if not exists licenciada boolean not null default true;
 
 -- ---------- usuários (perfil + fazendas autorizadas) ----------
 -- id = mesmo id do Supabase Auth (auth.users) — esse SIM é um uuid de verdade,
@@ -394,6 +399,34 @@ returns boolean as $$
   select exists (select 1 from usuarios u where u.id = auth.uid() and u.perfil = 'Suporte Adm');
 $$ language sql stable security definer set search_path = public;
 
+-- fazenda "Não licenciada" (marcada pelo Suporte Adm): os dados continuam no banco e
+-- permanecem 100% legíveis (relatórios/exportações), só ficam bloqueados os LANÇAMENTOS novos
+-- (manejo, movimentação de estoque, agenda) — ver as políticas de escrita mais abaixo, que
+-- combinam fazenda_autorizada(fazenda_id) com esta função só pra INSERT/UPDATE/DELETE, nunca
+-- pra SELECT.
+create or replace function fazenda_licenciada(fid text)
+returns boolean as $$
+  select coalesce((select f.licenciada from fazendas f where f.id = fid), true);
+$$ language sql stable security definer set search_path = public;
+
+-- (Revertido) Suporte Adm NÃO deve ficar vinculado em usuario_fazendas a todas as fazendas —
+-- isso contornaria sem querer as restrições de estoque (insumos/movimentos) e agenda
+-- (agendamentos), que dependem só de fazenda_autorizada() sem checar o perfil, e o Suporte
+-- Adm não deve ter acesso a essas três coisas em NENHUMA fazenda. O acesso dele a fazendas/
+-- retiros/safras/lotes/manejos já é garantido diretamente pela função eh_suporte_adm() nas
+-- políticas abaixo, sem precisar de vínculo nenhum em usuario_fazendas.
+drop trigger if exists trg_vincular_suporte_adm_a_fazenda_nova on fazendas;
+drop trigger if exists trg_vincular_novo_suporte_adm_a_todas_fazendas on usuarios;
+drop function if exists vincular_suporte_adm_a_fazenda_nova();
+drop function if exists vincular_novo_suporte_adm_a_todas_fazendas();
+
+-- limpeza: remove os vínculos que essas triggers (de uma versão anterior deste script) já
+-- tinham criado — sem isso, o Suporte Adm continuaria com acesso de "membro" a estoque/agenda
+-- de fazendas que não deveria, via fazenda_autorizada() puro.
+delete from usuario_fazendas uf
+using usuarios u
+where uf.usuario_id = u.id and u.perfil = 'Suporte Adm';
+
 -- true se auth.uid() e "outro_usuario_id" compartilham ao menos uma fazenda —
 -- usado para um Administrador só enxergar, como usuário, quem está no mesmo
 -- grupo de fazendas que ele (não vê outros Administradores de grupos diferentes).
@@ -457,21 +490,89 @@ drop policy if exists "safras: acesso autorizado" on safras;
 create policy "safras: acesso autorizado" on safras
   for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
+-- A partir daqui, lotes/insumos/manejos/movimentos/agendamentos separam LEITURA (sempre
+-- liberada pra quem é autorizado na fazenda — histórico nunca some, mesmo "Não licenciada",
+-- pra Relatórios/Exportações continuarem funcionando) de ESCRITA (exige também
+-- fazenda_licenciada(), ou seja, só lança dado novo numa fazenda "Licenciada").
+-- Suporte Adm só tem bypass (eh_suporte_adm()) em LOTES e MANEJOS — o que ele precisa pra
+-- importar histórico de qualquer fazenda e pra montar os números do Painel de clientes. Ele
+-- NÃO tem acesso a insumos/movimentos (estoque) nem a agendamentos (agenda) de fazenda
+-- nenhuma além da própria — essas telas nem existem pra esse perfil no app.
+
 drop policy if exists "lotes: acesso autorizado" on lotes;
-create policy "lotes: acesso autorizado" on lotes
-  for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
+drop policy if exists "lotes: leitura" on lotes;
+create policy "lotes: leitura" on lotes
+  for select using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
+drop policy if exists "lotes: insercao" on lotes;
+create policy "lotes: insercao" on lotes
+  for insert with check (
+    (fazenda_autorizada(fazenda_id) and fazenda_licenciada(fazenda_id))
+    or eh_suporte_adm()
+    -- permite reenviar (upsert) um lote que JÁ EXISTE e já é autorizado, mesmo com a fazenda
+    -- "Não licenciada" — a sincronização sempre reenvia a coleção inteira via "INSERT ... ON
+    -- CONFLICT DO UPDATE", e o Postgres exige que a política de INSERT passe mesmo quando o
+    -- resultado é só uma atualização de uma linha que já existia sem mudar nada.
+    or (fazenda_autorizada(fazenda_id) and exists (select 1 from lotes t2 where t2.id = lotes.id))
+  );
+drop policy if exists "lotes: atualizacao" on lotes;
+create policy "lotes: atualizacao" on lotes
+  for update using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
+drop policy if exists "lotes: exclusao" on lotes;
+create policy "lotes: exclusao" on lotes
+  for delete using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "insumos: acesso autorizado" on insumos;
-create policy "insumos: acesso autorizado" on insumos
-  for all using (fazenda_id is null or fazenda_autorizada(fazenda_id) or eh_suporte_adm());
+drop policy if exists "insumos: leitura" on insumos;
+create policy "insumos: leitura" on insumos
+  for select using (fazenda_id is null or fazenda_autorizada(fazenda_id));
+drop policy if exists "insumos: insercao" on insumos;
+create policy "insumos: insercao" on insumos
+  for insert with check (
+    fazenda_id is null
+    or (fazenda_autorizada(fazenda_id) and fazenda_licenciada(fazenda_id))
+    or (fazenda_autorizada(fazenda_id) and exists (select 1 from insumos t2 where t2.id = insumos.id))
+  );
+drop policy if exists "insumos: atualizacao" on insumos;
+create policy "insumos: atualizacao" on insumos
+  for update using (fazenda_id is null or fazenda_autorizada(fazenda_id));
+drop policy if exists "insumos: exclusao" on insumos;
+create policy "insumos: exclusao" on insumos
+  for delete using (fazenda_id is null or fazenda_autorizada(fazenda_id));
 
 drop policy if exists "manejos: acesso autorizado" on manejos;
-create policy "manejos: acesso autorizado" on manejos
-  for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
+drop policy if exists "manejos: leitura" on manejos;
+create policy "manejos: leitura" on manejos
+  for select using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
+drop policy if exists "manejos: insercao" on manejos;
+create policy "manejos: insercao" on manejos
+  for insert with check (
+    (fazenda_autorizada(fazenda_id) and fazenda_licenciada(fazenda_id))
+    or eh_suporte_adm()
+    or (fazenda_autorizada(fazenda_id) and exists (select 1 from manejos t2 where t2.id = manejos.id))
+  );
+drop policy if exists "manejos: atualizacao" on manejos;
+create policy "manejos: atualizacao" on manejos
+  for update using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
+drop policy if exists "manejos: exclusao" on manejos;
+create policy "manejos: exclusao" on manejos
+  for delete using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "movimentos: acesso autorizado" on movimentos;
-create policy "movimentos: acesso autorizado" on movimentos
-  for all using (fazenda_autorizada(fazenda_id));
+drop policy if exists "movimentos: leitura" on movimentos;
+create policy "movimentos: leitura" on movimentos
+  for select using (fazenda_autorizada(fazenda_id));
+drop policy if exists "movimentos: insercao" on movimentos;
+create policy "movimentos: insercao" on movimentos
+  for insert with check (
+    (fazenda_autorizada(fazenda_id) and fazenda_licenciada(fazenda_id))
+    or (fazenda_autorizada(fazenda_id) and exists (select 1 from movimentos t2 where t2.id = movimentos.id))
+  );
+drop policy if exists "movimentos: atualizacao" on movimentos;
+create policy "movimentos: atualizacao" on movimentos
+  for update using (fazenda_autorizada(fazenda_id));
+drop policy if exists "movimentos: exclusao" on movimentos;
+create policy "movimentos: exclusao" on movimentos
+  for delete using (fazenda_autorizada(fazenda_id));
 
 drop policy if exists "sugestoes_ressinc: acesso autorizado" on sugestoes_ressinc;
 create policy "sugestoes_ressinc: acesso autorizado" on sugestoes_ressinc
@@ -486,8 +587,21 @@ create policy "protocolos_padrao: acesso autorizado" on protocolos_padrao
   for all using (fazenda_autorizada(fazenda_id));
 
 drop policy if exists "agendamentos: acesso autorizado" on agendamentos;
-create policy "agendamentos: acesso autorizado" on agendamentos
-  for all using (fazenda_autorizada(fazenda_id));
+drop policy if exists "agendamentos: leitura" on agendamentos;
+create policy "agendamentos: leitura" on agendamentos
+  for select using (fazenda_autorizada(fazenda_id));
+drop policy if exists "agendamentos: insercao" on agendamentos;
+create policy "agendamentos: insercao" on agendamentos
+  for insert with check (
+    (fazenda_autorizada(fazenda_id) and fazenda_licenciada(fazenda_id))
+    or (fazenda_autorizada(fazenda_id) and exists (select 1 from agendamentos t2 where t2.id = agendamentos.id))
+  );
+drop policy if exists "agendamentos: atualizacao" on agendamentos;
+create policy "agendamentos: atualizacao" on agendamentos
+  for update using (fazenda_autorizada(fazenda_id));
+drop policy if exists "agendamentos: exclusao" on agendamentos;
+create policy "agendamentos: exclusao" on agendamentos
+  for delete using (fazenda_autorizada(fazenda_id));
 
 -- usuarios: cada um vê a si mesmo; um Administrador só vê OUTROS usuários se
 -- (a) foi ele quem cadastrou aquela pessoa, ou (b) compartilha alguma fazenda

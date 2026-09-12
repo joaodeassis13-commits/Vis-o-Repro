@@ -5,7 +5,7 @@ import {
   ClipboardList, Stethoscope, Warehouse, ArrowDownToLine, ArrowUpFromLine,
   LogOut, Plus, Trash2, ScanLine, Wifi, WifiOff, Download, ChevronRight,
   Tag, Package, CheckCircle2, Circle, X, Search, FileDown,
-  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload, Lock, LockOpen, ChevronUp, ChevronDown
+  Calendar, CalendarClock, Bell, Check, XCircle, Pencil, Save, Camera, CloudOff, RefreshCw, Menu, TrendingUp, Upload, Lock, LockOpen, ChevronUp, ChevronDown, LayoutDashboard
 } from "lucide-react";
 import { carregarTudo, gravarColecao, gravarRascunhos, apagarTudoLocal, lerMeta, gravarMeta } from "./lib/db.js";
 import { definirPinLocal, conferirPinLocal, temPinLocal, removerPinLocal } from "./lib/pinLocal.js";
@@ -357,8 +357,15 @@ function BtnGhost({ children, onClick, style, danger }) {
 
 function FazendaAtivaBanner({ fazendaAtiva }) {
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "#166336", background: "#E6EFE5", border: "1px solid #C5D8C9", borderRadius: 20, padding: "5px 12px", marginBottom: 18 }}>
-      <Home size={13} /> {fazendaAtiva ? fazendaAtiva.nome : "Nenhuma fazenda ativa"}
+    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "#166336", background: "#E6EFE5", border: "1px solid #C5D8C9", borderRadius: 20, padding: "5px 12px" }}>
+        <Home size={13} /> {fazendaAtiva ? fazendaAtiva.nome : "Nenhuma fazenda ativa"}
+      </div>
+      {fazendaAtiva?.licenciada === false && (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: "#A32D2D", background: "#FBEAEA", border: "1px solid #E0B4B4", borderRadius: 20, padding: "5px 12px" }}>
+          <Lock size={13} /> Não licenciada — só Relatórios e Exportações disponíveis
+        </div>
+      )}
     </div>
   );
 }
@@ -1154,6 +1161,10 @@ export default function App() {
   const fazendasVisiveis = currentUser?.perfil === "Suporte Adm"
     ? fazendas
     : fazendas.filter((f) => (meuUsuario?.fazendasAutorizadas || currentUser?.fazendasAutorizadas || []).includes(f.id));
+  // Benchmarking (comparação entre fazendas) só deve considerar fazendas Licenciadas — uma
+  // fazenda "Não licenciada" fica de fora da comparação, mesmo que o Administrador tenha
+  // acesso a ela pra ver relatórios/exportações dela.
+  const fazendasVisiveisLicenciadas = fazendasVisiveis.filter((f) => f.licenciada !== false);
   const retirosAtivos = useMemo(() => retiros.filter((r) => r.fazendaId === fazendaAtivaId), [retiros, fazendaAtivaId]);
   const safrasAtivas = useMemo(() => safras.filter((s) => s.fazendaId === fazendaAtivaId), [safras, fazendaAtivaId]);
   const safraAtiva = safras.find((s) => s.id === safraAtivaId) || null;
@@ -1163,6 +1174,13 @@ export default function App() {
   const safraAtivaBloqueada = !!safraAtiva?.lancamentosDesabilitados;
   const avisarSafraBloqueada = () => {
     alert(`Lançamentos estão desabilitados para a safra "${safraAtiva?.nome}". Troque para outra safra ou peça para um Administrador reabilitá-la em Fazendas.`);
+  };
+  // fazenda "Não licenciada" (marcada pelo Suporte Adm): só pode ver Relatórios e
+  // Exportações — os dados continuam no banco, só fica bloqueado LANÇAR coisa nova
+  // (manejo, movimentação de estoque, agenda) até a fazenda ser licenciada de novo.
+  const fazendaAtivaNaoLicenciada = fazendaAtiva ? fazendaAtiva.licenciada === false : false;
+  const avisarFazendaNaoLicenciada = () => {
+    alert(`A fazenda "${fazendaAtiva?.nome}" está marcada como Não licenciada. Enquanto isso só é possível acessar Relatórios e Exportações — fale com o Suporte para regularizar.`);
   };
   const lotesAtivos = useMemo(
     () => lotes.filter((l) => l.fazendaId === fazendaAtivaId && (safraAtivaId ? l.safraId === safraAtivaId : true)),
@@ -1197,7 +1215,7 @@ export default function App() {
 
   const addFazenda = (f, retirosNomes = [], safrasAnos = []) => {
     const fazId = uid("faz");
-    setFazendas((a) => [...a, { ...f, id: fazId, criadoEm: new Date().toISOString() }]);
+    setFazendas((a) => [...a, { ...f, id: fazId, licenciada: true, criadoEm: new Date().toISOString() }]);
     if (retirosNomes.length > 0) {
       setRetiros((a) => [...a, ...retirosNomes.map((nome) => ({ id: uid("ret"), fazendaId: fazId, nome, criadoEm: new Date().toISOString() }))]);
     }
@@ -1206,7 +1224,11 @@ export default function App() {
     }
     // quem cria a fazenda já entra automaticamente no próprio grupo dela — senão ela
     // desapareceria da visão de quem acabou de criar (cada perfil só vê seu grupo agora).
-    if (currentUser) toggleAutorizacaoFazenda(currentUser.id, fazId);
+    // Exceção: Suporte Adm nunca se autovincula — ele já enxerga/gerencia toda fazenda
+    // independente de vínculo, e um vínculo em usuario_fazendas concederia sem querer acesso
+    // de estoque/agenda (que ele não deve ter em NENHUMA fazenda), já que essas duas dependem
+    // só de fazenda_autorizada(), sem checar o perfil.
+    if (currentUser && currentUser.perfil !== "Suporte Adm") toggleAutorizacaoFazenda(currentUser.id, fazId);
     setFazendaAtivaId(fazId);
     marcaPendencia();
   };
@@ -1246,6 +1268,15 @@ export default function App() {
   // que ainda aparece no seletor). Só o Administrador deve ter acesso a esse botão na tela.
   const toggleSafraLancamentos = (safraId) => {
     setSafras((a) => a.map((s) => s.id === safraId ? { ...s, lancamentosDesabilitados: !s.lancamentosDesabilitados } : s));
+    marcaPendencia();
+  };
+
+  // "Licenciada" / "Não licenciada": controle comercial do Suporte Adm sobre a fazenda. Enquanto
+  // "Não licenciada", a fazenda só pode ver Relatórios e Exportações — os dados continuam no
+  // banco, só fica bloqueado LANÇAR coisa nova (manejo, movimentação de estoque, agenda,
+  // benchmarking). Só o Suporte Adm deve ter acesso a esse botão na tela.
+  const toggleFazendaLicenciada = (fazendaId) => {
+    setFazendas((a) => a.map((f) => f.id === fazendaId ? { ...f, licenciada: f.licenciada === false } : f));
     marcaPendencia();
   };
 
@@ -1680,6 +1711,7 @@ export default function App() {
 
   const registrarEntradaEstoque = (categoria, camposItem, quantidade, data, obs, valorUnitario, local) => {
     if (local !== "externo" && safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
+    if (local !== "externo" && fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return null; }
     const dono = local === "externo"
       ? { local: "externo", usuarioId: currentUser?.id, fazendaId: null }
       : { local: "fazenda", fazendaId: fazendaAtivaId, usuarioId: null };
@@ -1701,6 +1733,7 @@ export default function App() {
 
   const registrarSaidaEstoque = (insumoId, quantidade, manejoId, tipoManejo) => {
     if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação principal já avisou
+    if (fazendaAtivaNaoLicenciada) return; // idem
     const item = insumos.find((i) => i.id === insumoId);
     setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, estoque: Math.max(0, i.estoque - quantidade) } : i));
     setMovimentos((a) => [{ id: uid("mov"), tipo: "saida", insumoId, quantidade, data: todayISO(), manejoId, tipoManejo, local: item?.local || "fazenda", fazendaId: fazendaAtivaId, criadoEm: new Date().toISOString() }, ...a]);
@@ -1718,6 +1751,7 @@ export default function App() {
 
   const registrarManejo = (manejo) => {
     if (safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
+    if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return null; }
     const id = uid("man");
     // respeita uma data escolhida na tela (permite registro retroativo); se nada for
     // enviado, usa a data de hoje como padrão.
@@ -1919,6 +1953,7 @@ export default function App() {
 
   const addAgendamento = (ag) => {
     if (safraAtivaBloqueada) { avisarSafraBloqueada(); return; }
+    if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return; }
     const id = uid("ag");
     setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "manual", status: "confirmado", criadoEm: new Date().toISOString() }]);
     marcaPendencia();
@@ -1943,6 +1978,7 @@ export default function App() {
   // da Agenda (veja gruposDuplicados em AbaAgenda).
   const criarPreAgendamento = (ag) => {
     if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação que originou este pré-agendamento já avisou
+    if (fazendaAtivaNaoLicenciada) return; // idem
     const id = uid("ag");
     setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString() }]);
     marcaPendencia();
@@ -2050,7 +2086,11 @@ export default function App() {
 
   /* ---------- navegação ---------- */
 
-  const NAV = currentUser?.perfil === "Supervisor"
+  // fazenda "Não licenciada": Supervisor/Inseminador (cujo dia a dia gira em torno de UMA
+  // fazenda ativa) ficam só com Relatórios/Exportações (e Auditoria, que é consulta, não
+  // lançamento) — os dados continuam no banco, só as abas de LANÇAR coisa nova somem.
+  const ABAS_BLOQUEADAS_SEM_LICENCA = ["manejo", "agenda", "estoque", "benchmarking"];
+  const NAV_BASE = currentUser?.perfil === "Supervisor"
     ? [
         { key: "agenda", label: "Agenda", icon: Calendar },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
@@ -2059,6 +2099,7 @@ export default function App() {
       ]
     : currentUser?.perfil === "Suporte Adm"
     ? [
+        { key: "painel_clientes", label: "Painel de clientes", icon: LayoutDashboard },
         { key: "cadastros", label: "Cadastros", icon: Layers },
         { key: "usuarios", label: "Usuários", icon: Users },
       ]
@@ -2079,6 +2120,11 @@ export default function App() {
         { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
         { key: "exportacoes", label: "Exportações", icon: FileDown },
       ];
+  // só filtra pra Supervisor/Inseminador — o Administrador não tem "fazenda ativa" única (pode
+  // ter várias no grupo, com licenças diferentes); o filtro dele acontece dentro do Benchmarking.
+  const NAV = fazendaAtivaNaoLicenciada && ["Supervisor", "Inseminador"].includes(currentUser?.perfil)
+    ? NAV_BASE.filter((item) => !ABAS_BLOQUEADAS_SEM_LICENCA.includes(item.key))
+    : NAV_BASE;
 
   const SUBTABS = {
     cadastros: [
@@ -2105,7 +2151,7 @@ export default function App() {
   React.useEffect(() => {
     if (!currentUser) return;
     if (currentUser.perfil === "Supervisor") { setSection("relatorios"); return; }
-    if (currentUser.perfil === "Suporte Adm") { setSection("cadastros"); setSub("fazenda"); return; }
+    if (currentUser.perfil === "Suporte Adm") { setSection("painel_clientes"); return; }
     if (currentUser.perfil === "Administrador") { setSection("fazendas"); return; }
     setSection("manejo");
   }, [currentUser]);
@@ -2113,6 +2159,16 @@ export default function App() {
   React.useEffect(() => {
     if (SUBTABS[section]) setSub(SUBTABS[section][0].key);
   }, [section]);
+
+  // se a fazenda ativa está Não licenciada e a pessoa está numa aba que sumiu do menu (ou
+  // trocou de fazenda ativa pra uma não licenciada estando nela), joga pra Relatórios.
+  React.useEffect(() => {
+    if (!currentUser) return;
+    if (fazendaAtivaNaoLicenciada && ["Supervisor", "Inseminador"].includes(currentUser.perfil)
+      && ["manejo", "agenda", "estoque", "benchmarking"].includes(section)) {
+      setSection("relatorios");
+    }
+  }, [fazendaAtivaNaoLicenciada, currentUser, section]);
 
   React.useEffect(() => {
     if (!safrasAtivas.some((s) => s.id === safraAtivaId)) setSafraAtivaId(safrasAtivas[0]?.id || "");
@@ -2454,9 +2510,12 @@ export default function App() {
         <div style={{ padding: isMobile ? "16px 14px 60px" : "26px 28px 60px", maxWidth: isMobile ? "100%" : 1320 }}>
           {/* Cada aba fica sempre montada (só escondida via CSS) para não perder o que foi digitado
               e ainda não registrado ao trocar de aba. */}
+          <div style={{ display: section === "painel_clientes" ? "block" : "none" }}>
+            <AbaPainelClientes fazendas={fazendas} users={users} safras={safras} lotes={lotes} manejos={manejos} />
+          </div>
           <div style={{ display: section === "cadastros" && sub === "fazenda" ? "block" : "none" }}>
             <AbaFazenda fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addFazenda={addFazenda} addRetiro={addRetiro} removeRetiro={removeRetiro}
-              addSafra={addSafra} removeSafra={removeSafra} toggleSafraLancamentos={toggleSafraLancamentos} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} />
+              addSafra={addSafra} removeSafra={removeSafra} toggleSafraLancamentos={toggleSafraLancamentos} toggleFazendaLicenciada={toggleFazendaLicenciada} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} />
           </div>
           <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
             <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} importarLotesHistoricos={importarLotesHistoricos} />
@@ -2539,7 +2598,7 @@ export default function App() {
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
             <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
-              perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveis} />
+              perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveisLicenciadas} />
           </div>
           <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
             <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} perfil={currentUser.perfil}
@@ -2559,6 +2618,96 @@ export default function App() {
 // "fazendas"), pode criar retiros e habilitar/desabilitar safras já existentes — não cria
 // fazenda nova, não cria/exclui safra, não exclui retiro nem fazenda (tudo isso é exclusivo
 // do Suporte Adm agora).
+// Visão geral de todas as fazendas do sistema, exclusiva do Suporte Adm — quem é o
+// administrador de cada uma, quantos usuários de cada perfil ela tem, quantas safras,
+// quantos animais e inseminações por safra, e o status de licença.
+function AbaPainelClientes({ fazendas, users, safras, lotes, manejos }) {
+  const nomesAdmins = (fazendaId) => {
+    const nomes = users.filter((u) => u.perfil === "Administrador" && (u.fazendasAutorizadas || []).includes(fazendaId)).map((u) => u.nome);
+    return nomes.length > 0 ? nomes.join(", ") : "—";
+  };
+  const contarPerfil = (fazendaId, perfil) =>
+    users.filter((u) => u.perfil === perfil && (u.fazendasAutorizadas || []).includes(fazendaId)).length;
+  const safrasDe = (fazendaId) => safras.filter((s) => s.fazendaId === fazendaId);
+  const animaisPorSafra = (fazendaId, safraId) => {
+    const set = new Set();
+    lotes.filter((l) => l.fazendaId === fazendaId && l.safraId === safraId).forEach((l) => (l.animais || []).forEach((b) => set.add(b)));
+    return set.size;
+  };
+  const inseminacoesPorSafra = (fazendaId, safraId) =>
+    manejos.filter((m) => m.tipo === "inseminacao" && m.fazendaId === fazendaId && m.safraId === safraId)
+      .reduce((soma, m) => soma + (m.animaisLidos || []).length, 0);
+
+  return (
+    <div>
+      <SectionTitle icon={LayoutDashboard} title="Painel de clientes" subtitle="Visão geral de todas as fazendas do sistema, por safra." />
+
+      {fazendas.length === 0 ? (
+        <EmptyState text="Nenhuma fazenda cadastrada no sistema ainda." />
+      ) : (
+        <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Fazenda</th>
+                <th>Município</th>
+                <th>Proprietário</th>
+                <th>Adm</th>
+                <th>Supervisor</th>
+                <th>Inseminador</th>
+                <th>Safras</th>
+                <th>Animais</th>
+                <th>Inseminações</th>
+                <th>Licença</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fazendas.map((f) => {
+                const safs = safrasDe(f.id);
+                const licenciada = f.licenciada !== false;
+                return (
+                  <tr key={f.id}>
+                    <td style={{ fontWeight: 700 }}>{f.nome}</td>
+                    <td>{f.municipio || "—"}</td>
+                    <td>{f.proprietario || "—"}</td>
+                    <td>{nomesAdmins(f.id)}</td>
+                    <td>{contarPerfil(f.id, "Supervisor")}</td>
+                    <td>{contarPerfil(f.id, "Inseminador")}</td>
+                    <td>{safs.length}</td>
+                    <td>
+                      {safs.length === 0 ? "—" : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          {safs.map((s) => <span key={s.id} style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{s.nome}: {animaisPorSafra(f.id, s.id)}</span>)}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {safs.length === 0 ? "—" : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          {safs.map((s) => <span key={s.id} style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{s.nome}: {inseminacoesPorSafra(f.id, s.id)}</span>)}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700,
+                        border: `1px solid ${licenciada ? "#C5D8C9" : "#E0B4B4"}`, borderRadius: 20, padding: "4px 10px",
+                        background: licenciada ? "#E6EFE5" : "#FBEAEA", color: licenciada ? "#166336" : "#A32D2D", whiteSpace: "nowrap",
+                      }}>
+                        {licenciada ? <LockOpen size={12} /> : <Lock size={12} />} {licenciada ? "Licenciada" : "Não licenciada"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AbaFazendasAdmin({ fazendas, retiros, safras, addRetiro, toggleSafraLancamentos }) {
   const [fazendaAberta, setFazendaAberta] = useState(null);
   const [nomeRetiroExistente, setNomeRetiroExistente] = useState("");
@@ -2590,6 +2739,7 @@ function AbaFazendasAdmin({ fazendas, retiros, safras, addRetiro, toggleSafraLan
                 <th>Telefone</th>
                 <th>Retiros</th>
                 <th>Safras</th>
+                <th>Licença</th>
                 <th></th>
               </tr>
             </thead>
@@ -2598,6 +2748,7 @@ function AbaFazendasAdmin({ fazendas, retiros, safras, addRetiro, toggleSafraLan
                 const rets = retirosDe(f.id);
                 const safs = safrasDe(f.id);
                 const aberta = fazendaAberta === f.id;
+                const licenciada = f.licenciada !== false;
                 return (
                   <React.Fragment key={f.id}>
                     <tr onClick={() => setFazendaAberta(aberta ? null : f.id)} style={{ cursor: "pointer" }}>
@@ -2609,13 +2760,22 @@ function AbaFazendasAdmin({ fazendas, retiros, safras, addRetiro, toggleSafraLan
                       <td>{f.telefone || "—"}</td>
                       <td>{rets.length}</td>
                       <td>{safs.length}</td>
+                      <td>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700,
+                          border: `1px solid ${licenciada ? "#C5D8C9" : "#E0B4B4"}`, borderRadius: 20, padding: "4px 10px",
+                          background: licenciada ? "#E6EFE5" : "#FBEAEA", color: licenciada ? "#166336" : "#A32D2D",
+                        }}>
+                          {licenciada ? <LockOpen size={12} /> : <Lock size={12} />} {licenciada ? "Licenciada" : "Não licenciada"}
+                        </span>
+                      </td>
                       <td style={{ textAlign: "right" }}>
                         <ChevronRight size={15} color="#9B9686" style={{ transform: aberta ? "rotate(90deg)" : "none" }} />
                       </td>
                     </tr>
                     {aberta && (
                       <tr>
-                        <td colSpan={9} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                        <td colSpan={10} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Retiros de {f.nome}</div>
                           <div style={{ display: "flex", gap: 8, marginBottom: 10, maxWidth: 380 }}>
                             <input style={inputStyle} placeholder="Nome do novo retiro" value={nomeRetiroExistente}
@@ -2665,7 +2825,7 @@ function AbaFazendasAdmin({ fazendas, retiros, safras, addRetiro, toggleSafraLan
   );
 }
 
-function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, toggleSafraLancamentos, fazendaAtivaId, setFazendaAtivaId, removerFazenda }) {
+function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, toggleSafraLancamentos, toggleFazendaLicenciada, fazendaAtivaId, setFazendaAtivaId, removerFazenda }) {
   const empty = { nome: "", municipio: "", areaTotal: "", proprietario: "", responsavel: "", telefone: "" };
   const [form, setForm] = useState(empty);
   const [retirosNovos, setRetirosNovos] = useState([]); // nomes ainda não salvos, junto com a fazenda
@@ -2791,6 +2951,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                 <th>Telefone</th>
                 <th>Retiros</th>
                 <th>Safras</th>
+                <th>Licença</th>
                 <th></th>
               </tr>
             </thead>
@@ -2800,6 +2961,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                 const safs = safrasDe(f.id);
                 const aberta = fazendaAberta === f.id;
                 const ativa = f.id === fazendaAtivaId;
+                const licenciada = f.licenciada !== false;
                 return (
                   <React.Fragment key={f.id}>
                     <tr onClick={() => setFazendaAberta(aberta ? null : f.id)} style={{ cursor: "pointer" }}>
@@ -2816,6 +2978,17 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                       <td>{f.telefone || "—"}</td>
                       <td>{rets.length}</td>
                       <td>{safs.length}</td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => toggleFazendaLicenciada(f.id)}
+                          title={licenciada ? "Licenciada — clique para marcar como Não licenciada" : "Não licenciada — clique para licenciar"}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                            border: `1px solid ${licenciada ? "#C5D8C9" : "#E0B4B4"}`, borderRadius: 20, padding: "4px 10px",
+                            background: licenciada ? "#E6EFE5" : "#FBEAEA", color: licenciada ? "#166336" : "#A32D2D",
+                          }}>
+                          {licenciada ? <LockOpen size={12} /> : <Lock size={12} />} {licenciada ? "Licenciada" : "Não licenciada"}
+                        </button>
+                      </td>
                       <td style={{ textAlign: "right" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
                           {!ativa && (
@@ -2836,7 +3009,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                     </tr>
                     {aberta && (
                       <tr>
-                        <td colSpan={9} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                        <td colSpan={10} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Retiros de {f.nome}</div>
                           <div style={{ display: "flex", gap: 8, marginBottom: 10, maxWidth: 380 }}>
                             <input style={inputStyle} placeholder="Nome do novo retiro" value={nomeRetiroExistente}
@@ -7684,6 +7857,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   const [visaoProtocolo, setVisaoProtocolo] = useState("protocolo"); // "protocolo" | "manejos" | "duracao"
   const [visaoResumo, setVisaoResumo] = useState("animais"); // "animais" | "inseminacoes" | "prenhas"
   const [visaoGeral, setVisaoGeral] = useState("concepcao"); // "concepcao" | "fertilidade"
+  const [visaoCusto, setVisaoCusto] = useState("animal"); // "animal" | "inseminacao" | "prenhez"
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || null;
 
   // ---------- filtros de Retiro, Lote e Categoria — reduzem todo o relatório a um recorte específico ----------
@@ -7704,6 +7878,10 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   );
   const lotesFiltrados = filtroAtivo ? lotes.filter((l) => idsLotesFiltrados.has(l.id)) : lotes;
   const manejosFiltrados = filtroAtivo ? manejos.filter((m) => idsLotesFiltrados.has(m.loteId)) : manejos;
+  // movimentos de estoque não têm lote — só o manejo que gerou a saída (manejoId) — então o
+  // recorte de Retiro/Lote/Categoria se aplica através dos manejos já filtrados acima.
+  const idsManejosFiltrados = new Set(manejosFiltrados.map((m) => m.id));
+  const movimentosFiltrados = filtroAtivo ? movimentos.filter((m) => m.manejoId && idsManejosFiltrados.has(m.manejoId)) : movimentos;
 
   const registros = useMemo(() => construirRegistrosConcepcao(manejosFiltrados, lotesFiltrados, insumos), [manejosFiltrados, lotesFiltrados, insumos]);
 
@@ -7794,6 +7972,31 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     ...ORDENS_IATF.map((ordem) => ({ label: ordem, valor: contarPrenhas(diagnosticosValidos.filter((m) => m.ordem === ordem)) })),
     { label: "Repasse", valor: contarPrenhas(diagnosticosRepasseValidos) },
   ];
+
+  // ---------- Custo por Animal / Inseminação / Prenhez ----------
+  // valor gasto = soma das SAÍDAS de estoque de Hormônio e Sêmen (quantidade × valor unitário
+  // do insumo) cujo manejo de origem está dentro do recorte de Retiro/Lote/Categoria escolhido
+  // (movimento de estoque não tem lote próprio — só o manejo que gerou a saída).
+  const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
+  const gastoHormonioSemen = movimentosFiltrados
+    .filter((m) => m.tipo === "saida")
+    .reduce((soma, m) => {
+      const insumo = insumos.find((i) => i.id === m.insumoId);
+      if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || insumo.valorUnitario == null) return soma;
+      return soma + m.quantidade * insumo.valorUnitario;
+    }, 0);
+  const custoPorAnimal = totalAnimais > 0 ? gastoHormonioSemen / totalAnimais : null;
+  const custoPorInseminacao = totalInseminacoes > 0 ? gastoHormonioSemen / totalInseminacoes : null;
+  const totalDiagnosticosRegistrados = diagnosticosValidos.reduce((s, m) => s + (m.detalhes || []).length, 0)
+    + diagnosticosRepasseValidos.reduce((s, m) => s + (m.detalhes || []).length, 0);
+  const custoPorPrenhez = (custoPorInseminacao != null && totalPrenhas > 0)
+    ? (custoPorInseminacao * totalDiagnosticosRegistrados) / totalPrenhas
+    : null;
+  const OPCOES_CUSTO = {
+    animal: { label: "Animal", valor: custoPorAnimal, descricao: "Gasto com Hormônio e Sêmen ÷ nº de animais trabalhados." },
+    inseminacao: { label: "Inseminação", valor: custoPorInseminacao, descricao: "Gasto com Hormônio e Sêmen ÷ nº de inseminações registradas." },
+    prenhez: { label: "Prenhez", valor: custoPorPrenhez, descricao: "Custo por inseminação × total de diagnósticos registrados ÷ nº de prenhas registradas." },
+  };
 
   const OPCOES_ROSCA_RESUMO = {
     animais: { label: "Matrizes", grupos: [
@@ -7959,6 +8162,23 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                 <BarrasConcepcao dados={porTouro} ordenarPorTaxaDesc compacto />
               </div>
             </div>
+          </div>
+
+          <div style={{ ...cardStyle, marginBottom: 20, display: "flex", flexDirection: "column" }}>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Custo</div>
+            <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 12, width: "fit-content" }}>
+              {Object.entries(OPCOES_CUSTO).map(([key, op]) => (
+                <button key={key} onClick={() => setVisaoCusto(key)}
+                  style={{
+                    padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                    background: visaoCusto === key ? "#166336" : "transparent", color: visaoCusto === key ? "#FFFFFF" : "#6B685E",
+                  }}>{op.label}</button>
+              ))}
+            </div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 700, color: "#232520" }}>
+              {fmtMoeda(OPCOES_CUSTO[visaoCusto].valor)}
+            </div>
+            <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>{OPCOES_CUSTO[visaoCusto].descricao}</p>
           </div>
 
           <div style={{ ...cardStyle, marginBottom: 20, height: 300, display: "flex", flexDirection: "column" }}>
@@ -8768,17 +8988,16 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
   const [buscaManejo, setBuscaManejo] = useState("");
 
   const GRUPOS_MANEJO_BUSCA = [
-    { tipos: ["inducao"], label: "Indução" },
-    { tipos: ["implantacao", "ressinc"], label: "D0" },
-    { tipos: ["retirada"], label: "Retirada" },
     { tipos: ["inseminacao"], label: "Inseminação" },
     { tipos: ["diagnostico"], label: "Diagnóstico" },
   ];
   // só entram como opção os manejos que realmente tiveram leitura individual de animal
-  // (animaisLidos) para o lote+ordem escolhidos.
+  // (animaisLidos) para o lote+ordem escolhidos — e, na 1º IATF, só existe regra de
+  // comparação pro Diagnóstico (não tem "faltantes" definido pra Inseminação nessa ordem).
   const opcoesManejoBusca = useMemo(() => {
     if (!buscaLoteId || !buscaOrdem) return [];
     return GRUPOS_MANEJO_BUSCA
+      .filter(({ label }) => !(buscaOrdem === "1º IATF" && label === "Inseminação"))
       .filter(({ tipos }) => manejos.some((m) =>
         m.loteId === buscaLoteId && m.ordem === buscaOrdem && tipos.includes(m.tipo) && (m.animaisLidos || []).length > 0
       ))
