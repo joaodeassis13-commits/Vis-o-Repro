@@ -8000,7 +8000,10 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     const custoPrenhez = (custoInseminacao != null && totalPrenhasSubset > 0)
       ? (custoInseminacao * totalDiagRegistradosSubset) / totalPrenhasSubset
       : null;
-    return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
+    return {
+      animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez,
+      n: { animal: totalAnimaisSubset, inseminacao: totalInseminacoesSubset, prenhez: totalPrenhasSubset },
+    };
   };
 
   const custosGeral = calcularCustos(lotesValidos, manejosFiltrados.filter((m) => !idsDesconhecidosResumo.has(m.loteId)), movimentosFiltrados);
@@ -8017,8 +8020,8 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     prenhez: { label: "Prenhez", descricao: "Custo por inseminação × total de diagnósticos registrados ÷ nº de prenhas registradas." },
   };
   const dadosCusto = [
-    { label: "Geral", valor: custosGeral[visaoCusto] },
-    ...custosPorCategoria.map((c) => ({ label: c.label, valor: c[visaoCusto] })),
+    { label: "Geral", valor: custosGeral[visaoCusto], n: custosGeral.n[visaoCusto] },
+    ...custosPorCategoria.map((c) => ({ label: c.label, valor: c[visaoCusto], n: c.n[visaoCusto] })),
   ];
 
   const OPCOES_ROSCA_RESUMO = {
@@ -8378,6 +8381,7 @@ function BarrasCusto({ dados, compacto }) {
             <div style={{ width: larguraColuna, height: `${d.valor != null ? Math.max((d.valor / maiorValor) * alturaMaximaPx, 4) : 2}px`, background: d.valor != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, height: compacto ? 22 : 27, flexShrink: 0, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
+          {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98", flexShrink: 0 }}>n={d.n}</div>}
         </div>
       ))}
     </div>
@@ -8404,7 +8408,7 @@ function LinhaConcepcao({ dados, agruparPorMes }) {
   const margemTopo = 44; // maior que antes: a porcentagem agora fica na vertical (rotacionada), ocupando mais altura acima do ponto
   // rótulos sempre na horizontal agora (nunca girados) — cabem numa única linha de texto,
   // por isso a margem de baixo é bem mais enxuta do que quando o dia ficava rotacionado.
-  const margemBaixo = agruparPorMes ? 34 : 20; // rótulo do dia + (quando agrupado) rótulo do mês, ambos deitados
+  const margemBaixo = agruparPorMes ? 56 : 34; // rótulo do dia + n= + (quando agrupado) rótulo do mês, todos deitados
   const alturaTotal = alturaUtil + margemTopo + margemBaixo;
   const largura = Math.max(dados.length * (agruparPorMes ? 30 : 60), 260);
   const maiorTaxa = Math.max(...dados.map((d) => d.taxa || 0), 10);
@@ -8443,12 +8447,15 @@ function LinhaConcepcao({ dados, agruparPorMes }) {
               transform={`rotate(-90 ${p.x} ${p.y - 12})`}>{Math.round(p.taxa)}%</text>
             {/* rótulo do dia sempre deitado (nunca girado) */}
             <text x={p.x} y={margemTopo + alturaUtil + 14} fontSize="10" fill="#6B685E" textAnchor="middle">{p.label}</text>
+            {p.n != null && (
+              <text x={p.x} y={margemTopo + alturaUtil + 26} fontSize="9" fill="#B0AA98" textAnchor="middle">n={p.n}</text>
+            )}
           </g>
         ))}
         {agruparPorMes && gruposMes.map((g, i) => {
           const xMedio = (g.pontos[0].x + g.pontos[g.pontos.length - 1].x) / 2;
           return (
-            <text key={i} x={xMedio} y={margemTopo + alturaUtil + 30} fontSize="10.5" fontWeight="700" fill="#166336" textAnchor="middle">
+            <text key={i} x={xMedio} y={margemTopo + alturaUtil + 44} fontSize="10.5" fontWeight="700" fill="#166336" textAnchor="middle">
               {fmtMes(g.mes)}
             </text>
           );
