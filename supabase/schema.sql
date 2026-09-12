@@ -35,10 +35,17 @@ create table if not exists usuarios (
   nome text not null,
   login text unique not null,
   email text,
-  perfil text not null check (perfil in ('Administrador', 'Supervisor', 'Inseminador')),
+  perfil text not null check (perfil in ('Suporte Adm', 'Administrador', 'Supervisor', 'Inseminador')),
   criado_por uuid references usuarios (id),
   criado_em timestamptz not null default now()
 );
+
+-- Suporte Adm: perfil novo (acima de Administrador), exclusivo para cadastrar fazendas, safras,
+-- usuários administrador e importar histórico de qualquer fazenda do sistema — ver
+-- eh_suporte_adm() e as políticas que a usam, mais abaixo. Sem isto, um banco já existente
+-- rejeitaria esse perfil (o "create table if not exists" acima não altera tabela já criada).
+alter table usuarios drop constraint if exists usuarios_perfil_check;
+alter table usuarios add constraint usuarios_perfil_check check (perfil in ('Suporte Adm', 'Administrador', 'Supervisor', 'Inseminador'));
 
 -- "create table if not exists" não adiciona colunas a uma tabela que já
 -- existia de uma rodada anterior do schema — estes comandos garantem que as
@@ -379,6 +386,14 @@ returns boolean as $$
   select exists (select 1 from usuarios u where u.id = auth.uid() and u.perfil = 'Administrador');
 $$ language sql stable security definer set search_path = public;
 
+-- Suporte Adm: acima de Administrador — só ele pode criar fazendas, safras/retiros e
+-- usuários Administrador, e importar histórico em QUALQUER fazenda do sistema (não só
+-- as do próprio grupo). Ver políticas de fazendas/safras/retiros/lotes/manejos/usuarios abaixo.
+create or replace function eh_suporte_adm()
+returns boolean as $$
+  select exists (select 1 from usuarios u where u.id = auth.uid() and u.perfil = 'Suporte Adm');
+$$ language sql stable security definer set search_path = public;
+
 -- true se auth.uid() e "outro_usuario_id" compartilham ao menos uma fazenda —
 -- usado para um Administrador só enxergar, como usuário, quem está no mesmo
 -- grupo de fazendas que ele (não vê outros Administradores de grupos diferentes).
@@ -399,6 +414,9 @@ drop policy if exists "fazendas: leitura/edicao/exclusao do proprio grupo" on fa
 create policy "fazendas: leitura/edicao/exclusao do proprio grupo" on fazendas
   for select using (
     fazenda_autorizada(id)
+    -- Suporte Adm enxerga TODAS as fazendas do sistema (precisa pra cadastrar safra/importar
+    -- histórico em qualquer uma delas, não só nas do próprio grupo).
+    or eh_suporte_adm()
     -- sem isso, "INSERT ... ON CONFLICT DO UPDATE" (usado pela sincronização) não consegue
     -- nem verificar se existe conflito numa fazenda órfã (sem ninguém autorizado ainda) —
     -- o Postgres exige visibilidade (política de SELECT) da linha pra avaliar o ON CONFLICT,
@@ -410,12 +428,10 @@ drop policy if exists "fazendas: atualizacao do proprio grupo" on fazendas;
 create policy "fazendas: atualizacao do proprio grupo" on fazendas
   for update using (
     fazenda_autorizada(id)
-    -- qualquer Administrador também pode atualizar — cobre o caso de "upsert" (INSERT ...
-    -- ON CONFLICT DO UPDATE) usado pela sincronização: o Postgres exige que a política de
-    -- UPDATE passe mesmo quando não existe conflito de verdade (é uma exigência da própria
-    -- forma como "ON CONFLICT DO UPDATE" é avaliado, não depende dos dados). Sem isso, a
-    -- primeira sincronização de uma fazenda nova trava sem conseguir se auto-vincular.
-    or eh_administrador()
+    -- Suporte Adm pode atualizar qualquer fazenda (ex.: dados cadastrais, mesmo fora do
+    -- próprio grupo) — cobre também o "upsert" (INSERT ... ON CONFLICT DO UPDATE) da
+    -- sincronização pra fazendas recém-criadas por ele.
+    or eh_suporte_adm()
   );
 drop policy if exists "fazendas: exclusao do proprio grupo" on fazendas;
 create policy "fazendas: exclusao do proprio grupo" on fazendas
@@ -423,9 +439,10 @@ create policy "fazendas: exclusao do proprio grupo" on fazendas
 drop policy if exists "fazendas: administrador pode criar" on fazendas;
 create policy "fazendas: administrador pode criar" on fazendas
   for insert with check (
-    eh_administrador()
-    -- sem isso, qualquer usuário autorizado (não-Administrador, ex.: Inseminador) que
-    -- simplesmente sincronizasse a fazenda dele (sem mudar nada) cairia nesse "upsert" (ON
+    -- só o Suporte Adm cria fazenda nova de verdade — Administrador não cadastra mais fazenda.
+    eh_suporte_adm()
+    -- sem isso, qualquer usuário autorizado (ex.: Inseminador, ou o próprio Administrador
+    -- ressincronizando uma fazenda já existente sem mudar nada) cairia nesse "upsert" (ON
     -- CONFLICT DO UPDATE) e falharia — o Postgres exige que a política de INSERT também
     -- passe nesse tipo de comando, mesmo quando o resultado final é só uma atualização de
     -- uma linha que já existe e já é autorizada pra essa pessoa.
@@ -434,23 +451,23 @@ create policy "fazendas: administrador pode criar" on fazendas
 
 drop policy if exists "retiros: acesso autorizado" on retiros;
 create policy "retiros: acesso autorizado" on retiros
-  for all using (fazenda_autorizada(fazenda_id));
+  for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "safras: acesso autorizado" on safras;
 create policy "safras: acesso autorizado" on safras
-  for all using (fazenda_autorizada(fazenda_id));
+  for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "lotes: acesso autorizado" on lotes;
 create policy "lotes: acesso autorizado" on lotes
-  for all using (fazenda_autorizada(fazenda_id));
+  for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "insumos: acesso autorizado" on insumos;
 create policy "insumos: acesso autorizado" on insumos
-  for all using (fazenda_id is null or fazenda_autorizada(fazenda_id));
+  for all using (fazenda_id is null or fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "manejos: acesso autorizado" on manejos;
 create policy "manejos: acesso autorizado" on manejos
-  for all using (fazenda_autorizada(fazenda_id));
+  for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "movimentos: acesso autorizado" on movimentos;
 create policy "movimentos: acesso autorizado" on movimentos
@@ -484,18 +501,26 @@ create policy "usuarios: leitura" on usuarios
   for select using (
     id = auth.uid()
     or criado_por = auth.uid()
+    or eh_suporte_adm()
     or (eh_administrador() and mesmo_grupo_de_fazendas(id))
   );
 
+-- Administrador só pode cadastrar Supervisor/Inseminador (cadastro de Administrador é
+-- exclusivo do Suporte Adm) — reforça no banco a mesma regra já aplicada na tela.
 drop policy if exists "usuarios: insercao" on usuarios;
 create policy "usuarios: insercao" on usuarios
-  for insert with check (id = auth.uid() or eh_administrador());
+  for insert with check (
+    id = auth.uid()
+    or eh_suporte_adm()
+    or (eh_administrador() and perfil in ('Supervisor', 'Inseminador'))
+  );
 
 drop policy if exists "usuarios: atualizacao" on usuarios;
 create policy "usuarios: atualizacao" on usuarios
   for update using (
     id = auth.uid()
     or criado_por = auth.uid()
+    or eh_suporte_adm()
     or (eh_administrador() and mesmo_grupo_de_fazendas(id))
   );
 
@@ -506,6 +531,7 @@ drop policy if exists "usuarios: exclusao" on usuarios;
 create policy "usuarios: exclusao" on usuarios
   for delete using (
     criado_por = auth.uid()
+    or eh_suporte_adm()
     or (eh_administrador() and mesmo_grupo_de_fazendas(id))
   );
 
@@ -517,6 +543,7 @@ drop policy if exists "usuario_fazendas: acesso" on usuario_fazendas;
 create policy "usuario_fazendas: acesso" on usuario_fazendas
   for all using (
     usuario_id = auth.uid()
+    or eh_suporte_adm()
     or (eh_administrador() and fazenda_autorizada(fazenda_id))
   );
 

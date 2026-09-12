@@ -128,6 +128,7 @@ const seedFazendas = [
 ];
 
 const seedUsers = [
+  { id: uid("u"), nome: "Suporte VisãoRepro", login: "suporte", perfil: "Suporte Adm", fazendasAutorizadas: [] },
   { id: uid("u"), nome: "Marcos Vieira", login: "marcos", perfil: "Administrador", fazendasAutorizadas: [] },
   { id: uid("u"), nome: "Carlos Andrade", login: "carlos", perfil: "Inseminador", fazendasAutorizadas: [seedFazendas[0].id] },
   { id: uid("u"), nome: "Renata Souza", login: "renata", perfil: "Supervisor", fazendasAutorizadas: [seedFazendas[0].id] },
@@ -1037,7 +1038,7 @@ export default function App() {
     // recente que um Administrador tivesse acabado de conceder em outro aparelho, momentos
     // antes deste sincronizar. Removendo o campo (em vez de mandar como está), a função que
     // envia autorizações simplesmente pula esses usuários, sem apagar nada.
-    const usuariosParaEnviar = currentUser?.perfil === "Administrador"
+    const usuariosParaEnviar = ["Administrador", "Suporte Adm"].includes(currentUser?.perfil)
       ? users
       : users.map((u) => { const { fazendasAutorizadas, ...resto } = u; return resto; });
     const resultado = await sincronizar({ usuarios: usuariosParaEnviar, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes });
@@ -1150,7 +1151,9 @@ export default function App() {
   // de "currentUser" diretamente — evita ficar escondendo fazendas por causa de um instante em
   // que essas duas cópias do usuário logado ainda não tinham se atualizado juntas.
   const meuUsuario = users.find((u) => u.id === currentUser?.id);
-  const fazendasVisiveis = fazendas.filter((f) => (meuUsuario?.fazendasAutorizadas || currentUser?.fazendasAutorizadas || []).includes(f.id));
+  const fazendasVisiveis = currentUser?.perfil === "Suporte Adm"
+    ? fazendas
+    : fazendas.filter((f) => (meuUsuario?.fazendasAutorizadas || currentUser?.fazendasAutorizadas || []).includes(f.id));
   const retirosAtivos = useMemo(() => retiros.filter((r) => r.fazendaId === fazendaAtivaId), [retiros, fazendaAtivaId]);
   const safrasAtivas = useMemo(() => safras.filter((s) => s.fazendaId === fazendaAtivaId), [safras, fazendaAtivaId]);
   const safraAtiva = safras.find((s) => s.id === safraAtivaId) || null;
@@ -2054,9 +2057,14 @@ export default function App() {
         { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
         { key: "exportacoes", label: "Exportações", icon: FileDown },
       ]
-    : currentUser?.perfil === "Administrador"
+    : currentUser?.perfil === "Suporte Adm"
     ? [
         { key: "cadastros", label: "Cadastros", icon: Layers },
+        { key: "usuarios", label: "Usuários", icon: Users },
+      ]
+    : currentUser?.perfil === "Administrador"
+    ? [
+        { key: "fazendas", label: "Fazendas", icon: Home },
         { key: "usuarios", label: "Usuários", icon: Users },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
         { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
@@ -2097,7 +2105,8 @@ export default function App() {
   React.useEffect(() => {
     if (!currentUser) return;
     if (currentUser.perfil === "Supervisor") { setSection("relatorios"); return; }
-    if (currentUser.perfil === "Administrador") { setSection("cadastros"); setSub("fazenda"); return; }
+    if (currentUser.perfil === "Suporte Adm") { setSection("cadastros"); setSub("fazenda"); return; }
+    if (currentUser.perfil === "Administrador") { setSection("fazendas"); return; }
     setSection("manejo");
   }, [currentUser]);
 
@@ -2109,12 +2118,18 @@ export default function App() {
     if (!safrasAtivas.some((s) => s.id === safraAtivaId)) setSafraAtivaId(safrasAtivas[0]?.id || "");
   }, [fazendaAtivaId, safras]);
 
-  // Todo perfil (inclusive Administrador) só pode ter como fazenda ativa uma das fazendas atribuídas a ele
+  // Todo perfil (inclusive Administrador) só pode ter como fazenda ativa uma das fazendas
+  // atribuídas a ele — exceto o Suporte Adm, que precisa poder atuar em qualquer fazenda do
+  // sistema (cadastro de safra, importação de histórico etc.).
   React.useEffect(() => {
     if (!currentUser) return;
+    if (currentUser.perfil === "Suporte Adm") {
+      if (!fazendas.some((f) => f.id === fazendaAtivaId)) setFazendaAtivaId(fazendas[0]?.id || "");
+      return;
+    }
     const autorizadas = meuUsuario?.fazendasAutorizadas || currentUser.fazendasAutorizadas || [];
     if (!autorizadas.includes(fazendaAtivaId)) setFazendaAtivaId(autorizadas[0] || "");
-  }, [currentUser, meuUsuario]);
+  }, [currentUser, meuUsuario, fazendas]);
 
   // ---------- layout responsivo: no celular a barra lateral vira um menu retrátil ----------
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 860 : false);
@@ -2333,7 +2348,7 @@ export default function App() {
             {erroSincronizacao && (
               <p style={{ fontSize: 10.5, color: "#E3A45C", margin: "6px 0 0", lineHeight: 1.4 }}>⚠ {erroSincronizacao}</p>
             )}
-            {supabaseConfigurado && currentUser.perfil === "Administrador" && (
+            {supabaseConfigurado && ["Administrador", "Suporte Adm"].includes(currentUser.perfil) && (
               confirmarLimparLocal ? (
                 <div style={{ marginTop: 6, fontSize: 10.5, color: "#E3A45C", lineHeight: 1.4 }}>
                   Apaga só os dados guardados NESTE aparelho (o Supabase não é afetado; a próxima sincronização busca tudo de lá de novo). Confirma?
@@ -2446,6 +2461,9 @@ export default function App() {
           <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
             <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} importarLotesHistoricos={importarLotesHistoricos} />
           </div>
+          <div style={{ display: section === "fazendas" ? "block" : "none" }}>
+            <AbaFazendasAdmin fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addRetiro={addRetiro} toggleSafraLancamentos={toggleSafraLancamentos} />
+          </div>
 
           <div style={{ display: section === "manejo" && sub === "novos_animais" ? "block" : "none" }}>
             <AbaNovosAnimais fazendaAtiva={fazendaAtiva} />
@@ -2536,6 +2554,116 @@ export default function App() {
 /* =========================================================
    CADASTROS
 ========================================================= */
+
+// Versão do Administrador: só enxerga as fazendas do próprio grupo (já vem filtrado em
+// "fazendas"), pode criar retiros e habilitar/desabilitar safras já existentes — não cria
+// fazenda nova, não cria/exclui safra, não exclui retiro nem fazenda (tudo isso é exclusivo
+// do Suporte Adm agora).
+function AbaFazendasAdmin({ fazendas, retiros, safras, addRetiro, toggleSafraLancamentos }) {
+  const [fazendaAberta, setFazendaAberta] = useState(null);
+  const [nomeRetiroExistente, setNomeRetiroExistente] = useState("");
+
+  const retirosDe = (fazId) => retiros.filter((r) => r.fazendaId === fazId);
+  const safrasDe = (fazId) => safras.filter((s) => s.fazendaId === fazId);
+  const adicionarRetiroExistente = (fazId) => {
+    if (!nomeRetiroExistente.trim()) return;
+    addRetiro({ fazendaId: fazId, nome: nomeRetiroExistente.trim() });
+    setNomeRetiroExistente("");
+  };
+
+  return (
+    <div>
+      <SectionTitle icon={Home} title="Fazendas" subtitle="Fazendas do seu grupo. Você pode criar retiros e habilitar/desabilitar safras — o cadastro de fazendas e safras novas é feito pelo Suporte." />
+
+      {fazendas.length === 0 ? (
+        <EmptyState text="Nenhuma fazenda autorizada para o seu usuário ainda." />
+      ) : (
+        <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Fazenda</th>
+                <th>Município</th>
+                <th>Área (ha)</th>
+                <th>Proprietário</th>
+                <th>Responsável</th>
+                <th>Telefone</th>
+                <th>Retiros</th>
+                <th>Safras</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {fazendas.map((f) => {
+                const rets = retirosDe(f.id);
+                const safs = safrasDe(f.id);
+                const aberta = fazendaAberta === f.id;
+                return (
+                  <React.Fragment key={f.id}>
+                    <tr onClick={() => setFazendaAberta(aberta ? null : f.id)} style={{ cursor: "pointer" }}>
+                      <td style={{ fontWeight: 700 }}>{f.nome}</td>
+                      <td>{f.municipio || "—"}</td>
+                      <td>{f.areaTotal || "—"}</td>
+                      <td>{f.proprietario || "—"}</td>
+                      <td>{f.responsavel || "—"}</td>
+                      <td>{f.telefone || "—"}</td>
+                      <td>{rets.length}</td>
+                      <td>{safs.length}</td>
+                      <td style={{ textAlign: "right" }}>
+                        <ChevronRight size={15} color="#9B9686" style={{ transform: aberta ? "rotate(90deg)" : "none" }} />
+                      </td>
+                    </tr>
+                    {aberta && (
+                      <tr>
+                        <td colSpan={9} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Retiros de {f.nome}</div>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 10, maxWidth: 380 }}>
+                            <input style={inputStyle} placeholder="Nome do novo retiro" value={nomeRetiroExistente}
+                              onChange={(e) => setNomeRetiroExistente(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && adicionarRetiroExistente(f.id)} />
+                            <BtnPrimary onClick={() => adicionarRetiroExistente(f.id)}><Plus size={15} /></BtnPrimary>
+                          </div>
+                          {rets.length === 0 ? <EmptyState text="Nenhum retiro cadastrado para esta fazenda." /> : (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                              {rets.map((r) => (
+                                <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#EEEEEE", border: "1px solid #DDDDDD", borderRadius: 20, padding: "4px 10px", fontSize: 12.5 }}>
+                                  <Building2 size={12} /> {r.nome}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8, marginTop: rets.length === 0 ? 0 : 16 }}>Safras de {f.nome}</div>
+                          {safs.length === 0 ? <EmptyState text="Nenhuma safra cadastrada para esta fazenda ainda — o cadastro é feito pelo Suporte." /> : (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {safs.map((s) => (
+                                <span key={s.id} style={{
+                                  display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 20, padding: "4px 10px", fontSize: 12.5,
+                                  background: s.lancamentosDesabilitados ? "#FBEAEA" : "#EEEEEE", border: `1px solid ${s.lancamentosDesabilitados ? "#E0B4B4" : "#DDDDDD"}`,
+                                }}>
+                                  <Calendar size={12} /> {s.nome}
+                                  <button onClick={() => toggleSafraLancamentos(s.id)}
+                                    title={s.lancamentosDesabilitados ? "Lançamentos desabilitados — clique para reabilitar" : "Lançamentos habilitados — clique para desabilitar"}
+                                    style={{ background: "none", border: "none", cursor: "pointer", color: s.lancamentosDesabilitados ? "#A32D2D" : "#166336", display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 600 }}>
+                                    {s.lancamentosDesabilitados ? <><Lock size={12} /> Desabilitada</> : <><LockOpen size={12} /> Habilitada</>}
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, toggleSafraLancamentos, fazendaAtivaId, setFazendaAtivaId, removerFazenda }) {
   const empty = { nome: "", municipio: "", areaTotal: "", proprietario: "", responsavel: "", telefone: "" };
@@ -6487,20 +6615,33 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
   };
   const categoriaDoInsumo = (id) => insumos.find((x) => x.id === id)?.categoria;
   const doseMediaDoInsumo = (id) => insumos.find((x) => x.id === id)?.doseMedia || null;
+  const valorUnitarioDoInsumo = (id) => insumos.find((x) => x.id === id)?.valorUnitario ?? null;
+  const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
 
   // Hormônio e Medicamento: a "Quantidade" da saída (que é lançada na unidade de embalagem,
   // ex.: ml) vira número de doses, dividindo pela Dose média informada na entrada de estoque
-  // daquele produto. Sem dose média cadastrada (insumo antigo), mostra a quantidade bruta mesmo.
+  // daquele produto — sempre arredondada pra um número inteiro. Sem dose média cadastrada
+  // (insumo antigo), mostra a quantidade bruta mesmo.
   const emDoses = (categoria) => categoria === "Hormônio" || categoria === "Medicamento";
-  const formatarDoses = (n) => Math.round(n * 10) / 10;
   const quantidadeExibida = (insumoId, quantidadeBruta, categoria) => {
     if (!emDoses(categoria)) return quantidadeBruta;
     const doseMedia = doseMediaDoInsumo(insumoId);
-    return doseMedia ? formatarDoses(quantidadeBruta / doseMedia) : quantidadeBruta;
+    return doseMedia ? Math.round(quantidadeBruta / doseMedia) : quantidadeBruta;
+  };
+  // valor unitário por dose = valor unitário (por mL/unidade) × Dose média; valor total usa
+  // sempre a quantidade bruta, então não muda com o arredondamento das doses.
+  const valorUnitarioPorDoseExibido = (insumoId) => {
+    const doseMedia = doseMediaDoInsumo(insumoId);
+    const valorUnitario = valorUnitarioDoInsumo(insumoId);
+    return doseMedia && valorUnitario != null ? valorUnitario * doseMedia : valorUnitario;
+  };
+  const valorTotalExibido = (insumoId, quantidadeBruta) => {
+    const valorUnitario = valorUnitarioDoInsumo(insumoId);
+    return valorUnitario != null ? quantidadeBruta * valorUnitario : null;
   };
 
-  // Hormônio e Sêmen: uma linha por produto, somando todas as saídas dele (não importa a
-  // origem/manejo) — as demais categorias continuam mostrando uma linha por saída, com a origem.
+  // Hormônio, Medicamento e Sêmen: uma linha por produto, somando todas as saídas dele (não
+  // importa a origem/manejo) — Utensílio continua mostrando uma linha por saída, com a origem.
   const agruparPorInsumo = (lista) => {
     const mapa = new Map();
     lista.forEach((m) => {
@@ -6528,7 +6669,7 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
 
       {grupos.map(({ categoria, titulo }) => {
         const itens = saidas.filter((m) => categoriaDoInsumo(m.insumoId) === categoria);
-        const agregarPorProduto = categoria === "Hormônio" || categoria === "Sêmen";
+        const agregarPorProduto = categoria === "Hormônio" || categoria === "Sêmen" || categoria === "Medicamento";
         const itensAgrupados = agregarPorProduto ? agruparPorInsumo(itens) : null;
         const rotuloQuantidade = emDoses(categoria) ? "Quantidade (doses)" : "Quantidade";
         return (
@@ -6539,12 +6680,22 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
             ) : agregarPorProduto ? (
               <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
-                  <thead><tr><th>Insumo</th><th>{rotuloQuantidade}</th><th>Última saída</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Insumo</th>
+                      <th>{rotuloQuantidade}</th>
+                      {emDoses(categoria) && <th>Valor unitário (R$/dose)</th>}
+                      {emDoses(categoria) && <th>Valor total (R$)</th>}
+                      <th>Última saída</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {itensAgrupados.map((g) => (
                       <tr key={g.insumoId}>
                         <td style={{ fontWeight: 700 }}>{nomeInsumo(g.insumoId)}</td>
                         <td>{quantidadeExibida(g.insumoId, g.quantidade, categoria)}</td>
+                        {emDoses(categoria) && <td>{fmtMoeda(valorUnitarioPorDoseExibido(g.insumoId))}</td>}
+                        {emDoses(categoria) && <td>{fmtMoeda(valorTotalExibido(g.insumoId, g.quantidade))}</td>}
                         <td>{fmtDate(g.ultimaData)}</td>
                       </tr>
                     ))}
@@ -6662,7 +6813,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                       <th>Produto</th>
                       <th>{categoria === "Hormônio" ? "Hormônio" : "Tipo"}</th>
                       <th>Estoque (doses)</th>
-                      <th>Valor unitário</th>
+                      <th>Valor unitário (R$/dose)</th>
                       <th>Valor total</th>
                     </tr>
                   </thead>
@@ -7274,13 +7425,18 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 ========================================================= */
 
 
-const PERFIS_USUARIO = ["Administrador", "Supervisor", "Inseminador"];
+const PERFIS_USUARIO = ["Suporte Adm", "Administrador", "Supervisor", "Inseminador"];
 // mesmo formato de uuid exigido pelo Supabase Auth/usuarios.id — usado só para avisar na tela
 // quando um usuário tem um id inválido (não vai sincronizar) e precisa ser excluído e recriado.
 const REGEX_UUID_USUARIO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, removerUsuario, currentUser }) {
-  const empty = { nome: "", email: "", senha: "", perfil: "Inseminador" };
+  // Administrador só pode cadastrar Supervisor/Inseminador — cadastro de Administrador é
+  // exclusivo do Suporte Adm. O próprio Suporte Adm não é criável por aqui (provisionado à parte).
+  const perfisSelecionaveis = currentUser?.perfil === "Suporte Adm"
+    ? ["Administrador", "Supervisor", "Inseminador"]
+    : ["Supervisor", "Inseminador"];
+  const empty = { nome: "", email: "", senha: "", perfil: perfisSelecionaveis[0] };
   const [form, setForm] = useState(empty);
   const [usuarioAberto, setUsuarioAberto] = useState(null);
   const [confirmarExclusaoId, setConfirmarExclusaoId] = useState(null);
@@ -7304,6 +7460,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, re
   };
 
   const corPerfil = (perfil) => ({
+    "Suporte Adm": { bg: "#232520", color: "#FFFFFF" },
     Administrador: { bg: "#E4D6EE", color: "#5A2A8A" },
     Supervisor: { bg: "#EFEFEF", color: "#8A5A1F" },
     Inseminador: { bg: "#E6EFE5", color: "#2A4531" },
@@ -7311,7 +7468,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, re
 
   return (
     <div>
-      <SectionTitle icon={Users} title="Usuários" subtitle="Administrador: relatórios, cadastro de fazendas e de usuários (vê todas as fazendas). Supervisor e Inseminador: acesso restrito às fazendas autorizadas pelo Administrador." />
+      <SectionTitle icon={Users} title="Usuários" subtitle="Suporte Adm: cadastra fazendas, safras, usuários administrador e importa histórico de qualquer fazenda. Administrador: cadastra Supervisor/Inseminador e acessa relatórios, benchmarking e exportações. Supervisor e Inseminador: acesso restrito às fazendas autorizadas." />
 
       <div style={{ ...cardStyle, marginBottom: 24 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Adicionar usuário</div>
@@ -7330,7 +7487,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, re
           )}
           <Field label="Perfil">
             <select style={inputStyle} value={form.perfil} onChange={set("perfil")}>
-              {PERFIS_USUARIO.map((p) => <option key={p} value={p}>{p}</option>)}
+              {perfisSelecionaveis.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </Field>
         </div>
@@ -8689,11 +8846,13 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
 
   const registrarAtribuicao = () => {
     const nova = novaIdentificacao.trim();
+    const anterior = identificacaoAnterior.trim();
     if (!nova) { setMsgAtribuicao("Informe a nova identificação."); return; }
-    if (!identificacaoAnterior) { setMsgAtribuicao("Selecione a identificação anterior."); return; }
-    if (nova === identificacaoAnterior) { setMsgAtribuicao("A nova identificação precisa ser diferente da anterior."); return; }
-    atribuirHistoricoAnimal(identificacaoAnterior, nova);
-    setMsgAtribuicao(`Histórico de "${identificacaoAnterior}" atribuído a "${nova}".`);
+    if (!anterior) { setMsgAtribuicao("Informe a identificação anterior."); return; }
+    if (!brincosConhecidos.includes(anterior)) { setMsgAtribuicao(`Não há nenhum registro de "${anterior}" no sistema.`); return; }
+    if (nova === anterior) { setMsgAtribuicao("A nova identificação precisa ser diferente da anterior."); return; }
+    atribuirHistoricoAnimal(anterior, nova);
+    setMsgAtribuicao(`Histórico de "${anterior}" atribuído a "${nova}".`);
     setNovaIdentificacao("");
     setIdentificacaoAnterior("");
   };
@@ -8792,10 +8951,11 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
           </div>
           <div style={{ minWidth: 170 }}>
             <Field label="Identificação anterior">
-              <select style={inputStyle} value={identificacaoAnterior} onChange={(e) => { setIdentificacaoAnterior(e.target.value); setMsgAtribuicao(""); }}>
-                <option value="">Selecione o animal</option>
-                {brincosConhecidos.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
+              <input style={inputStyle} list="brincos-conhecidos-auditoria" value={identificacaoAnterior}
+                onChange={(e) => { setIdentificacaoAnterior(e.target.value); setMsgAtribuicao(""); }} placeholder="Digite para buscar" />
+              <datalist id="brincos-conhecidos-auditoria">
+                {brincosConhecidos.map((b) => <option key={b} value={b} />)}
+              </datalist>
             </Field>
           </div>
           <div style={{ marginBottom: 14 }}>
