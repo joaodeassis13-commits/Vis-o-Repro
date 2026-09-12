@@ -7978,25 +7978,48 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   // do insumo) cujo manejo de origem está dentro do recorte de Retiro/Lote/Categoria escolhido
   // (movimento de estoque não tem lote próprio — só o manejo que gerou a saída).
   const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
-  const gastoHormonioSemen = movimentosFiltrados
-    .filter((m) => m.tipo === "saida")
-    .reduce((soma, m) => {
-      const insumo = insumos.find((i) => i.id === m.insumoId);
-      if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || insumo.valorUnitario == null) return soma;
-      return soma + m.quantidade * insumo.valorUnitario;
-    }, 0);
-  const custoPorAnimal = totalAnimais > 0 ? gastoHormonioSemen / totalAnimais : null;
-  const custoPorInseminacao = totalInseminacoes > 0 ? gastoHormonioSemen / totalInseminacoes : null;
-  const totalDiagnosticosRegistrados = diagnosticosValidos.reduce((s, m) => s + (m.detalhes || []).length, 0)
-    + diagnosticosRepasseValidos.reduce((s, m) => s + (m.detalhes || []).length, 0);
-  const custoPorPrenhez = (custoPorInseminacao != null && totalPrenhas > 0)
-    ? (custoPorInseminacao * totalDiagnosticosRegistrados) / totalPrenhas
-    : null;
-  const OPCOES_CUSTO = {
-    animal: { label: "Animal", valor: custoPorAnimal, descricao: "Gasto com Hormônio e Sêmen ÷ nº de animais trabalhados." },
-    inseminacao: { label: "Inseminação", valor: custoPorInseminacao, descricao: "Gasto com Hormônio e Sêmen ÷ nº de inseminações registradas." },
-    prenhez: { label: "Prenhez", valor: custoPorPrenhez, descricao: "Custo por inseminação × total de diagnósticos registrados ÷ nº de prenhas registradas." },
+  const calcularCustos = (lotesSubset, manejosSubset, movimentosSubset) => {
+    const totalAnimaisSubset = lotesSubset.reduce((s, l) => s + (l.animais || []).length, 0);
+    const inseminacoesSubset = manejosSubset.filter((m) => m.tipo === "inseminacao");
+    const totalInseminacoesSubset = inseminacoesSubset.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+    const diagSubset = manejosSubset.filter((m) => m.tipo === "diagnostico");
+    const diagRepasseSubset = manejosSubset.filter((m) => m.tipo === "diagnostico_repasse");
+    const totalPrenhasSubset = contarPrenhas(diagSubset) + contarPrenhas(diagRepasseSubset);
+    const totalDiagRegistradosSubset = diagSubset.reduce((s, m) => s + (m.detalhes || []).length, 0)
+      + diagRepasseSubset.reduce((s, m) => s + (m.detalhes || []).length, 0);
+    const idsManejosSubset = new Set(manejosSubset.map((m) => m.id));
+    const gastoSubset = movimentosSubset
+      .filter((m) => m.tipo === "saida" && m.manejoId && idsManejosSubset.has(m.manejoId))
+      .reduce((soma, m) => {
+        const insumo = insumos.find((i) => i.id === m.insumoId);
+        if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || insumo.valorUnitario == null) return soma;
+        return soma + m.quantidade * insumo.valorUnitario;
+      }, 0);
+    const custoAnimal = totalAnimaisSubset > 0 ? gastoSubset / totalAnimaisSubset : null;
+    const custoInseminacao = totalInseminacoesSubset > 0 ? gastoSubset / totalInseminacoesSubset : null;
+    const custoPrenhez = (custoInseminacao != null && totalPrenhasSubset > 0)
+      ? (custoInseminacao * totalDiagRegistradosSubset) / totalPrenhasSubset
+      : null;
+    return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
   };
+
+  const custosGeral = calcularCustos(lotesValidos, manejosFiltrados.filter((m) => !idsDesconhecidosResumo.has(m.loteId)), movimentosFiltrados);
+  const custosPorCategoria = CATEGORIAS_RESUMO.map((cat) => {
+    const lotesCat = lotesFiltrados.filter((l) => l.categoria === cat);
+    const idsLotesCat = new Set(lotesCat.map((l) => l.id));
+    const manejosCat = manejosFiltrados.filter((m) => idsLotesCat.has(m.loteId));
+    return { label: `${cat}s`, ...calcularCustos(lotesCat, manejosCat, movimentosFiltrados) };
+  });
+
+  const OPCOES_CUSTO = {
+    animal: { label: "Animal", descricao: "Gasto com Hormônio e Sêmen ÷ nº de animais trabalhados." },
+    inseminacao: { label: "Inseminação", descricao: "Gasto com Hormônio e Sêmen ÷ nº de inseminações registradas." },
+    prenhez: { label: "Prenhez", descricao: "Custo por inseminação × total de diagnósticos registrados ÷ nº de prenhas registradas." },
+  };
+  const dadosCusto = [
+    { label: "Geral", valor: custosGeral[visaoCusto] },
+    ...custosPorCategoria.map((c) => ({ label: c.label, valor: c[visaoCusto] })),
+  ];
 
   const OPCOES_ROSCA_RESUMO = {
     animais: { label: "Matrizes", grupos: [
@@ -8164,9 +8187,9 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
             </div>
           </div>
 
-          <div style={{ ...cardStyle, marginBottom: 20, display: "flex", flexDirection: "column" }}>
+          <div style={{ ...cardStyle, marginBottom: 20, height: 300, display: "flex", flexDirection: "column" }}>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Custo</div>
-            <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 12, width: "fit-content" }}>
+            <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 10, width: "fit-content" }}>
               {Object.entries(OPCOES_CUSTO).map(([key, op]) => (
                 <button key={key} onClick={() => setVisaoCusto(key)}
                   style={{
@@ -8175,10 +8198,10 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                   }}>{op.label}</button>
               ))}
             </div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 700, color: "#232520" }}>
-              {fmtMoeda(OPCOES_CUSTO[visaoCusto].valor)}
+            <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 10px" }}>{OPCOES_CUSTO[visaoCusto].descricao}</p>
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <BarrasCusto dados={dadosCusto} />
             </div>
-            <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>{OPCOES_CUSTO[visaoCusto].descricao}</p>
           </div>
 
           <div style={{ ...cardStyle, marginBottom: 20, height: 300, display: "flex", flexDirection: "column" }}>
@@ -8338,6 +8361,27 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
           </div>
           <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 58 : 84, height: compacto ? 22 : 27, flexShrink: 0, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
           {d.n != null && <div style={{ fontSize: compacto ? 8.5 : 10.5, color: "#B0AA98", flexShrink: 0 }}>n={d.n}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// mesmo visual do BarrasConcepcao, mas pra valores em R$ (não porcentagem) — usado no card de Custo.
+function BarrasCusto({ dados, compacto }) {
+  const fmtMoedaCurta = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
+  if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
+  const maiorValor = Math.max(...dados.map((d) => d.valor || 0), 1);
+  const alturaMaximaPx = compacto ? 90 : 140;
+  return (
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
+      {dados.map((d, i) => (
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: compacto ? 56 : 76, flexShrink: 0 }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
+            <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4, whiteSpace: "nowrap" }}>{fmtMoedaCurta(d.valor)}</div>
+            <div style={{ width: compacto ? 28 : 44, height: `${d.valor != null ? Math.max((d.valor / maiorValor) * alturaMaximaPx, 4) : 2}px`, background: d.valor != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
+          </div>
+          <div style={{ fontSize: compacto ? 9.5 : 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: compacto ? 70 : 90, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{d.label}</div>
         </div>
       ))}
     </div>
