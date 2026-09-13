@@ -82,3 +82,17 @@ export async function buscarBenchmarkFertilidadePorCategoriaSistema(categoria, s
   const { data, error } = await supabase.rpc("benchmarking_fertilidade_por_categoria_sistema", { p_categoria: categoria, p_safra_nome: safraNome });
   return formatarResposta(data, error);
 }
+
+// concepção por NÚMERO DE MANEJOS do protocolo (3 manejos / 4 manejos) — todas as fazendas do sistema.
+export async function buscarBenchmarkConcepcaoPorManejoSistema(tipoManejo, safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_concepcao_por_manejo_sistema", { p_tipo_manejo: tipoManejo, p_safra_nome: safraNome });
+  return formatarResposta(data, error);
+}
+
+// concepção por DURAÇÃO DO PROTOCOLO (7/8/9 dias) — todas as fazendas do sistema.
+export async function buscarBenchmarkConcepcaoPorProtocoloSistema(protocolo, safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_concepcao_por_protocolo_sistema", { p_protocolo: protocolo, p_safra_nome: safraNome });
+  return formatarResposta(data, error);
+}

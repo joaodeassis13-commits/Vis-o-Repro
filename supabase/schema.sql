@@ -195,6 +195,11 @@ alter table manejos add column if not exists data_inicio date;
 alter table manejos add column if not exists data_fim date;
 alter table manejos add column if not exists destino_vazias text;
 alter table manejos add column if not exists raca_touro text;  -- Repasse: raça do(s) touro(s) usado(s), texto livre com memória (sugestões vêm do próprio histórico, sem cadastro à parte)
+-- exclusão "branda": em vez de apagar de verdade, marca o manejo como excluído — ele some de
+-- todo o resto do sistema (relatórios, agenda, etc.), mas continua consultável em Auditoria >
+-- Buscar manejos excluídos, caso precise recuperar as informações manualmente depois.
+alter table manejos add column if not exists excluido boolean not null default false;
+alter table manejos add column if not exists excluido_em timestamptz;
 
 -- garante que a restrição de "tipo" já aceite os manejos mais novos mesmo em
 -- bancos criados antes deles existirem (o nome da constraint é o padrão gerado pelo Postgres).
@@ -1071,6 +1076,83 @@ returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, 
 $$ language sql stable security definer set search_path = public;
 
 grant execute on function benchmarking_fertilidade_por_categoria_grupo(text, text) to authenticated;
+
+-- ---------- concepção POR NÚMERO DE MANEJOS DO PROTOCOLO (3 ou 4 manejos) ----------
+-- "tipo_manejo" (3/4 manejos) e "protocolo" (7/8/9 dias) ficam gravados no D0/Ressinc daquele
+-- lote+ordem, não no Diagnóstico em si — por isso primeiro acha, pra cada (fazenda, lote,
+-- ordem), qual foi o D0/Ressinc mais recente ali, e só depois cruza com os diagnósticos
+-- daquele mesmo lote+ordem. Não cobre Repasse (que não tem D0/Ressinc associado).
+drop function if exists benchmarking_concepcao_por_manejo_sistema(text);
+create or replace function benchmarking_concepcao_por_manejo_sistema(p_tipo_manejo text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with protocolo_por_lote_ordem as (
+    select distinct on (fazenda_id, lote_id, ordem) fazenda_id, lote_id, ordem, tipo_manejo
+    from manejos
+    where tipo in ('implantacao', 'ressinc') and lote_id is not null and ordem is not null
+    order by fazenda_id, lote_id, ordem, data desc
+  ),
+  por_fazenda as (
+    select
+      m.fazenda_id,
+      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
+    from manejos m
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    join protocolo_por_lote_ordem p on p.fazenda_id = m.fazenda_id and p.lote_id = m.lote_id and p.ordem = m.ordem
+    where m.tipo = 'diagnostico' and p.tipo_manejo = p_tipo_manejo
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+    having count(*) > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_concepcao_por_manejo_sistema(text, text) to authenticated;
+
+-- ---------- concepção POR DURAÇÃO DO PROTOCOLO (7/8/9 dias) ----------
+-- mesma lógica da função acima, só que agrupando pela duração do protocolo em vez do nº de manejos.
+drop function if exists benchmarking_concepcao_por_protocolo_sistema(text);
+create or replace function benchmarking_concepcao_por_protocolo_sistema(p_protocolo text, p_safra_nome text default null)
+returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
+  with protocolo_por_lote_ordem as (
+    select distinct on (fazenda_id, lote_id, ordem) fazenda_id, lote_id, ordem, protocolo
+    from manejos
+    where tipo in ('implantacao', 'ressinc') and lote_id is not null and ordem is not null
+    order by fazenda_id, lote_id, ordem, data desc
+  ),
+  por_fazenda as (
+    select
+      m.fazenda_id,
+      round(100.0 * count(*) filter (where d ->> 'resultado' = 'Prenha') / count(*), 1) as taxa
+    from manejos m
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    join protocolo_por_lote_ordem p on p.fazenda_id = m.fazenda_id and p.lote_id = m.lote_id and p.ordem = m.ordem
+    where m.tipo = 'diagnostico' and p.protocolo = p_protocolo
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
+    group by m.fazenda_id
+    having count(*) > 0
+  ),
+  tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
+  ranqueadas as (
+    select taxa, row_number() over (order by taxa asc) as posicao_da_pior, row_number() over (order by taxa desc) as posicao_da_melhor
+    from por_fazenda
+  )
+  select
+    (select round(avg(taxa), 1) from por_fazenda) as media_geral,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_melhor <= tamanho.qtd) as media_top25,
+    (select round(avg(taxa), 1) from ranqueadas, tamanho where posicao_da_pior  <= tamanho.qtd) as media_bottom25,
+    (select count(*) from por_fazenda) as num_fazendas;
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_concepcao_por_protocolo_sistema(text, text) to authenticated;
 
 -- avisa a API (PostgREST) que o schema mudou — importante sempre que uma coluna nova é
 -- adicionada (como "criado_em" em retiros/safras acima), pra ela não continuar usando uma

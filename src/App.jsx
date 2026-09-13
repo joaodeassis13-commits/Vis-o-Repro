@@ -15,6 +15,7 @@ import { sincronizar, buscarPerfilProprio, excluirRegistro } from "./lib/sync.js
 import {
   buscarBenchmarkTaxaPrenhezSistema, buscarBenchmarkTaxaFertilidadeSistema,
   buscarBenchmarkConcepcaoPorOrdemSistema, buscarBenchmarkConcepcaoPorCategoriaSistema, buscarBenchmarkFertilidadePorCategoriaSistema,
+  buscarBenchmarkConcepcaoPorManejoSistema, buscarBenchmarkConcepcaoPorProtocoloSistema,
 } from "./lib/benchmarking.js";
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
 import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario, pedirRedefinicaoSenha, definirNovaSenha } from "./lib/auth.js";
@@ -1201,9 +1202,18 @@ export default function App() {
     [insumos, fazendaAtivaId, currentUser]
   );
   const manejosAtivos = useMemo(
-    () => manejos.filter((m) => m.fazendaId === fazendaAtivaId && (safraAtivaId ? m.safraId === safraAtivaId : true)),
+    () => manejos.filter((m) => m.fazendaId === fazendaAtivaId && (safraAtivaId ? m.safraId === safraAtivaId : true) && !m.excluido),
     [manejos, fazendaAtivaId, safraAtivaId]
   );
+  // manejos excluídos (só desta fazenda) — usados unicamente na Auditoria, pra consulta.
+  const manejosExcluidos = useMemo(
+    () => manejos.filter((m) => m.fazendaId === fazendaAtivaId && m.excluido),
+    [manejos, fazendaAtivaId]
+  );
+  // mesma lista "manejos" (todas as fazendas visíveis, sem filtro de fazenda/safra ativa — usada
+  // nas visões multi-fazenda do Administrador/Suporte Adm e no Benchmarking), só que sem os
+  // excluídos — a exclusão branda não deve aparecer em relatório, exportação nem benchmarking.
+  const manejosSemExcluidos = useMemo(() => manejos.filter((m) => !m.excluido), [manejos]);
   const movimentosAtivos = useMemo(
     () => movimentos.filter((m) => m.local === "externo" ? insumos.find((i) => i.id === m.insumoId)?.usuarioId === currentUser?.id : m.fazendaId === fazendaAtivaId),
     [movimentos, fazendaAtivaId, insumos, currentUser]
@@ -1832,12 +1842,11 @@ export default function App() {
       }));
       setMovimentos((a) => a.filter((mv) => !(mv.tipo === "saida" && mv.manejoId === id)));
     }
-    setManejos((a) => a.filter((m) => m.id !== id));
+    // exclusão BRANDA: o manejo continua existindo (só assim dá pra consultar depois em
+    // Auditoria > Buscar manejos excluídos), apenas marcado como excluído — some de todo o
+    // resto do sistema porque manejosAtivos/manejosSemExcluidos já filtram excluido=true.
+    setManejos((a) => a.map((m) => m.id === id ? { ...m, excluido: true, excluidoEm: new Date().toISOString() } : m));
     marcaPendencia();
-    // sem isso, o manejo continuava existindo no Supabase e a sincronização seguinte trazia
-    // ele de volta — a exclusão local sozinha nunca é o suficiente pra nada que já sincronizou.
-    const r = await excluirRegistro("manejos", id);
-    if (!r.ok) console.error("Falha ao excluir manejo no Supabase:", r.erro);
   };
 
   // TIPOS de manejo que só deveriam existir UMA vez por lote+ordem — se dois aparelhos,
@@ -2190,8 +2199,8 @@ export default function App() {
       { key: "implantacao", label: "D0", icon: ImplantIcon },
       { key: "retirada", label: "Retirada", icon: Syringe },
       { key: "inseminacao", label: "Inseminação", icon: SpermIcon },
-      { key: "diagnostico", label: "Diagnóstico", icon: UltrasoundIcon },
       { key: "repasse", label: "Repasse", icon: RefreshCw },
+      { key: "diagnostico", label: "Diagnóstico", icon: UltrasoundIcon },
       { key: "diagnostico_final", label: "Diagnóstico Final", icon: Search },
     ],
     estoque: [
@@ -2398,7 +2407,7 @@ export default function App() {
         </nav>
 
         <div style={{ padding: 12, borderTop: "1px solid #3F5B49" }}>
-          {currentUser?.perfil !== "Administrador" && (
+          {!["Administrador", "Suporte Adm"].includes(currentUser?.perfil) && (
             <>
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: "#9FA890", textTransform: "uppercase", letterSpacing: "0.4px", padding: "0 10px 5px" }}>Fazenda ativa</div>
@@ -2568,7 +2577,7 @@ export default function App() {
           </div>
           <div style={{ display: section === "cadastros" && sub === "fazenda" ? "block" : "none" }}>
             <AbaFazenda fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addFazenda={addFazenda} addRetiro={addRetiro} removeRetiro={removeRetiro}
-              addSafra={addSafra} removeSafra={removeSafra} toggleSafraLancamentos={toggleSafraLancamentos} toggleFazendaLicenciada={toggleFazendaLicenciada} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} />
+              addSafra={addSafra} removeSafra={removeSafra} toggleSafraLancamentos={toggleSafraLancamentos} toggleFazendaLicenciada={toggleFazendaLicenciada} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} perfil={currentUser.perfil} />
           </div>
           <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
             <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} importarLotesHistoricos={importarLotesHistoricos} />
@@ -2644,18 +2653,18 @@ export default function App() {
           </div>
           <div style={{ display: section === "relatorios" ? "block" : "none" }}>
             <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil}
-              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} movimentosTodos={movimentos} />
+              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejosSemExcluidos} movimentosTodos={movimentos} />
           </div>
           <div style={{ display: section === "auditoria" ? "block" : "none" }}>
-            <AbaAuditoria fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} manejos={manejosAtivos} atribuirHistoricoAnimal={atribuirHistoricoAnimal} />
+            <AbaAuditoria fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} manejosExcluidos={manejosExcluidos} atribuirHistoricoAnimal={atribuirHistoricoAnimal} />
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
-            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
+            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejosSemExcluidos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
               perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveisLicenciadas} />
           </div>
           <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
             <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil}
-              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejos} movimentosTodos={movimentos} />
+              fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejosSemExcluidos} movimentosTodos={movimentos} />
           </div>
         </div>
       </main>
@@ -2878,7 +2887,7 @@ function AbaFazendasAdmin({ fazendas, retiros, safras, addRetiro, toggleSafraLan
   );
 }
 
-function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, toggleSafraLancamentos, toggleFazendaLicenciada, fazendaAtivaId, setFazendaAtivaId, removerFazenda }) {
+function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRetiro, addSafra, removeSafra, toggleSafraLancamentos, toggleFazendaLicenciada, fazendaAtivaId, setFazendaAtivaId, removerFazenda, perfil }) {
   const empty = { nome: "", municipio: "", areaTotal: "", proprietario: "", responsavel: "", telefone: "" };
   const [form, setForm] = useState(empty);
   const [retirosNovos, setRetirosNovos] = useState([]); // nomes ainda não salvos, junto com a fazenda
@@ -3044,7 +3053,7 @@ function AbaFazenda({ fazendas, retiros, safras, addFazenda, addRetiro, removeRe
                       </td>
                       <td style={{ textAlign: "right" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-                          {!ativa && (
+                          {!ativa && perfil !== "Suporte Adm" && (
                             <BtnGhost onClick={(e) => { e.stopPropagation(); setFazendaAtivaId(f.id); }}>Usar</BtnGhost>
                           )}
                           {confirmarExclusaoFazendaId === f.id ? (
@@ -7011,6 +7020,14 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
     const custoPorUnidade = custoPorUnidadeDoInsumo(insumoId);
     return custoPorUnidade != null ? quantidadeBruta * custoPorUnidade : null;
   };
+  // valor total de saída de um grupo de movimentos — funciona pras 4 categorias (Hormônio,
+  // Sêmen, Medicamento, Utensílio), já que custoPorUnidadeInsumo já resolve o valor por
+  // mL/unidade/dose certo pra cada uma.
+  const valorTotalSaidasGrupo = (itensDoGrupo) => itensDoGrupo.reduce((s, m) => {
+    const custoPorUnidade = custoPorUnidadeDoInsumo(m.insumoId);
+    return s + (custoPorUnidade != null ? m.quantidade * custoPorUnidade : 0);
+  }, 0);
+  const valorTotalGeralSaidas = valorTotalSaidasGrupo(saidas);
 
   // Hormônio, Medicamento e Sêmen: uma linha por produto, somando todas as saídas dele (não
   // importa a origem/manejo) — Utensílio continua mostrando uma linha por saída, com a origem.
@@ -7039,6 +7056,11 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
 
       <SeletorLocalEstoque local={localTab} setLocal={setLocalTab} />
 
+      <div style={{ ...cardStyle, marginBottom: 24, display: "inline-block" }}>
+        <div style={{ fontSize: 11, color: "#9B9686", textTransform: "uppercase", fontWeight: 700 }}>Valor total de saídas ({localTab === "externo" ? "Externo" : "Fazenda"})</div>
+        <div style={{ fontFamily: "'Work Sans', sans-serif", fontSize: 26, fontWeight: 700, color: "#232520", marginTop: 4 }}>{fmtMoeda(valorTotalGeralSaidas)}</div>
+      </div>
+
       {grupos.map(({ categoria, titulo }) => {
         const itens = saidas.filter((m) => categoriaDoInsumo(m.insumoId) === categoria);
         const agregarPorProduto = categoria === "Hormônio" || categoria === "Sêmen" || categoria === "Medicamento";
@@ -7046,7 +7068,10 @@ function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
         const rotuloQuantidade = emDoses(categoria) ? "Quantidade (doses)" : "Quantidade";
         return (
           <div key={categoria} style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>{titulo}</div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase" }}>{titulo}</div>
+              {itens.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#166336" }}>Total: {fmtMoeda(valorTotalSaidasGrupo(itens))}</div>}
+            </div>
             {itens.length === 0 ? (
               <EmptyState text={`Nenhuma saída de ${titulo.toLowerCase()} registrada ainda — ela ocorre automaticamente ao registrar um manejo.`} />
             ) : agregarPorProduto ? (
@@ -7134,7 +7159,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
 
       <div style={{ ...cardStyle, marginBottom: 24, display: "inline-block" }}>
         <div style={{ fontSize: 11, color: "#9B9686", textTransform: "uppercase", fontWeight: 700 }}>Valor total em estoque ({localTab === "externo" ? "Externo" : "Fazenda"})</div>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 700, color: "#232520", marginTop: 4 }}>{fmtMoeda(valorTotalGeral)}</div>
+        <div style={{ fontFamily: "'Work Sans', sans-serif", fontSize: 26, fontWeight: 700, color: "#232520", marginTop: 4 }}>{fmtMoeda(valorTotalGeral)}</div>
       </div>
 
       {grupos.map(({ categoria, titulo }) => {
@@ -9216,7 +9241,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               titulo="Concepção por número de manejos"
               opcoes={TIPOS_MANEJO_IMPLANTACAO.map((v) => ({ key: v, label: v }))}
               calcularTaxasGrupo={(v) => taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, "numeroManejos", v)}
-              buscarTaxasSistema={() => Promise.resolve({ ok: false, motivo: "Essa comparação ainda não está disponível para \u201cGeral do Sistema\u201d." })}
+              buscarTaxasSistema={buscarBenchmarkConcepcaoPorManejoSistema}
               safraAtiva={safraAtual}
               fazendaAtivaId={fazendaIdAtual}
               escopo={escopo}
@@ -9226,7 +9251,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               titulo="Concepção por duração do protocolo"
               opcoes={PROTOCOLOS_IMPLANTACAO.map((v) => ({ key: v, label: v }))}
               calcularTaxasGrupo={(v) => taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, "duracaoProtocolo", v)}
-              buscarTaxasSistema={() => Promise.resolve({ ok: false, motivo: "Essa comparação ainda não está disponível para \u201cGeral do Sistema\u201d." })}
+              buscarTaxasSistema={buscarBenchmarkConcepcaoPorProtocoloSistema}
               safraAtiva={safraAtual}
               fazendaAtivaId={fazendaIdAtual}
               escopo={escopo}
@@ -9266,6 +9291,7 @@ function AbaNovosAnimais({ fazendaAtiva, safraAtiva, manejos, registrarManejo, r
   const [arquivoNome, setArquivoNome] = useState("");
   const [erroImport, setErroImport] = useState("");
   const inputRef = React.useRef(null);
+  const brincoInputRef = React.useRef(null);
   const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
 
   const adicionarPendente = () => {
@@ -9362,8 +9388,11 @@ function AbaNovosAnimais({ fazendaAtiva, safraAtiva, manejos, registrarManejo, r
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Adicionar animal</div>
             <div className="grid-form-3">
               <Field label="Identificação *">
-                <input style={inputStyle} value={form.brinco} onChange={set("brinco")} placeholder="Ex: 1234"
-                  onKeyDown={(e) => e.key === "Enter" && adicionarPendente()} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input ref={brincoInputRef} style={inputStyle} value={form.brinco} onChange={set("brinco")} placeholder="Ex: 1234"
+                    onKeyDown={(e) => e.key === "Enter" && adicionarPendente()} />
+                  <BotaoCameraLeitura onLido={(texto) => { setForm((f) => ({ ...f, brinco: texto })); brincoInputRef.current?.focus(); }} />
+                </div>
               </Field>
               <Field label="Raça da matriz">
                 <input style={inputStyle} list="racas-novos-animais" value={form.raca} onChange={set("raca")} placeholder="Selecione ou digite a raça" />
@@ -9458,7 +9487,7 @@ function AbaNovosAnimais({ fazendaAtiva, safraAtiva, manejos, registrarManejo, r
    ainda serão definidas e implementadas depois.
 ========================================================= */
 
-function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistoricoAnimal }) {
+function AbaAuditoria({ fazendaAtiva, lotes, retiros, insumos, manejos, manejosExcluidos, atribuirHistoricoAnimal }) {
   const [filtroRetiroId, setFiltroRetiroId] = useState("");
   const [filtroLoteId, setFiltroLoteId] = useState("");
   const lotesDoRetiroFiltro = lotes.filter((l) => !filtroRetiroId || l.retiroId === filtroRetiroId);
@@ -9472,6 +9501,7 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
 
   /* ---------- busca de animais faltantes num manejo específico ---------- */
   const [buscaLoteId, setBuscaLoteId] = useState("");
+  const [buscaLoteNome, setBuscaLoteNome] = useState("");
   const [buscaOrdem, setBuscaOrdem] = useState("");
   const [buscaManejo, setBuscaManejo] = useState("");
 
@@ -9616,6 +9646,62 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
     return true;
   });
 
+  /* ---------- Buscar manejos excluídos (consulta — não recupera direto) ---------- */
+  const LABEL_TIPO_MANEJO = {
+    novos_animais: "Novos animais", inducao: "Indução", implantacao: "D0", ressinc: "Ressinc",
+    retirada: "Retirada", inseminacao: "Inseminação", diagnostico: "Diagnóstico",
+    repasse: "Repasse", diagnostico_repasse: "Diagnóstico - repasse",
+  };
+  const [filtroTipoExcluido, setFiltroTipoExcluido] = useState("");
+  const tiposExcluidosDisponiveis = [...new Set((manejosExcluidos || []).map((m) => m.tipo))];
+  const excluidosDoTipoFiltrado = (manejosExcluidos || [])
+    .filter((m) => m.tipo === filtroTipoExcluido)
+    .sort((a, b) => (a.excluidoEm < b.excluidoEm ? 1 : -1));
+  const nomeLoteAud = (id) => lotes.find((l) => l.id === id)?.nome;
+  const nomeInsumoAud = (id) => {
+    const i = insumos.find((x) => x.id === id);
+    if (!i) return "—";
+    return i.categoria === "Sêmen" ? `${i.touro} — ${i.raca}` : i.produtoComercial;
+  };
+  // monta uma lista de linhas "Produto: valor (dose)" com os campos específicos que existirem
+  // naquele manejo — cobre Indução/D0/Ressinc/Retirada/Inseminação sem precisar de um caso pra
+  // cada tipo separadamente.
+  const resumoProdutosExcluido = (m) => {
+    const linhas = [];
+    if (m.produtoId) linhas.push(`Produto: ${nomeInsumoAud(m.produtoId)} — ${m.quantidade ?? "—"} ${m.unidade || ""}`);
+    if (m.implanteId) linhas.push(`Implante: ${nomeInsumoAud(m.implanteId)}`);
+    if (m.benzoatoId) linhas.push(`Benzoato: ${nomeInsumoAud(m.benzoatoId)} (${m.doseBenzoato ?? "—"} mL)`);
+    if (m.prostaglandinaId) linhas.push(`Prostaglandina: ${nomeInsumoAud(m.prostaglandinaId)} (${m.doseProstaglandina ?? "—"} mL)`);
+    if (m.cipionatoId) linhas.push(`Cipionato: ${nomeInsumoAud(m.cipionatoId)} (${m.doseCipionato ?? "—"} mL)`);
+    if (m.ecgHcgId) linhas.push(`ECG/HCG: ${nomeInsumoAud(m.ecgHcgId)} (${m.doseEcgHcg ?? "—"} mL)`);
+    if (m.gnrhId) linhas.push(`GnRH: ${nomeInsumoAud(m.gnrhId)} (${m.doseGnrh ?? "—"} mL)`);
+    if (m.perdasImplante != null) linhas.push(`Perdas de implante: ${m.perdasImplante}`);
+    if (m.horarioInicial || m.horarioFinal) linhas.push(`Horário: ${m.horarioInicial || "—"} a ${m.horarioFinal || "—"}`);
+    if (m.protocoloPadrao) linhas.push(`Protocolo padrão: ${m.protocoloPadrao}`);
+    if (m.tipoManejo) linhas.push(`Tipo de manejo: ${m.tipoManejo}`);
+    if (m.protocolo) linhas.push(`Duração do protocolo: ${m.protocolo}`);
+    if (m.destinoVazias) linhas.push(`Destino das vazias: ${m.destinoVazias}`);
+    if (m.medicamentos?.length) linhas.push(`Medicamentos: ${m.medicamentos.map((x) => `${nomeInsumoAud(x.medicamentoId)} (${x.dose})`).join(", ")}`);
+    if (m.localEstoque) linhas.push(`Local de estoque: ${m.localEstoque === "externo" ? "Externo" : "Fazenda"}`);
+    if (m.inseminador) linhas.push(`Inseminador: ${m.inseminador}`);
+    return linhas;
+  };
+  // lista genérica "campo: valor" com os detalhes daquele animal específico — cobre qualquer
+  // formato de detalhe (ECC, peso, resultado, sêmen, etc.) sem precisar mapear campo a campo.
+  const TRADUCAO_CAMPO_ANIMAL = {
+    ecc: "ECC", peso: "Peso", observacoes: "Observações", resultado: "Resultado", racaMatriz: "Raça da matriz",
+    semenId: "Sêmen", touro: "Touro", racaTouro: "Raça do touro", inseminador: "Inseminador",
+    statusPrenhez: "Status de prenhez", raca: "Raça", perdaImplante: "Perda de implante",
+    tempoGestacao: "Tempo de gestação", origemPrenhez: "Origem da prenhez",
+  };
+  const detalhesAnimalExcluido = (d) => Object.entries(d)
+    .filter(([k, v]) => k !== "brinco" && v != null && v !== "" && v !== false)
+    .map(([k, v]) => {
+      const label = TRADUCAO_CAMPO_ANIMAL[k] || k;
+      const valor = k === "semenId" ? nomeInsumoAud(v) : typeof v === "object" ? JSON.stringify(v) : String(v);
+      return `${label}: ${valor}`;
+    }).join(" · ");
+
   return (
     <div>
       <SectionTitle icon={Search} title="Auditoria" subtitle="Compare o nº de animais informado em cada etapa do protocolo, lote a lote." />
@@ -9625,11 +9711,21 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
         <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Buscar animais faltantes</div>
         <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 12px" }}>Selecione lote, ordem e manejo para ver quais animais deveriam ter sido lidos ali e ficaram de fora.</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
-          <select value={buscaLoteId} onChange={(e) => { setBuscaLoteId(e.target.value); setBuscaOrdem(""); setBuscaManejo(""); }}
-            style={{ ...inputStyle, width: "auto", minWidth: 170, padding: "7px 10px", fontSize: 12.5 }}>
-            <option value="">Selecione o lote</option>
-            {lotes.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
-          </select>
+          <div>
+            <input list="lotes-busca-faltantes" value={buscaLoteNome}
+              onChange={(e) => {
+                const valor = e.target.value;
+                setBuscaLoteNome(valor);
+                const encontrado = lotes.find((l) => l.nome.trim().toLowerCase() === valor.trim().toLowerCase());
+                setBuscaLoteId(encontrado ? encontrado.id : "");
+                setBuscaOrdem(""); setBuscaManejo("");
+              }}
+              placeholder="Digite ou selecione o lote"
+              style={{ ...inputStyle, width: "auto", minWidth: 170, padding: "7px 10px", fontSize: 12.5 }} />
+            <datalist id="lotes-busca-faltantes">
+              {lotes.map((l) => <option key={l.id} value={l.nome} />)}
+            </datalist>
+          </div>
           <select value={buscaOrdem} onChange={(e) => { setBuscaOrdem(e.target.value); setBuscaManejo(""); }} disabled={!buscaLoteId}
             style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
             <option value="">Selecione a ordem</option>
@@ -9678,6 +9774,60 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
         </div>
         {msgAtribuicao && (
           <p style={{ fontSize: 12.5, color: msgAtribuicao.startsWith("Histórico") ? "#166336" : "#A32D2D", margin: 0 }}>{msgAtribuicao}</p>
+        )}
+      </div>
+
+      <div style={{ ...cardStyle, marginBottom: 24 }}>
+        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 4 }}>Buscar manejos excluídos</div>
+        <p style={{ fontSize: 11.5, color: "#9B9686", margin: "0 0 12px" }}>
+          Funciona só como consulta — como uma lixeira que não se recupera direto por aqui. Se quiser trazer algum desses manejos de volta, anote as informações abaixo e lance de novo na aba do manejo correspondente.
+        </p>
+        <select value={filtroTipoExcluido} onChange={(e) => setFiltroTipoExcluido(e.target.value)}
+          style={{ ...inputStyle, width: "auto", minWidth: 200, padding: "7px 10px", fontSize: 12.5, marginBottom: 14 }}>
+          <option value="">Selecione o manejo</option>
+          {tiposExcluidosDisponiveis.map((t) => <option key={t} value={t}>{LABEL_TIPO_MANEJO[t] || t}</option>)}
+        </select>
+        {!filtroTipoExcluido ? (
+          <p style={{ fontSize: 12.5, color: "#9B9686" }}>
+            {manejosExcluidos.length === 0 ? "Nenhum manejo excluído nesta fazenda." : "Selecione um tipo de manejo pra ver os excluídos."}
+          </p>
+        ) : excluidosDoTipoFiltrado.length === 0 ? (
+          <EmptyState text="Nenhum manejo excluído desse tipo." />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {excluidosDoTipoFiltrado.map((m) => (
+              <div key={m.id} style={{ border: "1px solid #E5DFCC", borderRadius: 10, padding: 12, background: "#FBFAF7" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 12.5, color: "#232520", marginBottom: 8 }}>
+                  <span><strong>Lote:</strong> {nomeLoteAud(m.loteId) || m.loteNome || "—"}</span>
+                  {m.ordem && <span><strong>Ordem:</strong> {m.ordem}</span>}
+                  {m.categoria && <span><strong>Categoria:</strong> {m.categoria}</span>}
+                  <span><strong>Data do manejo:</strong> {fmtDate(m.data)}</span>
+                  <span><strong>Excluído em:</strong> {m.excluidoEm ? new Date(m.excluidoEm).toLocaleString("pt-BR") : "—"}</span>
+                  {m.numeroAnimais != null && <span><strong>Nº de animais:</strong> {m.numeroAnimais}</span>}
+                </div>
+                {resumoProdutosExcluido(m).length > 0 && (
+                  <div style={{ fontSize: 12, color: "#6B685E", marginBottom: 8 }}>
+                    {resumoProdutosExcluido(m).map((l, i) => <div key={i}>{l}</div>)}
+                  </div>
+                )}
+                {(m.animaisLidos || []).length > 0 && (
+                  <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 8, overflowX: "auto" }}>
+                    <table>
+                      <thead><tr><th>Animal</th><th>Detalhes</th></tr></thead>
+                      <tbody>
+                        {(m.detalhes || []).map((d, i) => (
+                          <tr key={i}>
+                            <td style={{ fontWeight: 700 }}>{d.brinco || "—"}</td>
+                            <td style={{ fontSize: 11.5 }}>{detalhesAnimalExcluido(d) || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -10030,8 +10180,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       return {
         didDrawCell: (data) => {
           if (data.section === "body" && limites.has(data.row.index)) {
-            doc.setDrawColor(190, 190, 190);
-            doc.setLineWidth(0.75);
+            doc.setDrawColor(0, 0, 0);
+            doc.setLineWidth(0.5);
             doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
           }
         },
