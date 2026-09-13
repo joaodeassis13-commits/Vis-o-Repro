@@ -1726,7 +1726,16 @@ export default function App() {
     );
     const insumoId = existente ? existente.id : uid("ins");
     if (existente) {
-      setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, ...camposItem, estoque: i.estoque + quantidade, quantidade, valorUnitario } : i));
+      // Hormônio/Medicamento/Utensílio: o valor unitário do produto passa a ser uma MÉDIA
+      // PONDERADA entre o que já tinha em estoque (com o valor unitário atual) e o que está
+      // entrando agora (com o valor informado nesta entrada) — não sobrescreve mais o preço
+      // antigo direto. Sêmen não entra aqui: cada partida já é um insumo próprio (o preço dela
+      // é o dela mesma, não faz sentido misturar com o de outra partida).
+      let valorUnitarioFinal = valorUnitario;
+      if (["Hormônio", "Medicamento", "Utensílio"].includes(categoria) && existente.estoque > 0 && existente.valorUnitario != null && valorUnitario != null) {
+        valorUnitarioFinal = (existente.estoque * existente.valorUnitario + quantidade * valorUnitario) / (existente.estoque + quantidade);
+      }
+      setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, ...camposItem, estoque: i.estoque + quantidade, quantidade, valorUnitario: valorUnitarioFinal } : i));
     } else {
       setInsumos((a) => [...a, { ...camposItem, id: insumoId, ...dono, categoria, quantidade, estoque: quantidade, valorUnitario, criadoEm: new Date().toISOString() }]);
     }
@@ -1784,6 +1793,24 @@ export default function App() {
         const idsRemover = new Set(coletarDescendentesIds(agendamentoCorrespondente.id, agendamentos));
         if (idsRemover.size > 0) setAgendamentos((a) => a.filter((ag) => !idsRemover.has(ag.id)));
       }
+    }
+
+    // o(s) pré-agendamento(s) que gerarPreAgendamentos está prestes a criar (a próxima etapa,
+    // ex.: Diagnóstico depois de uma Inseminação) substitui qualquer agendamento MANUAL já
+    // existente pro mesmo manejo/ordem/lote — evita conviver com um lembrete manual que já
+    // ficou desatualizado assim que o passo seguinte é sugerido automaticamente de verdade.
+    const tiposASeremGerados = tiposDoProximoPreAgendamento(manejoCompleto);
+    if (tiposASeremGerados.length > 0 && manejoCompleto.loteNome) {
+      const idsSubstituir = [];
+      tiposASeremGerados.forEach((tipoGerado) => {
+        agendamentos.filter((ag) =>
+          ag.fazendaId === fazendaAtivaId && ag.origem === "manual" && ag.tipo === tipoGerado &&
+          (ag.ordem || null) === (manejoCompleto.ordem || null) &&
+          ag.loteNome && ag.loteNome.trim().toLowerCase() === manejoCompleto.loteNome.trim().toLowerCase() &&
+          (ag.status === "pendente" || ag.status === "confirmado")
+        ).forEach((ag) => idsSubstituir.push(ag.id, ...coletarDescendentesIds(ag.id, agendamentos)));
+      });
+      if (idsSubstituir.length > 0) setAgendamentos((a) => a.filter((ag) => !idsSubstituir.includes(ag.id)));
     }
 
     gerarPreAgendamentos(manejoCompleto);
@@ -1920,6 +1947,22 @@ export default function App() {
       nova = recalcularCadeiaDerivada(filho.id, nova);
     });
     return nova;
+  };
+
+  // espelha as mesmas regras de gerarPreAgendamentos, mas só pra saber ANTES quais tipos de
+  // agendamento vão ser gerados a partir deste manejo — usado em registrarManejo pra decidir
+  // quais agendamentos manuais precisam ser substituídos.
+  const tiposDoProximoPreAgendamento = (m) => {
+    if (m.tipo === "inducao") return ["D0"];
+    if (m.tipo === "implantacao" || m.tipo === "ressinc") {
+      if (m.tipoManejo === "3 manejos") return ["Retirada"];
+      if (m.tipoManejo === "4 manejos") return ["PGF 5", "Retirada"];
+      return [];
+    }
+    if (m.tipo === "retirada") return ["Inseminação"];
+    if (m.tipo === "inseminacao") return ["Diagnóstico"];
+    if (m.tipo === "repasse" && m.dataFim) return ["Diagnóstico - repasse"];
+    return [];
   };
 
   const gerarPreAgendamentos = (m) => {
@@ -5164,6 +5207,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       brinco: b, semenId, ecc: ecc.trim() || null, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
       gnrhId: gnrhId || null, doseGnrh: doseGnrh.trim() !== "" ? numBR(doseGnrh) : null,
       racaMatriz: racaMatriz.trim() || null,
+      inseminador: inseminador.trim() || currentUser?.nome || null,
       horario: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       loteId: loteResolvidoId,
     };
@@ -5235,6 +5279,9 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       const porGnrh = {};
       registrosNovos.forEach((r) => { if (r.gnrhId && r.doseGnrh) porGnrh[r.gnrhId] = (porGnrh[r.gnrhId] || 0) + r.doseGnrh; });
       Object.entries(porGnrh).forEach(([gid, dose]) => registrarSaidaEstoque(gid, dose, editandoManejo.id, "inseminacao"));
+      // 1 bainha por animal inseminado (novo nesta edição) — mesmo utensílio usado no fluxo normal.
+      const bainhaEdicao = insumos.find((i) => i.categoria === "Utensílio" && i.local === localEstoque && normalizarCabecalho(i.produtoComercial).includes("bainha"));
+      if (bainhaEdicao && registrosNovos.length > 0) registrarSaidaEstoque(bainhaEdicao.id, registrosNovos.length, editandoManejo.id, "inseminacao");
       if (eh1aIATF) {
         registrosNovos.forEach((r) => addAnimalAoLote(editandoManejo.loteId, r.brinco));
         atribuirManejosRetroativos(editandoManejo.loteId, registrosNovos.map((r) => r.brinco));
@@ -5271,6 +5318,10 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       const porGnrh = {};
       registrosDoLote.forEach((r) => { if (r.gnrhId && r.doseGnrh) porGnrh[r.gnrhId] = (porGnrh[r.gnrhId] || 0) + r.doseGnrh; });
       Object.entries(porGnrh).forEach(([gid, dose]) => registrarSaidaEstoque(gid, dose, manejoId, "inseminacao"));
+      // 1 bainha por animal inseminado — usa o utensílio comercial cujo nome contenha "bainha",
+      // cadastrado no mesmo local de estoque (fazenda/externo) usado nesta Inseminação.
+      const bainha = insumos.find((i) => i.categoria === "Utensílio" && i.local === localEstoque && normalizarCabecalho(i.produtoComercial).includes("bainha"));
+      if (bainha) registrarSaidaEstoque(bainha.id, registrosDoLote.length, manejoId, "inseminacao");
     });
     if (manejoIds.length > 0) medicamentos.forEach((m) => registrarSaidaEstoque(m.medicamentoId, m.dose, manejoIds[0], "inseminacao"));
 
@@ -5508,7 +5559,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               <div style={{ marginTop: 20 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão ({registros.length})</div>
                 <table>
-                  <thead><tr><th>Animal</th><th>Lote</th><th>Horário</th><th>Sêmen / touro</th><th>ECC</th><th>Peso</th><th>Observações</th><th>GnRH</th><th>Nota</th><th></th></tr></thead>
+                  <thead><tr><th>Animal</th><th>Lote</th><th>Horário</th><th>Sêmen / touro</th><th>ECC</th><th>Peso</th><th>Inseminador</th><th>Observações</th><th>GnRH</th><th>Nota</th><th></th></tr></thead>
                   <tbody>
                     {registros.map((r) => (
                       <tr key={r.brinco}>
@@ -5518,6 +5569,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         <td>{nomeSemen(r.semenId)}</td>
                         <td>{r.ecc || "—"}</td>
                         <td>{r.peso ? `${r.peso} kg` : "—"}</td>
+                        <td>{r.inseminador || "—"}</td>
                         <td>{r.observacoes || "—"}</td>
                         <td>{r.gnrhId ? `${nomeInsumo(r.gnrhId)} (${r.doseGnrh} mL)` : "—"}</td>
                         <td>{r.notaAtribuicao || "—"}</td>
@@ -6687,6 +6739,10 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
     const i = insumos.find((x) => x.id === id);
     return i?.tamanhoEmbalagem != null ? `${i.tamanhoEmbalagem} ${i.unidadeEmbalagem || ""}`.trim() : "—";
   };
+  const touroInsumo = (id) => insumos.find((x) => x.id === id)?.touro || "—";
+  const racaInsumo = (id) => insumos.find((x) => x.id === id)?.raca || "—";
+  const partidaInsumo = (id) => { const p = insumos.find((x) => x.id === id)?.partida; return p ? fmtDate(p) : "—"; };
+  const colunaTabela = { width: 130, textAlign: "center" };
 
   return (
     <div>
@@ -6829,19 +6885,62 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Últimas entradas — {categoriaTab}</div>
-          {entradas.length === 0 ? <EmptyState text="Nenhuma entrada registrada ainda nesta categoria." /> : (
+          {entradas.length === 0 ? <EmptyState text="Nenhuma entrada registrada ainda nesta categoria." /> : categoriaTab === "Sêmen" ? (
             <table>
-              <thead><tr><th>Item</th><th>Quantidade</th><th>Embalagem</th><th>Valor unitário</th><th>Valor total</th><th>Data</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <th style={colunaTabela}>Touro</th>
+                  <th style={colunaTabela}>Raça</th>
+                  <th style={colunaTabela}>Partida</th>
+                  <th style={colunaTabela}>Quantidade</th>
+                  <th style={colunaTabela}>Valor unitário</th>
+                  <th style={colunaTabela}>Valor total</th>
+                  <th style={colunaTabela}>Data</th>
+                  <th style={colunaTabela}></th>
+                </tr>
+              </thead>
               <tbody>
                 {entradas.map((m) => (
                   <tr key={m.id}>
-                    <td>{nomeInsumo(m.insumoId)}</td>
-                    <td>{m.quantidade}</td>
-                    <td>{embalagemInsumo(m.insumoId)}</td>
-                    <td>{m.valorUnitario != null ? `R$ ${m.valorUnitario.toFixed(2)}` : "—"}</td>
-                    <td>{m.valorUnitario != null ? `R$ ${(m.valorUnitario * m.quantidade).toFixed(2)}` : "—"}</td>
-                    <td>{fmtDate(m.data)}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td style={colunaTabela}>{touroInsumo(m.insumoId)}</td>
+                    <td style={colunaTabela}>{racaInsumo(m.insumoId)}</td>
+                    <td style={colunaTabela}>{partidaInsumo(m.insumoId)}</td>
+                    <td style={colunaTabela}>{m.quantidade}</td>
+                    <td style={colunaTabela}>{m.valorUnitario != null ? `R$ ${m.valorUnitario.toFixed(2)}` : "—"}</td>
+                    <td style={colunaTabela}>{m.valorUnitario != null ? `R$ ${(m.valorUnitario * m.quantidade).toFixed(2)}` : "—"}</td>
+                    <td style={colunaTabela}>{fmtDate(m.data)}</td>
+                    <td style={colunaTabela}>
+                      <button onClick={() => window.confirm("Excluir esta entrada de estoque?") && removerEntradaEstoque(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
+                        <Trash2 size={13} /> Excluir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th style={colunaTabela}>Item</th>
+                  <th style={colunaTabela}>Quantidade</th>
+                  <th style={colunaTabela}>Embalagem</th>
+                  <th style={colunaTabela}>Valor unitário</th>
+                  <th style={colunaTabela}>Valor total</th>
+                  <th style={colunaTabela}>Data</th>
+                  <th style={colunaTabela}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entradas.map((m) => (
+                  <tr key={m.id}>
+                    <td style={colunaTabela}>{nomeInsumo(m.insumoId)}</td>
+                    <td style={colunaTabela}>{m.quantidade}</td>
+                    <td style={colunaTabela}>{embalagemInsumo(m.insumoId)}</td>
+                    <td style={colunaTabela}>{m.valorUnitario != null ? `R$ ${m.valorUnitario.toFixed(2)}` : "—"}</td>
+                    <td style={colunaTabela}>{m.valorUnitario != null ? `R$ ${(m.valorUnitario * m.quantidade).toFixed(2)}` : "—"}</td>
+                    <td style={colunaTabela}>{fmtDate(m.data)}</td>
+                    <td style={colunaTabela}>
                       <button onClick={() => window.confirm("Excluir esta entrada de estoque?") && removerEntradaEstoque(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}>
                         <Trash2 size={13} /> Excluir
                       </button>
@@ -6869,6 +6968,12 @@ function custoPorUnidadeInsumo(insumo) {
     return insumo.valorUnitario / insumo.tamanhoEmbalagem;
   }
   return insumo.valorUnitario;
+}
+
+// identifica o utensílio "bainha" (de inseminação) pelo nome do produto comercial — usado tanto
+// pra descontar 1 unidade por animal inseminado quanto pra incluir esse custo nas contas de Custo.
+function ehBainha(insumo) {
+  return insumo?.categoria === "Utensílio" && normalizarCabecalho(insumo.produtoComercial || "").includes("bainha");
 }
 
 function AbaEstoqueSaida({ fazendaAtiva, insumos, movimentos, manejos }) {
@@ -7873,6 +7978,13 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
     if (!semenId) return 0;
     return custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0;
   };
+  // custo da bainha usada NESSE manejo de Inseminação — sempre 1 unidade por animal, então o
+  // valor unitário do produto já É o custo por animal, sem precisar dividir por nada.
+  const custoBainhaDoManejo = (manejoId) => {
+    const mov = movimentos.find((mv) => mv.tipo === "saida" && mv.manejoId === manejoId && ehBainha(insumos.find((i) => i.id === mv.insumoId)));
+    if (!mov) return 0;
+    return custoPorUnidadeInsumo(insumos.find((i) => i.id === mov.insumoId)) || 0;
+  };
   // custo de Hormônio de UM manejo (Indução/D0/Retirada), dividido pelo nº de animais daquele
   // manejo — dá o custo hormonal "por cabeça" daquele evento específico, que depois é somado
   // entre Indução (só na 1ª IATF) + D0 + Retirada pra chegar no custo hormonal daquele animal
@@ -7918,16 +8030,18 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
         brinco: detIns.brinco, prenha: detDiag.resultado === "Prenha", ordem: insem.ordem,
         categoria: insem.categoria || null, retiroId: insem.retiroId || null, fazendaId: insem.fazendaId,
         loteId: insem.loteId || null, loteNome: lotes.find((l) => l.id === insem.loteId)?.nome || null,
-        ecc: detIns.ecc || null, inseminador: insem.inseminador || null,
+        ecc: detIns.ecc || null, inseminador: detIns.inseminador || insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro), partida: partidaDoSemen(detIns.semenId),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
         numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo || null,
         duracaoProtocolo: insem.protocolo || d0MaisRecente?.protocolo || null,
-        // custo real gasto NESSE animal (sêmen usado nele + a fração do hormônio do
-        // protocolo daquela ordem) — usado pra calcular custo por Inseminador/Mês/Raça/ECC.
+        // custo real gasto NESSE animal (sêmen usado nele + bainha da inseminação + a fração
+        // do hormônio do protocolo daquela ordem) — usado pra calcular custo por
+        // Inseminador/Mês/Raça/ECC.
         custoSemenAnimal: custoSemenDoAnimal(detIns.semenId),
+        custoBainhaAnimal: custoBainhaDoManejo(insem.id),
         custoHormonioAnimal: custoHormonioOrdem,
       });
     });
@@ -8131,7 +8245,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
       .reduce((soma, m) => {
         const insumo = insumos.find((i) => i.id === m.insumoId);
         const custoPorUnidade = custoPorUnidadeInsumo(insumo);
-        if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || custoPorUnidade == null) return soma;
+        if (!insumo || !(["Hormônio", "Sêmen"].includes(insumo.categoria) || ehBainha(insumo)) || custoPorUnidade == null) return soma;
         return soma + m.quantidade * custoPorUnidade;
       }, 0);
     const custoAnimal = totalAnimaisSubset > 0 ? gastoSubset / totalAnimaisSubset : null;
@@ -8484,9 +8598,9 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   // em "%" às vezes não consegue se basear numa altura definida do pai, e todas as barras acabam
   // saindo do mesmo tamanho. Em pixel fixo, a altura de cada barra sempre reflete o valor dela.
   // No modo não-compacto, a largura da coluna varia conforme o nº de colunas do gráfico (padrão
-  // do Benchmarking): até 4 colunas = 64px, 5 colunas = 51px, 6 ou mais = 42px — altura máxima
+  // do Benchmarking): até 5 colunas = 50px, 6 ou mais = 42px — altura máxima
   // sempre 120px. O modo compacto (usado no "lado a lado" do Benchmarking) mantém seu tamanho fixo.
-  const larguraColuna = compacto ? 28 : (lista.length <= 4 ? 64 : lista.length === 5 ? 51 : 42);
+  const larguraColuna = compacto ? 28 : (lista.length <= 5 ? 50 : 42);
   const alturaMaximaPx = compacto ? 90 : 120;
   return (
     <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: lista.length > (compacto ? 6 : 8) ? "flex-start" : "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
@@ -8509,7 +8623,7 @@ function BarrasCusto({ dados, compacto }) {
   const fmtMoedaCurta = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
   if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorValor = Math.max(...dados.map((d) => d.valor || 0), 1);
-  const larguraColuna = compacto ? 28 : (dados.length <= 4 ? 64 : dados.length === 5 ? 51 : 42);
+  const larguraColuna = compacto ? 28 : (dados.length <= 5 ? 50 : 42);
   const alturaMaximaPx = compacto ? 90 : 120;
   return (
     <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%" }}>
@@ -9458,7 +9572,7 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
     const porLoteOrdem = new Map();
     const linha = (loteId, ordem) => {
       const k = `${loteId}|${ordem || ""}`;
-      if (!porLoteOrdem.has(k)) porLoteOrdem.set(k, { loteId, ordem: ordem || null, inducao: 0, d0: 0, retirada: 0, inseminacao: 0, diagnostico: 0 });
+      if (!porLoteOrdem.has(k)) porLoteOrdem.set(k, { loteId, ordem: ordem || null, inducao: 0, d0: 0, retirada: 0, inseminacao: 0, diagnostico: 0, prenhas: 0, vazias: 0 });
       return porLoteOrdem.get(k);
     };
 
@@ -9467,7 +9581,14 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
       if (m.tipo === "implantacao" || m.tipo === "ressinc") linha(m.loteId, m.ordem).d0 += m.numeroAnimais || 0;
       else if (m.tipo === "retirada") linha(m.loteId, m.ordem).retirada += m.numeroAnimais || 0;
       else if (m.tipo === "inseminacao") linha(m.loteId, m.ordem).inseminacao += (m.animaisLidos || []).length;
-      else if (m.tipo === "diagnostico") linha(m.loteId, m.ordem).diagnostico += (m.animaisLidos || []).length;
+      else if (m.tipo === "diagnostico") {
+        const l = linha(m.loteId, m.ordem);
+        l.diagnostico += (m.animaisLidos || []).length;
+        (m.detalhes || []).forEach((d) => {
+          if (d.resultado === "Prenha") l.prenhas += 1;
+          else if (d.resultado === "Vazia") l.vazias += 1;
+        });
+      }
     });
 
     manejos.filter((m) => m.tipo === "inducao" && m.loteId).forEach((m) => {
@@ -9578,17 +9699,31 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, manejos, atribuirHistorico
       ) : (
         <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
           <table>
-            <thead><tr><th>Lote</th><th>Ordem</th><th>Indução</th><th>D0</th><th>Retirada</th><th>Inseminação</th><th>Diagnóstico</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 120, textAlign: "center" }}>Lote</th>
+                <th style={{ width: 120, textAlign: "center" }}>Ordem</th>
+                <th style={{ width: 120, textAlign: "center" }}>Indução</th>
+                <th style={{ width: 120, textAlign: "center" }}>D0</th>
+                <th style={{ width: 120, textAlign: "center" }}>Retirada</th>
+                <th style={{ width: 120, textAlign: "center" }}>Inseminação</th>
+                <th style={{ width: 120, textAlign: "center" }}>Diagnóstico</th>
+                <th style={{ width: 120, textAlign: "center" }}>Prenhas</th>
+                <th style={{ width: 120, textAlign: "center" }}>Vazias</th>
+              </tr>
+            </thead>
             <tbody>
               {linhasFiltradas.map((l, i) => (
                 <tr key={`${l.loteId}-${l.ordem}-${i}`}>
-                  <td style={{ fontWeight: 700 }}>{nomeLote(l.loteId)}</td>
-                  <td>{l.ordem || "—"}</td>
-                  <td>{l.inducao || "—"}</td>
-                  <td>{l.d0 || "—"}</td>
-                  <td>{l.retirada || "—"}</td>
-                  <td>{l.inseminacao || "—"}</td>
-                  <td>{l.diagnostico || "—"}</td>
+                  <td style={{ fontWeight: 700, textAlign: "center" }}>{nomeLote(l.loteId)}</td>
+                  <td style={{ textAlign: "center" }}>{l.ordem || "—"}</td>
+                  <td style={{ textAlign: "center" }}>{l.inducao || "—"}</td>
+                  <td style={{ textAlign: "center" }}>{l.d0 || "—"}</td>
+                  <td style={{ textAlign: "center" }}>{l.retirada || "—"}</td>
+                  <td style={{ textAlign: "center" }}>{l.inseminacao || "—"}</td>
+                  <td style={{ textAlign: "center" }}>{l.diagnostico || "—"}</td>
+                  <td style={{ textAlign: "center" }}>{l.prenhas || "—"}</td>
+                  <td style={{ textAlign: "center" }}>{l.vazias || "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -9765,7 +9900,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       .reduce((soma, m) => {
         const insumo = insumos.find((i) => i.id === m.insumoId);
         const custoPorUnidade = custoPorUnidadeInsumo(insumo);
-        if (!insumo || !["Hormônio", "Sêmen"].includes(insumo.categoria) || custoPorUnidade == null) return soma;
+        if (!insumo || !(["Hormônio", "Sêmen"].includes(insumo.categoria) || ehBainha(insumo)) || custoPorUnidade == null) return soma;
         return soma + m.quantidade * custoPorUnidade;
       }, 0);
     const lotesEscopo = idsLotesEscopo ? lotes.filter((l) => idsLotesEscopo.has(l.id)) : lotes;
@@ -9785,7 +9920,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
   // (sêmen específico de cada animal + a fração do protocolo hormonal daquela ordem) nos
   // animais do grupo — não o custo do lote inteiro, já que esses recortes cruzam vários lotes.
   const custosPorRegistrosPDF = (registrosGrupo) => {
-    const gastoTotal = registrosGrupo.reduce((s, r) => s + (r.custoSemenAnimal || 0) + (r.custoHormonioAnimal || 0), 0);
+    const gastoTotal = registrosGrupo.reduce((s, r) => s + (r.custoSemenAnimal || 0) + (r.custoBainhaAnimal || 0) + (r.custoHormonioAnimal || 0), 0);
     const animaisDistintos = new Set(registrosGrupo.map((r) => r.brinco)).size;
     const totalInseminacoes = registrosGrupo.length;
     const prenhas = registrosGrupo.filter((r) => r.prenha).length;
@@ -9877,7 +10012,31 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     colunasInfo.forEach((c) => doc.text(c.texto, c.x, y));
     y += 18;
 
-    const opcoesTabela = { margin: { left: margemEsq, right: margemEsq }, styles: { fontSize: 8, cellPadding: 3, halign: "center" }, headStyles: { fillColor: [22, 99, 54], textColor: 255, fontStyle: "bold", halign: "center" } };
+    const opcoesTabela = {
+      margin: { left: margemEsq, right: margemEsq },
+      styles: { fontSize: 8, cellPadding: 3, halign: "center", fillColor: [255, 255, 255] },
+      headStyles: { fillColor: [22, 99, 54], textColor: 255, fontStyle: "bold", halign: "center" },
+      alternateRowStyles: { fillColor: [255, 255, 255] },
+    };
+    // desenha uma linha horizontal separando cada bloco mesclado (categoria, retiro, lote...) do
+    // próximo — não desenha depois do último bloco, já que a borda da tabela fecha ali mesmo.
+    const separadoresDeGrupo = (gruposTamanhos) => {
+      const limites = new Set();
+      let acumulado = -1;
+      gruposTamanhos.forEach((tam, i) => {
+        acumulado += tam;
+        if (i < gruposTamanhos.length - 1) limites.add(acumulado);
+      });
+      return {
+        didDrawCell: (data) => {
+          if (data.section === "body" && limites.has(data.row.index)) {
+            doc.setDrawColor(190, 190, 190);
+            doc.setLineWidth(0.75);
+            doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+          }
+        },
+      };
+    };
     const novaSecao = (titulo) => { doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(titulo, margemEsq, y); y += 6; };
 
     // 1) Resumo zootécnico geral (Categoria × Ordem, com Repasse)
@@ -9909,6 +10068,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposResumo),
       head: [["Categoria", "Ordem", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasResumo, gruposResumo, [0, 6, 7, 8, 9, 10, 11]),
     });
@@ -9936,6 +10096,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposRetiro),
       head: [["Retiro", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasRetiro, gruposRetiro, [0, 6, 7, 8, 9, 10]),
     });
@@ -9964,6 +10125,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposLote),
       head: [["Lote", "Categoria", "Ordem", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 7, 8, 9, 10, 11]),
     });
@@ -9992,6 +10154,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposInseminador),
       head: [["Inseminador", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasInseminador, gruposInseminador, [0, 6, 7, 8, 9, 10]),
     });
@@ -10019,6 +10182,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposMesPDF),
       head: [["Mês", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasMes, gruposMesPDF, [0, 6, 7, 8, 9, 10]),
     });
@@ -10049,6 +10213,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposRaca),
       head: [["Raça", "Touro", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasRaca, gruposRaca, [0, 6]),
     });
@@ -10076,6 +10241,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposEcc),
       head: [["Categoria", "ECC", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasEcc, gruposEcc, [0, 6]),
     });
