@@ -3564,7 +3564,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> Registrar {TITULOS_MANEJO[tipo].toLowerCase()}</BtnPrimary>
           </div>
 
@@ -4241,7 +4241,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> {editandoManejo ? "Salvar edição" : "Registrar D0"}</BtnPrimary>
           </div>
 
@@ -4950,7 +4950,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                 ⚠ O nº de animais informado ({numBR(numeroAnimais)}) é maior que o registrado no D0 mais recente deste lote na {loteAtual.ordem} ({d0MaisRecente.numeroAnimais}).
               </p>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: msg || excedeQuantidade ? 0 : 12 }}>
               <BtnPrimary disabled={!canSaveBase} onClick={() => salvar(false)}><Plus size={15} /> {editandoManejo ? "Salvar edição" : "Registrar retirada"}</BtnPrimary>
               {excedeQuantidade && canSaveBase && (
@@ -6091,7 +6091,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                       <tr key={r.brinco}>
                         <td><EarTag size="sm">{r.brinco}</EarTag></td>
                         <td style={{ color: r.resultado === "Prenha" ? "#166336" : "#166336", fontWeight: 600 }}>
-                          {r.resultado}{r.resultado === "Vazia" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#166336" }}>· gera sugestão de Ressinc</span>}
+                          {r.resultado}{r.resultado === "Vazia" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#166336" }}>· gera sugestão de {destinoVazias}</span>}
                         </td>
                         <td>{r.tempoGestacao != null ? `${r.tempoGestacao} dias` : "—"}</td>
                         <td style={{ fontWeight: r.origemPrenhez === "Repasse" ? 700 : 400 }}>{r.origemPrenhez || "—"}</td>
@@ -6332,7 +6332,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
             </div>
             <LegendaCamposOpcionais />
             <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Ao registrar, um pré-agendamento de "Diagnóstico - repasse" é criado automaticamente na Agenda, 30 dias após o Fim do período.</p>
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: msg ? 0 : 12 }}><Plus size={15} /> Registrar Repasse</BtnPrimary>
           </div>
           )}
@@ -6886,7 +6886,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
             <LegendaCamposOpcionais />
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: 12 }}>
               <Plus size={15} /> Registrar entrada
@@ -8256,7 +8256,10 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   // (movimento de estoque não tem lote próprio — só o manejo que gerou a saída).
   const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
   const calcularCustos = (lotesSubset, manejosSubset, movimentosSubset) => {
-    const totalAnimaisSubset = lotesSubset.reduce((s, l) => s + (l.animais || []).length, 0);
+    // usa numeroAnimais (a contagem oficial, informada em todo D0/Retirada) em vez de
+    // animais.length — esse array só é preenchido quando há leitura individual de brinco, então
+    // um lote trabalhado sem essa leitura ficaria contado como 0 animais mesmo tendo gasto real.
+    const totalAnimaisSubset = lotesSubset.reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
     const inseminacoesSubset = manejosSubset.filter((m) => m.tipo === "inseminacao");
     const totalInseminacoesSubset = inseminacoesSubset.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
     const diagSubset = manejosSubset.filter((m) => m.tipo === "diagnostico");
@@ -10054,7 +10057,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         return soma + m.quantidade * custoPorUnidade;
       }, 0);
     const lotesEscopo = idsLotesEscopo ? lotes.filter((l) => idsLotesEscopo.has(l.id)) : lotes;
-    const totalAnimaisEscopo = lotesEscopo.reduce((s, l) => s + (l.animais || []).length, 0);
+    const totalAnimaisEscopo = lotesEscopo.reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
     const insemManejos = manejosEscopo.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidosPDF.has(m.loteId));
     const totalInseminacoes = insemManejos.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
     const diagManejos = manejosEscopo.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidosPDF.has(m.loteId));
