@@ -5887,7 +5887,11 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
           ✎ Editando o diagnóstico de "{nomeLote(editandoManejo.loteId)}" — a leitura completa foi carregada abaixo, incluindo os animais já lidos. Você pode adicionar ou remover animais antes de salvar novamente.
         </div>
       )}
-      {!fazendaAtiva ? <EmptyState text="Selecione uma fazenda ativa para registrar diagnósticos." /> : !safraAtiva ? <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos. Todo manejo e lote precisa pertencer a uma safra." /> : lotesComInseminacao.length === 0 ? <EmptyState text="Nenhum lote disponível para diagnóstico no momento. Um lote aparece aqui após a Inseminação da sua ordem atual, e some daqui assim que o diagnóstico dessa ordem é registrado." /> : (
+      {!fazendaAtiva ? <EmptyState text="Selecione uma fazenda ativa para registrar diagnósticos." /> : !safraAtiva ? <EmptyState text="Selecione uma safra ativa (menu lateral) antes de registrar manejos. Todo manejo e lote precisa pertencer a uma safra." /> : (
+        <>
+          {lotesComInseminacao.length === 0 ? (
+            <EmptyState text="Nenhum lote disponível para diagnóstico no momento. Um lote aparece aqui após a Inseminação da sua ordem atual, e some daqui assim que o diagnóstico dessa ordem é registrado." />
+          ) : (
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Lote(s) — selecione um ou mais, desde que na mesma Ordem</div>
@@ -6054,7 +6058,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               {editandoManejo && <BtnGhost onClick={cancelarEdicaoHistorico}>Cancelar edição</BtnGhost>}
             </div>
           </div>
-
+        </>
+          )}
 
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Diagnósticos registrados</div>
           {historico.length === 0 ? (
