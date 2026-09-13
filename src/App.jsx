@@ -10178,12 +10178,18 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         if (i < gruposTamanhos.length - 1) limites.add(acumulado);
       });
       return {
-        didDrawCell: (data) => {
-          if (data.section === "body" && limites.has(data.row.index)) {
+        // desenha DEPOIS que toda a página da tabela já foi renderizada — se desenhasse célula a
+        // célula (didDrawCell), a linha da borda de um grupo acabava sendo sobrescrita assim que
+        // as linhas do grupo seguinte eram desenhadas por cima.
+        didDrawPage: (data) => {
+          limites.forEach((idx) => {
+            const linha = data.table.body[idx];
+            if (!linha) return;
+            const yLinha = linha.y + linha.height;
             doc.setDrawColor(0, 0, 0);
             doc.setLineWidth(0.5);
-            doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
-          }
+            doc.line(data.table.margin.left, yLinha, data.table.margin.left + data.table.width, yLinha);
+          });
         },
       };
     };

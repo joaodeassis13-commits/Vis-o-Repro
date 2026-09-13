@@ -76,7 +76,7 @@ const COLECOES_COM_CRIADO_EM = new Set([
 // tiveram a chance de recebê-lo. Sempre que um campo assim for criado no futuro, basta
 // adicionar aqui (coleção -> { campo: valorPadrão }).
 const CAMPOS_COM_PADRAO_OBRIGATORIO = {
-  manejos: { detalhes: [], animaisLidos: [], medicamentos: [], atualizadoEm: () => new Date().toISOString() },
+  manejos: { detalhes: [], animaisLidos: [], medicamentos: [], atualizadoEm: () => new Date().toISOString(), excluido: false },
   safras: { lancamentosDesabilitados: false },
 };
 
