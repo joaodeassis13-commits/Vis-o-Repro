@@ -4954,19 +4954,23 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // da próxima leitura, porque fica gravado no manejo).
   const inseminadoresConhecidos = [...new Set(manejos.filter((m) => m.tipo === "inseminacao" && m.inseminador).map((m) => m.inseminador))];
   // "Raça da matriz": por animal (a fêmea), não por sessão como Touro/Partida. Se o animal já
-  // teve uma raça atribuída antes (em qualquer Inseminação anterior), ela é reaproveitada
-  // automaticamente ao ler o brinco; senão, fica livre para digitar e atribuir pela 1ª vez.
+  // teve uma raça atribuída antes — em qualquer Inseminação anterior, ou no cadastro feito em
+  // "Novos animais" — ela é reaproveitada automaticamente ao ler o brinco; senão, fica livre
+  // para digitar e atribuir pela 1ª vez.
   // As sugestões (datalist) vêm da lista padrão de raças (RACAS_PADRAO); quem digitar algo
   // fora da lista pode usar normalmente, sem travar o campo.
   const [racaMatriz, setRacaMatriz] = useState("");
   const racasConhecidas = RACAS_PADRAO;
   const buscarRacaConhecida = (b) => {
-    const comRaca = manejos
-      .filter((m) => m.tipo === "inseminacao")
-      .flatMap((m) => (m.detalhes || []).map((d) => ({ ...d, data: m.data })))
-      .filter((d) => d.brinco === b && d.racaMatriz);
-    if (comRaca.length === 0) return null;
-    return comRaca.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)).racaMatriz;
+    const candidatos = [];
+    manejos.filter((m) => m.tipo === "inseminacao").forEach((m) => {
+      (m.detalhes || []).forEach((d) => { if (d.brinco === b && d.racaMatriz) candidatos.push({ raca: d.racaMatriz, data: m.data }); });
+    });
+    manejos.filter((m) => m.tipo === "novos_animais").forEach((m) => {
+      (m.detalhes || []).forEach((d) => { if (d.brinco === b && d.raca) candidatos.push({ raca: d.raca, data: m.data }); });
+    });
+    if (candidatos.length === 0) return null;
+    return candidatos.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)).raca;
   };
   const [brinco, setBrinco] = useState("");
   const [ecc, setEcc] = useState("");
@@ -5005,9 +5009,11 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
   // seleção múltipla de lotes: todos precisam estar na mesma Ordem
   const toggleLote = (id) => {
+    // limpa qualquer aviso anterior a cada nova tentativa — só reaparece se esta também for
+    // inválida, em vez de ficar preso na tela depois que o erro já foi corrigido.
+    setMsgLote("");
     if (lotesSelecionados.includes(id)) {
       setLotesSelecionados((a) => a.filter((x) => x !== id));
-      setMsgLote("");
       return;
     }
     const lote = lotesComRetirada.find((l) => l.id === id);
@@ -5021,7 +5027,6 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       return;
     }
     setLotesSelecionados((a) => [...a, id]);
-    setMsgLote("");
   };
 
   React.useEffect(() => {
@@ -5587,9 +5592,11 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   const ordemComum = lotesSelecionadosObjs[0]?.ordem || null;
 
   const toggleLote = (id) => {
+    // limpa qualquer aviso anterior a cada nova tentativa — só reaparece se esta também for
+    // inválida, em vez de ficar preso na tela depois que o erro já foi corrigido.
+    setMsgLote("");
     if (lotesSelecionados.includes(id)) {
       setLotesSelecionados((a) => a.filter((x) => x !== id));
-      setMsgLote("");
       return;
     }
     const lote = lotesComInseminacao.find((l) => l.id === id);
@@ -5599,7 +5606,6 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
       return;
     }
     setLotesSelecionados((a) => [...a, id]);
-    setMsgLote("");
   };
 
   React.useEffect(() => {
