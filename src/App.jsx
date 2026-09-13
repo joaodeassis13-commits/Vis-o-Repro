@@ -1540,20 +1540,20 @@ export default function App() {
   };
   const addLote = (l) => {
     const id = uid("lot");
-    setLotes((a) => [...a, { ...l, id, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, animais: [], criadoEm: new Date().toISOString() }]);
+    setLotes((a) => [...a, { ...l, id, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, animais: [], criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() }]);
     marcaPendencia();
     return id;
   };
   const atualizarLote = (loteId, campos) => {
-    setLotes((a) => a.map((l) => l.id === loteId ? { ...l, ...campos } : l));
+    setLotes((a) => a.map((l) => l.id === loteId ? { ...l, ...campos, atualizadoEm: new Date().toISOString() } : l));
     marcaPendencia();
   };
   const addAnimalAoLote = (loteId, brinco) => {
-    setLotes((a) => a.map((l) => l.id === loteId && !l.animais.includes(brinco) ? { ...l, animais: [...l.animais, brinco] } : l));
+    setLotes((a) => a.map((l) => l.id === loteId && !l.animais.includes(brinco) ? { ...l, animais: [...l.animais, brinco], atualizadoEm: new Date().toISOString() } : l));
     marcaPendencia();
   };
   const removeAnimalDoLote = (loteId, brinco) => {
-    setLotes((a) => a.map((l) => l.id === loteId ? { ...l, animais: l.animais.filter((b) => b !== brinco) } : l));
+    setLotes((a) => a.map((l) => l.id === loteId ? { ...l, animais: l.animais.filter((b) => b !== brinco), atualizadoEm: new Date().toISOString() } : l));
   };
 
   // "Atribuir histórico a nova identificação" (Auditoria): quando um animal ganha um novo brinco
@@ -1643,16 +1643,16 @@ export default function App() {
   const criarSugestaoRessinc = (loteId, brincos, origemManejoId, dataOrigem) => {
     setSugestoesRessinc((a) => [...a, {
       id: uid("sug"), loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
-      data: dataOrigem || todayISO(), status: "pendente", criadoEm: new Date().toISOString(),
+      data: dataOrigem || todayISO(), status: "pendente", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
     }]);
     marcaPendencia();
   };
   const descartarSugestaoRessinc = (id) => {
-    setSugestoesRessinc((a) => a.map((s) => s.id === id ? { ...s, status: "descartada" } : s));
+    setSugestoesRessinc((a) => a.map((s) => s.id === id ? { ...s, status: "descartada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
   };
   const removerSugestaoRessinc = (id) => {
-    setSugestoesRessinc((a) => a.map((s) => s.id === id ? { ...s, status: "confirmada" } : s));
+    setSugestoesRessinc((a) => a.map((s) => s.id === id ? { ...s, status: "confirmada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
   };
 
@@ -1668,16 +1668,16 @@ export default function App() {
   const criarSugestaoRepasse = (loteId, brincos, origemManejoId, dataOrigem) => {
     setSugestoesRepasse((a) => [...a, {
       id: uid("sug"), loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
-      data: dataOrigem || todayISO(), status: "pendente", criadoEm: new Date().toISOString(),
+      data: dataOrigem || todayISO(), status: "pendente", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
     }]);
     marcaPendencia();
   };
   const descartarSugestaoRepasse = (id) => {
-    setSugestoesRepasse((a) => a.map((s) => s.id === id ? { ...s, status: "descartada" } : s));
+    setSugestoesRepasse((a) => a.map((s) => s.id === id ? { ...s, status: "descartada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
   };
   const removerSugestaoRepasse = (id) => {
-    setSugestoesRepasse((a) => a.map((s) => s.id === id ? { ...s, status: "confirmada" } : s));
+    setSugestoesRepasse((a) => a.map((s) => s.id === id ? { ...s, status: "confirmada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
   };
 
@@ -1792,6 +1792,9 @@ export default function App() {
     // o manejo recém-registrado passa a ser a origem "oficial" da cadeia daqui pra frente — os
     // agendamentos que já tinham sido derivados daquele agendamento são descartados, pra não
     // conviver com os que gerarPreAgendamentos está prestes a criar a partir do manejo de verdade.
+    // Se NÃO existia nenhum, cria um agendamento retroativo já como "confirmado" — só pra ficar
+    // registrado no histórico da Agenda que esse manejo aconteceu naquele dia, mesmo sem ter
+    // sido agendado antes.
     const tipoAgenda = TIPO_MANEJO_PARA_AGENDAMENTO[manejo.tipo];
     if (tipoAgenda && manejoCompleto.loteNome) {
       const agendamentoCorrespondente = agendamentos.find((ag) =>
@@ -1802,6 +1805,15 @@ export default function App() {
       if (agendamentoCorrespondente) {
         const idsRemover = new Set(coletarDescendentesIds(agendamentoCorrespondente.id, agendamentos));
         if (idsRemover.size > 0) setAgendamentos((a) => a.filter((ag) => !idsRemover.has(ag.id)));
+      } else {
+        setAgendamentos((a) => [...a, {
+          id: uid("ag"), fazendaId: fazendaAtivaId, tipo: tipoAgenda, data: manejoCompleto.data,
+          loteNome: manejoCompleto.loteNome, retiroId: manejoCompleto.retiroId || null, ordem: manejoCompleto.ordem || null,
+          categoria: manejoCompleto.categoria || null, numeroAnimais: manejoCompleto.numeroAnimais || null,
+          titulo: `${tipoAgenda} — ${manejoCompleto.loteNome}`,
+          origem: "manual", status: "confirmado", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+        }]);
+        marcaPendencia();
       }
     }
 
@@ -1951,7 +1963,7 @@ export default function App() {
     lista.filter((ag) => ag.origemAgendamentoId === id).forEach((filho) => {
       const esperado = proximas.find((p) => p.tipo === filho.tipo);
       if (esperado && filho.data !== esperado.data) {
-        nova = nova.map((ag) => ag.id === filho.id ? { ...ag, data: esperado.data } : ag);
+        nova = nova.map((ag) => ag.id === filho.id ? { ...ag, data: esperado.data, atualizadoEm: new Date().toISOString() } : ag);
       }
       nova = recalcularCadeiaDerivada(filho.id, nova);
     });
@@ -2017,7 +2029,7 @@ export default function App() {
     if (safraAtivaBloqueada) { avisarSafraBloqueada(); return; }
     if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return; }
     const id = uid("ag");
-    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "manual", status: "confirmado", criadoEm: new Date().toISOString() }]);
+    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "manual", status: "confirmado", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() }]);
     marcaPendencia();
     const tipoInterno = TIPO_AGENDAMENTO_PARA_MANEJO[ag.tipo];
     if (tipoInterno) {
@@ -2042,7 +2054,7 @@ export default function App() {
     if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação que originou este pré-agendamento já avisou
     if (fazendaAtivaNaoLicenciada) return; // idem
     const id = uid("ag");
-    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString() }]);
+    setAgendamentos((a) => [...a, { ...ag, id, fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() }]);
     marcaPendencia();
     // a retirada, assim que agendada (mesmo ainda pendente de confirmação), já sugere a inseminação
     if (ag.tipo === "Retirada") {
@@ -2051,7 +2063,7 @@ export default function App() {
   };
 
   const confirmarAgendamento = (id) => {
-    setAgendamentos((a) => a.map((ag) => ag.id === id ? { ...ag, status: "confirmado" } : ag));
+    setAgendamentos((a) => a.map((ag) => ag.id === id ? { ...ag, status: "confirmado", atualizadoEm: new Date().toISOString() } : ag));
     marcaPendencia();
     const ag = agendamentos.find((x) => x.id === id);
     if (ag && ag.tipo === "Retirada" && !existeSugestaoDeInseminacao(id)) {
@@ -2060,7 +2072,7 @@ export default function App() {
   };
 
   const descartarAgendamento = (id) => {
-    setAgendamentos((a) => a.map((ag) => ag.id === id ? { ...ag, status: "descartado" } : ag));
+    setAgendamentos((a) => a.map((ag) => ag.id === id ? { ...ag, status: "descartado", atualizadoEm: new Date().toISOString() } : ag));
     marcaPendencia();
   };
 
@@ -2073,7 +2085,7 @@ export default function App() {
     // de ser apagado, porque a verificação de "já existe sugestão?" só olhava a lista atual.
     if (ag?.origem === "automatico" && ag.origemAgendamentoId) {
       setAgendamentos((a) => a.map((x) => x.id === ag.origemAgendamentoId
-        ? { ...x, sugestoesDescartadas: [...new Set([...(x.sugestoesDescartadas || []), ag.tipo])] }
+        ? { ...x, sugestoesDescartadas: [...new Set([...(x.sugestoesDescartadas || []), ag.tipo])], atualizadoEm: new Date().toISOString() }
         : x));
     }
     marcaPendencia();
@@ -2085,7 +2097,7 @@ export default function App() {
     setAgendamentos((a) => {
       const atual = a.find((ag) => ag.id === id);
       if (!atual) return a;
-      const atualizado = { ...atual, ...campos };
+      const atualizado = { ...atual, ...campos, atualizadoEm: new Date().toISOString() };
       let nova = a.map((ag) => ag.id === id ? atualizado : ag);
 
       const tipoInterno = TIPO_AGENDAMENTO_PARA_MANEJO[atualizado.tipo];
@@ -2103,13 +2115,13 @@ export default function App() {
         proximas.forEach((prox) => {
           const filho = nova.find((ag) => ag.origemAgendamentoId === id && ag.tipo === prox.tipo);
           if (filho) {
-            if (filho.data !== prox.data) nova = nova.map((ag) => ag.id === filho.id ? { ...ag, data: prox.data } : ag);
+            if (filho.data !== prox.data) nova = nova.map((ag) => ag.id === filho.id ? { ...ag, data: prox.data, atualizadoEm: new Date().toISOString() } : ag);
           } else if (!(atualizado.sugestoesDescartadas || []).includes(prox.tipo)) {
             nova = [...nova, {
               loteNome: atualizado.loteNome || "", retiroId: atualizado.retiroId || null, ordem: atualizado.ordem || null,
               categoria: atualizado.categoria || null, numeroAnimais: atualizado.numeroAnimais || null,
               origemAgendamentoId: id, tipo: prox.tipo, data: prox.data, titulo: `${prox.tipo} — ${atualizado.loteNome || ""}`,
-              id: uid("ag"), fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString(),
+              id: uid("ag"), fazendaId: fazendaAtivaId, origem: "automatico", status: "pendente", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
             }];
           }
         });
@@ -2141,7 +2153,7 @@ export default function App() {
       [idsNaNovaOrdem[posAtual], idsNaNovaOrdem[posVizinho]] = [idsNaNovaOrdem[posVizinho], idsNaNovaOrdem[posAtual]];
       const novaOrdemPorId = {};
       idsNaNovaOrdem.forEach((idDoItem, indice) => { novaOrdemPorId[idDoItem] = indice; });
-      return lista.map((a) => novaOrdemPorId[a.id] !== undefined ? { ...a, ordemExibicao: novaOrdemPorId[a.id] } : a);
+      return lista.map((a) => novaOrdemPorId[a.id] !== undefined ? { ...a, ordemExibicao: novaOrdemPorId[a.id], atualizadoEm: new Date().toISOString() } : a);
     });
     marcaPendencia();
   };
@@ -8074,6 +8086,73 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
   return registros;
 }
 
+// monta, pra CADA animal já inseminado (uma linha por evento de Inseminação — se o mesmo
+// animal foi inseminado em mais de uma ordem, ele entra uma vez por ordem), o custo real
+// gasto com ele: sêmen usado + bainha da sessão + a fração do protocolo hormonal (Indução/D0/
+// Retirada) daquela ordem. Diferente de construirRegistrosConcepcao, NÃO exige Diagnóstico —
+// usado nas contas de Custo, que devem considerar todo animal já inseminado, tenha ele
+// diagnóstico registrado ainda ou não.
+function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
+  const idsDesconhecidos = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  const inseminacoes = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidos.has(m.loteId));
+  const d0Ressinc = manejos.filter((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && !idsDesconhecidos.has(m.loteId));
+  const retiradas = manejos.filter((m) => m.tipo === "retirada" && !idsDesconhecidos.has(m.loteId));
+  const inducoes = manejos.filter((m) => m.tipo === "inducao" && !idsDesconhecidos.has(m.loteId));
+
+  const nomeTouro = (semenId, touroInformado) => {
+    if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.touro) return insumo.touro; }
+    return touroInformado || null;
+  };
+  const racaDoTouro = (semenId, racaTouroInformada) => {
+    if (racaTouroInformada) return racaTouroInformada;
+    if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.raca) return insumo.raca; }
+    return null;
+  };
+  const custoSemenDoAnimal = (semenId) => semenId ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0) : 0;
+  const custoBainhaDoManejo = (manejoId) => {
+    const mov = movimentos.find((mv) => mv.tipo === "saida" && mv.manejoId === manejoId && ehBainha(insumos.find((i) => i.id === mv.insumoId)));
+    return mov ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === mov.insumoId)) || 0) : 0;
+  };
+  const custoHormonioPorAnimalDoManejo = (manejo) => {
+    if (!manejo || !manejo.numeroAnimais) return 0;
+    const gasto = movimentos
+      .filter((mv) => mv.tipo === "saida" && mv.manejoId === manejo.id)
+      .reduce((soma, mv) => {
+        const insumo = insumos.find((i) => i.id === mv.insumoId);
+        const custoPorUnidade = custoPorUnidadeInsumo(insumo);
+        if (!insumo || insumo.categoria !== "Hormônio" || custoPorUnidade == null) return soma;
+        return soma + mv.quantidade * custoPorUnidade;
+      }, 0);
+    return gasto / manejo.numeroAnimais;
+  };
+
+  const eventos = [];
+  inseminacoes.forEach((insem) => {
+    const candidatosD0 = d0Ressinc.filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.data <= insem.data);
+    const d0MaisRecente = candidatosD0.length > 0 ? candidatosD0.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)) : null;
+    const candidatosRetirada = retiradas.filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.data <= insem.data);
+    const retiradaMaisRecente = candidatosRetirada.length > 0 ? candidatosRetirada.reduce((mais, atual) => (atual.data > mais.data ? atual : mais)) : null;
+    const inducaoDoLote = insem.ordem === ORDENS_IATF[0]
+      ? inducoes.filter((m) => m.loteId === insem.loteId && m.data <= insem.data).reduce((mais, atual) => (!mais || atual.data > mais.data ? atual : mais), null)
+      : null;
+    const custoHormonioOrdem = custoHormonioPorAnimalDoManejo(inducaoDoLote) + custoHormonioPorAnimalDoManejo(d0MaisRecente) + custoHormonioPorAnimalDoManejo(retiradaMaisRecente);
+    const custoBainha = custoBainhaDoManejo(insem.id);
+
+    (insem.detalhes || []).forEach((detIns) => {
+      if (!detIns.brinco) return;
+      eventos.push({
+        brinco: detIns.brinco, loteId: insem.loteId || null, categoria: insem.categoria || null, ordem: insem.ordem || null,
+        inseminador: detIns.inseminador || insem.inseminador || null,
+        mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
+        touro: nomeTouro(detIns.semenId, detIns.touroInformado), racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
+        ecc: detIns.ecc || null,
+        custoAnimal: custoSemenDoAnimal(detIns.semenId) + custoBainha + custoHormonioOrdem,
+      });
+    });
+  });
+  return eventos;
+}
+
 // agrupa os registros por uma dimensão (categoria, retiro, ECC, ...) e calcula a taxa de
 // cada grupo — registros sem essa dimensão preenchida ficam de fora (não viram um grupo
 // "vazio" no gráfico).
@@ -8255,50 +8334,46 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   // do insumo) cujo manejo de origem está dentro do recorte de Retiro/Lote/Categoria escolhido
   // (movimento de estoque não tem lote próprio — só o manejo que gerou a saída).
   const fmtMoeda = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
-  const calcularCustos = (lotesSubset, manejosSubset, movimentosSubset) => {
-    // usa numeroAnimais (a contagem oficial, informada em todo D0/Retirada) em vez de
-    // animais.length — esse array só é preenchido quando há leitura individual de brinco, então
-    // um lote trabalhado sem essa leitura ficaria contado como 0 animais mesmo tendo gasto real.
-    const totalAnimaisSubset = lotesSubset.reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
-    const inseminacoesSubset = manejosSubset.filter((m) => m.tipo === "inseminacao");
-    const totalInseminacoesSubset = inseminacoesSubset.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+  const eventosCustoTodos = useMemo(
+    () => construirEventosCustoInseminacao(manejosFiltrados, lotesFiltrados, insumos, movimentosFiltrados),
+    [manejosFiltrados, lotesFiltrados, insumos, movimentosFiltrados]
+  );
+  const calcularCustos = (manejosSubset, eventosSubset) => {
+    // Custo por Animal e por Inseminação agora só consideram animais JÁ INSEMINADOS: quem
+    // ainda não tem nenhuma Inseminação registrada não entra nem no gasto nem na contagem.
+    const gastoSubset = eventosSubset.reduce((s, e) => s + e.custoAnimal, 0);
+    const totalAnimaisInseminadosSubset = new Set(eventosSubset.map((e) => e.brinco)).size;
+    const totalInseminacoesSubset = eventosSubset.length;
     const diagSubset = manejosSubset.filter((m) => m.tipo === "diagnostico");
     const diagRepasseSubset = manejosSubset.filter((m) => m.tipo === "diagnostico_repasse");
     const totalPrenhasSubset = contarPrenhas(diagSubset) + contarPrenhas(diagRepasseSubset);
     const totalDiagRegistradosSubset = diagSubset.reduce((s, m) => s + (m.detalhes || []).length, 0)
       + diagRepasseSubset.reduce((s, m) => s + (m.detalhes || []).length, 0);
-    const idsManejosSubset = new Set(manejosSubset.map((m) => m.id));
-    const gastoSubset = movimentosSubset
-      .filter((m) => m.tipo === "saida" && m.manejoId && idsManejosSubset.has(m.manejoId))
-      .reduce((soma, m) => {
-        const insumo = insumos.find((i) => i.id === m.insumoId);
-        const custoPorUnidade = custoPorUnidadeInsumo(insumo);
-        if (!insumo || !(["Hormônio", "Sêmen"].includes(insumo.categoria) || ehBainha(insumo)) || custoPorUnidade == null) return soma;
-        return soma + m.quantidade * custoPorUnidade;
-      }, 0);
-    const custoAnimal = totalAnimaisSubset > 0 ? gastoSubset / totalAnimaisSubset : null;
+    const custoAnimal = totalAnimaisInseminadosSubset > 0 ? gastoSubset / totalAnimaisInseminadosSubset : null;
     const custoInseminacao = totalInseminacoesSubset > 0 ? gastoSubset / totalInseminacoesSubset : null;
-    const custoPrenhez = (custoInseminacao != null && totalPrenhasSubset > 0)
-      ? (custoInseminacao * totalDiagRegistradosSubset) / totalPrenhasSubset
+    // Custo por Prenhez = Custo por Animal (na nova forma) × total de diagnósticos ÷ nº de prenhas.
+    const custoPrenhez = (custoAnimal != null && totalPrenhasSubset > 0)
+      ? (custoAnimal * totalDiagRegistradosSubset) / totalPrenhasSubset
       : null;
     return {
       animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez,
-      n: { animal: totalAnimaisSubset, inseminacao: totalInseminacoesSubset, prenhez: totalPrenhasSubset },
+      n: { animal: totalAnimaisInseminadosSubset, inseminacao: totalInseminacoesSubset, prenhez: totalPrenhasSubset },
     };
   };
 
-  const custosGeral = calcularCustos(lotesValidos, manejosFiltrados.filter((m) => !idsDesconhecidosResumo.has(m.loteId)), movimentosFiltrados);
+  const custosGeral = calcularCustos(manejosFiltrados.filter((m) => !idsDesconhecidosResumo.has(m.loteId)), eventosCustoTodos);
   const custosPorCategoria = CATEGORIAS_RESUMO.map((cat) => {
     const lotesCat = lotesFiltrados.filter((l) => l.categoria === cat);
     const idsLotesCat = new Set(lotesCat.map((l) => l.id));
     const manejosCat = manejosFiltrados.filter((m) => idsLotesCat.has(m.loteId));
-    return { label: `${cat}s`, ...calcularCustos(lotesCat, manejosCat, movimentosFiltrados) };
+    const eventosCat = eventosCustoTodos.filter((e) => e.categoria === cat);
+    return { label: `${cat}s`, ...calcularCustos(manejosCat, eventosCat) };
   });
 
   const OPCOES_CUSTO = {
-    animal: { label: "Animal", descricao: "Gasto com Hormônio e Sêmen ÷ nº de animais trabalhados." },
-    inseminacao: { label: "Inseminação", descricao: "Gasto com Hormônio e Sêmen ÷ nº de inseminações registradas." },
-    prenhez: { label: "Prenhez", descricao: "Custo por inseminação × total de diagnósticos registrados ÷ nº de prenhas registradas." },
+    animal: { label: "Animal", descricao: "Gasto com Hormônio, Sêmen e Bainha ÷ nº de animais já inseminados." },
+    inseminacao: { label: "Inseminação", descricao: "Gasto com Hormônio, Sêmen e Bainha ÷ nº de inseminações realizadas." },
+    prenhez: { label: "Prenhez", descricao: "Custo por animal × total de diagnósticos registrados ÷ nº de prenhas registradas." },
   };
   const dadosCusto = [
     { label: "Geral", valor: custosGeral[visaoCusto], n: custosGeral.n[visaoCusto] },
@@ -10043,43 +10118,39 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
   // revisadas juntos antes de considerar definitivas.
   const idsDesconhecidosPDF = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
   const registrosPDF = useMemo(() => construirRegistrosConcepcao(manejos, lotes, insumos, movimentos), [manejos, lotes, insumos, movimentos]);
+  const eventosCustoPDF = useMemo(() => construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos), [manejos, lotes, insumos, movimentos]);
   const contarPrenhasDetPDF = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length, 0);
 
   const calcularCustosPDF = (idsLotesEscopo) => {
     const manejosEscopo = idsLotesEscopo ? manejos.filter((m) => idsLotesEscopo.has(m.loteId)) : manejos;
-    const idsManejosEscopo = new Set(manejosEscopo.map((m) => m.id));
-    const gasto = movimentos
-      .filter((m) => m.tipo === "saida" && m.manejoId && idsManejosEscopo.has(m.manejoId))
-      .reduce((soma, m) => {
-        const insumo = insumos.find((i) => i.id === m.insumoId);
-        const custoPorUnidade = custoPorUnidadeInsumo(insumo);
-        if (!insumo || !(["Hormônio", "Sêmen"].includes(insumo.categoria) || ehBainha(insumo)) || custoPorUnidade == null) return soma;
-        return soma + m.quantidade * custoPorUnidade;
-      }, 0);
-    const lotesEscopo = idsLotesEscopo ? lotes.filter((l) => idsLotesEscopo.has(l.id)) : lotes;
-    const totalAnimaisEscopo = lotesEscopo.reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
-    const insemManejos = manejosEscopo.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidosPDF.has(m.loteId));
-    const totalInseminacoes = insemManejos.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+    const eventosEscopo = idsLotesEscopo ? eventosCustoPDF.filter((e) => idsLotesEscopo.has(e.loteId)) : eventosCustoPDF;
+    // Custo por Animal e por Inseminação só consideram animais JÁ INSEMINADOS (ver
+    // construirEventosCustoInseminacao) — quem ainda não foi inseminado não entra na conta.
+    const gasto = eventosEscopo.reduce((s, e) => s + e.custoAnimal, 0);
+    const totalAnimaisInseminadosEscopo = new Set(eventosEscopo.map((e) => e.brinco)).size;
+    const totalInseminacoes = eventosEscopo.length;
     const diagManejos = manejosEscopo.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidosPDF.has(m.loteId));
     const diagRepasseManejos = manejosEscopo.filter((m) => m.tipo === "diagnostico_repasse" && !idsDesconhecidosPDF.has(m.loteId));
     const totalPrenhas = contarPrenhasDetPDF(diagManejos) + contarPrenhasDetPDF(diagRepasseManejos);
     const totalDiagnosticados = diagManejos.reduce((s, m) => s + (m.detalhes || []).length, 0) + diagRepasseManejos.reduce((s, m) => s + (m.detalhes || []).length, 0);
-    const custoAnimal = totalAnimaisEscopo > 0 ? gasto / totalAnimaisEscopo : null;
+    const custoAnimal = totalAnimaisInseminadosEscopo > 0 ? gasto / totalAnimaisInseminadosEscopo : null;
     const custoInseminacao = totalInseminacoes > 0 ? gasto / totalInseminacoes : null;
-    const custoPrenhez = (custoInseminacao != null && totalPrenhas > 0) ? (custoInseminacao * totalDiagnosticados) / totalPrenhas : null;
+    // Custo por Prenhez = Custo por Animal (na nova forma) × total de diagnósticos ÷ nº de prenhas.
+    const custoPrenhez = (custoAnimal != null && totalPrenhas > 0) ? (custoAnimal * totalDiagnosticados) / totalPrenhas : null;
     return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
   };
-  // custo por Inseminador/Mês de parição/Raça de touro/ECC: soma o que foi realmente usado
-  // (sêmen específico de cada animal + a fração do protocolo hormonal daquela ordem) nos
-  // animais do grupo — não o custo do lote inteiro, já que esses recortes cruzam vários lotes.
-  const custosPorRegistrosPDF = (registrosGrupo) => {
-    const gastoTotal = registrosGrupo.reduce((s, r) => s + (r.custoSemenAnimal || 0) + (r.custoBainhaAnimal || 0) + (r.custoHormonioAnimal || 0), 0);
-    const animaisDistintos = new Set(registrosGrupo.map((r) => r.brinco)).size;
-    const totalInseminacoes = registrosGrupo.length;
-    const prenhas = registrosGrupo.filter((r) => r.prenha).length;
+  // custo por Inseminador/Mês de parição/Raça de touro/ECC: Custo por Animal e por Inseminação
+  // usam TODO animal já inseminado daquele recorte (não exige Diagnóstico) — o Diagnóstico só
+  // entra na conta na hora de calcular o Custo por Prenhez.
+  const custosPorEventosPDF = (eventosGrupo, registrosGrupo) => {
+    const gastoTotal = eventosGrupo.reduce((s, e) => s + e.custoAnimal, 0);
+    const animaisDistintos = new Set(eventosGrupo.map((e) => e.brinco)).size;
+    const totalInseminacoes = eventosGrupo.length;
     const custoAnimal = animaisDistintos > 0 ? gastoTotal / animaisDistintos : null;
     const custoInseminacao = totalInseminacoes > 0 ? gastoTotal / totalInseminacoes : null;
-    const custoPrenhez = (custoInseminacao != null && prenhas > 0) ? (custoInseminacao * totalInseminacoes) / prenhas : null;
+    const prenhas = registrosGrupo.filter((r) => r.prenha).length;
+    const totalDiagnosticados = registrosGrupo.length;
+    const custoPrenhez = (custoAnimal != null && prenhas > 0) ? (custoAnimal * totalDiagnosticados) / prenhas : null;
     return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
   };
 
@@ -10299,8 +10370,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     const gruposInseminador = [];
     inseminadores.forEach((nome) => {
       const registrosIns = registrosPDF.filter((r) => r.inseminador === nome);
+      const eventosIns = eventosCustoPDF.filter((e) => e.inseminador === nome);
       const totalIns = statsGrupoPDF(registrosIns);
-      const custosIns = custosPorRegistrosPDF(registrosIns);
+      const custosIns = custosPorEventosPDF(eventosIns, registrosIns);
       let tamGrupo = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const st = statsGrupoPDF(registrosIns.filter((r) => r.categoria === cat));
@@ -10327,8 +10399,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     const gruposMesPDF = [];
     meses.forEach((mes) => {
       const registrosMes = registrosPDF.filter((r) => r.mesParicao === mes);
+      const eventosMes = eventosCustoPDF.filter((e) => e.mesParicao === mes);
       const totalMes = statsGrupoPDF(registrosMes);
-      const custosMes = custosPorRegistrosPDF(registrosMes);
+      const custosMes = custosPorEventosPDF(eventosMes, registrosMes);
       let tamGrupo = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat));
@@ -10362,10 +10435,11 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       let tamGrupo = 0;
       touros.forEach((touro) => {
         const registrosTouro = registrosRaca.filter((r) => r.touro === touro);
+        const eventosTouro = eventosCustoPDF.filter((e) => e.racaTouro === raca && e.touro === touro);
         const st = statsGrupoPDF(registrosTouro);
         if (st.inseminados === 0) return;
         linhasRaca.push([raca, touro, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalRaca.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorRegistrosPDF(registrosTouro))]);
+          fmtPctPDF(totalRaca.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro))]);
         tamGrupo++;
       });
       if (tamGrupo > 0) gruposRaca.push(tamGrupo);
@@ -10392,9 +10466,10 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const eccs = [...new Set(registrosCat.map((r) => r.ecc))].sort();
       eccs.forEach((ecc) => {
         const registrosEcc = registrosCat.filter((r) => r.ecc === ecc);
+        const eventosEcc = eventosCustoPDF.filter((e) => e.categoria === cat && e.ecc === ecc);
         const st = statsGrupoPDF(registrosEcc);
         linhasEcc.push([cat, ecc, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalCat.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorRegistrosPDF(registrosEcc))]);
+          fmtPctPDF(totalCat.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorEventosPDF(eventosEcc, registrosEcc))]);
       });
       gruposEcc.push(eccs.length);
     });

@@ -102,8 +102,13 @@ create table if not exists lotes (
   raca text,
   mes_paricao text,
   animais text[] not null default '{}',  -- brincos oficialmente atribuídos ao lote
-  criado_em timestamptz not null default now()
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()  -- protege contra sincronização concorrente: se dois
+    -- aparelhos offline mexerem no mesmo lote (ex.: um lê animais, outro edita numeroAnimais), quem
+    -- sincronizar por último não sobrescreve cegamente o outro — ver COLECOES_COM_PROTECAO_DE_CONFLITO em sync.js
 );
+
+alter table lotes add column if not exists atualizado_em timestamptz not null default now();
 
 -- renomeia a categoria "Novilha" para "Nulípara" em lotes já sincronizados antes dessa mudança
 update lotes set categoria = 'Nulípara' where categoria = 'Novilha';
@@ -240,8 +245,11 @@ create table if not exists sugestoes_ressinc (
   origem_manejo_id text references manejos (id) on delete set null,
   status text not null check (status in ('pendente', 'confirmada', 'descartada')),
   data date not null,
-  criado_em timestamptz not null default now()
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()  -- protege contra sincronização concorrente (ver lotes acima)
 );
+
+alter table sugestoes_ressinc add column if not exists atualizado_em timestamptz not null default now();
 
 -- ---------- sugestões de Repasse (nascem do Diagnóstico, "Destino para vazias" = Repasse) ----------
 create table if not exists sugestoes_repasse (
@@ -253,8 +261,11 @@ create table if not exists sugestoes_repasse (
   origem_manejo_id text references manejos (id) on delete set null,
   status text not null check (status in ('pendente', 'confirmada', 'descartada')),
   data date not null,
-  criado_em timestamptz not null default now()
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()  -- protege contra sincronização concorrente (ver lotes acima)
 );
+
+alter table sugestoes_repasse add column if not exists atualizado_em timestamptz not null default now();
 
 -- garante o "on delete set null" mesmo em bancos onde essas tabelas já existiam sem ele —
 -- pelo mesmo motivo do "movimentos" acima: sem isso, apagar um manejo de Inseminação ou
@@ -335,6 +346,7 @@ alter table agendamentos add column if not exists numero_animais integer;
 alter table agendamentos add column if not exists ordem_exibicao integer;
 alter table agendamentos add column if not exists categoria text;
 alter table agendamentos add column if not exists sugestoes_descartadas text[];  -- tipos de sugestão automática que o usuário já apagou a partir deste agendamento (evita recriar sozinho ao editar/confirmar)
+alter table agendamentos add column if not exists atualizado_em timestamptz not null default now();  -- protege contra sincronização concorrente (ver lotes acima)
 
 -- garante "criado_em" em TODAS as tabelas que precisam dele, mesmo nas que foram criadas
 -- há mais tempo (antes dessa coluna existir na definição de "create table" acima) — "create

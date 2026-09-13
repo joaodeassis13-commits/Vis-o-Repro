@@ -78,6 +78,10 @@ const COLECOES_COM_CRIADO_EM = new Set([
 const CAMPOS_COM_PADRAO_OBRIGATORIO = {
   manejos: { detalhes: [], animaisLidos: [], medicamentos: [], atualizadoEm: () => new Date().toISOString(), excluido: false },
   safras: { lancamentosDesabilitados: false },
+  lotes: { atualizadoEm: () => new Date().toISOString() },
+  sugestoesRessinc: { atualizadoEm: () => new Date().toISOString() },
+  sugestoesRepasse: { atualizadoEm: () => new Date().toISOString() },
+  agendamentos: { atualizadoEm: () => new Date().toISOString() },
 };
 
 function aplicarPadroesObrigatorios(colecao, itens) {
@@ -101,8 +105,22 @@ function aplicarPadroesObrigatorios(colecao, itens) {
 // realmente mais recente. Aqui comparamos pelo horário de fato de cada edição
 // ("atualizadoEm"), e quem editou por último de verdade é quem vence — não quem sincronizou
 // primeiro. Cada entrada aponta pro nome da coluna correspondente no banco.
+// "lotes" precisa disso tanto quanto "manejos": ler animais num aparelho (que atualiza
+// lote.animais) e mexer noutra coisa do mesmo lote (numeroAnimais, categoria...) em outro
+// aparelho, ambos offline, sem essa proteção o aparelho que sincronizar por último sobrescreve
+// o lote inteiro com a sua cópia desatualizada — inclusive apagando animais que o outro
+// aparelho tinha acabado de atribuir ao lote.
+// "sugestoesRessinc"/"sugestoesRepasse" pelo mesmo motivo: confirmar ou descartar uma sugestão
+// num aparelho, enquanto outro aparelho (que nunca viu essa confirmação) ainda tem a cópia
+// "pendente" — sem essa proteção, o segundo aparelho a sincronizar reabre a sugestão já resolvida.
+// "agendamentos" pelo mesmo motivo: confirmar/descartar/editar um agendamento (ou a cadeia de
+// pré-agendamentos derivados dele) num aparelho, enquanto outro ainda tem a cópia antiga.
 const COLECOES_COM_PROTECAO_DE_CONFLITO = {
   manejos: "atualizado_em",
+  lotes: "atualizado_em",
+  sugestoesRessinc: "atualizado_em",
+  sugestoesRepasse: "atualizado_em",
+  agendamentos: "atualizado_em",
 };
 
 async function resolverConflitosPorTimestamp(colecao, itens) {
