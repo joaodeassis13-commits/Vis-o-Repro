@@ -4726,9 +4726,9 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
       detalhes: detalhesCombinados,
     });
 
-    registrarSaidaEstoque(prostaglandinaId, dPGF, manejoId, "retirada");
-    registrarSaidaEstoque(cipionatoId, dCip, manejoId, "retirada");
-    registrarSaidaEstoque(ecgHcgId, dEH, manejoId, "retirada");
+    registrarSaidaEstoque(prostaglandinaId, dPGF * numBR(numeroAnimais), manejoId, "retirada");
+    registrarSaidaEstoque(cipionatoId, dCip * numBR(numeroAnimais), manejoId, "retirada");
+    registrarSaidaEstoque(ecgHcgId, dEH * numBR(numeroAnimais), manejoId, "retirada");
     medicamentos.forEach((m) => registrarSaidaEstoque(m.medicamentoId, m.dose, manejoId, "retirada"));
 
     if (addProtocoloPadraoSeNovo) {
