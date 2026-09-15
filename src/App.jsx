@@ -1300,10 +1300,15 @@ export default function App() {
   // pensado para trazer o histórico de safras anteriores de uma vez, via Excel. Além do
   // cadastro do lote, também recria os manejos de Inseminação e Diagnóstico quando a
   // planilha tiver essas colunas preenchidas (agrupando os animais por lote+ordem+data).
-  const importarLotesHistoricos = (linhas) => {
+  const importarLotesHistoricos = (linhas, fazendaIdAlvo) => {
     // linhas: [{ safra, retiro, lote, categoria, brinco, raca, mesParicao, ordem,
     //            dataInseminacao, touro, dataDiagnostico, resultado, tempoGestacaoInformado }, ...]
     //
+    // fazendaIdAlvo: pra quem tem "fazenda ativa" (a maioria dos perfis), a importação vale pra
+    // ela, como sempre — mas Suporte Adm não tem fazenda ativa (não aparece nem no menu lateral
+    // pra ele), então a tela de Importar histórico deixa ele escolher explicitamente a fazenda
+    // de destino, e passa o id dela aqui.
+    const fazendaId = fazendaIdAlvo || fazendaAtivaId;
     // IMPORTANTE: dado histórico é passado (já aconteceu), então os manejos aqui são
     // adicionados direto via setManejos — de propósito, SEM passar pela função
     // registrarManejo() normal do app. Isso garante que a importação NUNCA:
@@ -1322,28 +1327,44 @@ export default function App() {
 
     const acharOuCriarSafra = (nome) => {
       const nomeLimpo = nome.trim();
-      const existente = safrasAtuais.find((s) => s.fazendaId === fazendaAtivaId && s.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
+      const existente = safrasAtuais.find((s) => s.fazendaId === fazendaId && s.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
       if (existente) return existente.id;
-      const nova = { id: uid("saf"), fazendaId: fazendaAtivaId, nome: nomeLimpo };
+      const nova = { id: uid("saf"), fazendaId: fazendaId, nome: nomeLimpo };
       safrasAtuais = [...safrasAtuais, nova];
       safrasCriadas++;
       return nova.id;
     };
     const acharOuCriarRetiro = (nome) => {
       const nomeLimpo = nome.trim();
-      const existente = retirosAtuais.find((r) => r.fazendaId === fazendaAtivaId && r.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
+      const existente = retirosAtuais.find((r) => r.fazendaId === fazendaId && r.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
       if (existente) return existente.id;
-      const novo = { id: uid("ret"), fazendaId: fazendaAtivaId, nome: nomeLimpo };
+      const novo = { id: uid("ret"), fazendaId: fazendaId, nome: nomeLimpo };
       retirosAtuais = [...retirosAtuais, novo];
       retirosCriados++;
       return novo.id;
     };
-    // tenta achar um sêmen já cadastrado com esse touro, para vincular o manejo ao insumo
-    // de verdade; se não achar, guarda o nome digitado mesmo assim (sem vincular estoque).
-    const acharSemenPorTouro = (nomeTouro) => {
-      if (!nomeTouro) return null;
-      const encontrado = insumos.find((i) => i.categoria === "Sêmen" && i.fazendaId === fazendaAtivaId && (i.touro || "").trim().toLowerCase() === nomeTouro.trim().toLowerCase());
+    // acha um insumo (Hormônio) já cadastrado pelo nome do produto comercial — usado pelas
+    // colunas de protocolo hormonal da planilha (Implante, Benzoato, Prostaglandina, Cipionato,
+    // ECG/HCG, GnRH). Sem cadastro correspondente, o custo desse produto simplesmente não entra
+    // na conta (não há valor unitário pra buscar) — mas isso não impede a importação.
+    const acharInsumoPorNome = (nomeProduto) => {
+      if (!nomeProduto?.trim()) return null;
+      const encontrado = insumos.find((i) => i.categoria === "Hormônio" && i.fazendaId === fazendaId && (i.produtoComercial || "").trim().toLowerCase() === nomeProduto.trim().toLowerCase());
       return encontrado?.id || null;
+    };
+    // tenta achar um sêmen já cadastrado com esse touro (e, se informada, a mesma partida), para
+    // vincular o manejo ao insumo de verdade; sem partida informada, casa só pelo touro (pode
+    // achar a partida errada se o touro tiver mais de uma cadastrada) — se não achar nenhum,
+    // guarda touro/partida digitados mesmo assim (sem vincular estoque).
+    const acharSemenPorTouro = (nomeTouro, partidaISO) => {
+      if (!nomeTouro) return null;
+      const candidatos = insumos.filter((i) => i.categoria === "Sêmen" && i.fazendaId === fazendaId && (i.touro || "").trim().toLowerCase() === nomeTouro.trim().toLowerCase());
+      if (candidatos.length === 0) return null;
+      if (partidaISO) {
+        const comAPartida = candidatos.find((i) => i.partida === partidaISO);
+        if (comAPartida) return comAPartida.id;
+      }
+      return candidatos[0].id;
     };
     // acha um manejo (Inseminação/Diagnóstico) já existente para o mesmo lote+ordem+data — é
     // assim que uma reimportação corrige/completa dados em vez de duplicar o manejo inteiro.
@@ -1357,15 +1378,28 @@ export default function App() {
         const detalhesFinal = [...porBrinco.values()];
         manejosAtuais = manejosAtuais.map((m) => m.id === existente.id
           ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador,
-              tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null }
+              tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null,
+              implanteId: grupo.implanteId || m.implanteId || null,
+              benzoatoId: grupo.benzoatoId || m.benzoatoId || null, doseBenzoato: grupo.doseBenzoato ?? m.doseBenzoato ?? null,
+              prostaglandinaId: grupo.prostaglandinaId || m.prostaglandinaId || null, doseProstaglandina: grupo.doseProstaglandina ?? m.doseProstaglandina ?? null,
+              cipionatoId: grupo.cipionatoId || m.cipionatoId || null, doseCipionato: grupo.doseCipionato ?? m.doseCipionato ?? null,
+              ecgHcgId: grupo.ecgHcgId || m.ecgHcgId || null, doseEcgHcg: grupo.doseEcgHcg ?? m.doseEcgHcg ?? null }
           : m);
         manejosAtualizados++;
       } else {
         manejosAtuais = [...manejosAtuais, {
-          id: uid("man"), tipo, fazendaId: fazendaAtivaId, safraId: grupo.infoLote.safraId,
+          id: uid("man"), tipo, fazendaId: fazendaId, safraId: grupo.infoLote.safraId,
           loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
           data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos, inseminador: grupo.inseminador || null,
           tipoManejo: grupo.tipoManejo || null, protocolo: grupo.protocolo || null,
+          // protocolo hormonal do D0/Retirada, quando informado na planilha — usado só pra
+          // calcular custo (ver construirEventosCustoInseminacao/construirRegistrosConcepcao),
+          // nunca gera saída de estoque (a importação de histórico nunca desconta estoque).
+          implanteId: grupo.implanteId || null,
+          benzoatoId: grupo.benzoatoId || null, doseBenzoato: grupo.doseBenzoato ?? null,
+          prostaglandinaId: grupo.prostaglandinaId || null, doseProstaglandina: grupo.doseProstaglandina ?? null,
+          cipionatoId: grupo.cipionatoId || null, doseCipionato: grupo.doseCipionato ?? null,
+          ecgHcgId: grupo.ecgHcgId || null, doseEcgHcg: grupo.doseEcgHcg ?? null,
           operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
         }];
         manejosCriados++;
@@ -1398,7 +1432,7 @@ export default function App() {
       const safraId = acharOuCriarSafra(grupo.safraNome);
       const retiroId = acharOuCriarRetiro(grupo.retiroNome);
       const loteExistente = lotesAtuais.find((l) =>
-        l.fazendaId === fazendaAtivaId && l.safraId === safraId && l.retiroId === retiroId &&
+        l.fazendaId === fazendaId && l.safraId === safraId && l.retiroId === retiroId &&
         l.nome.trim().toLowerCase() === grupo.loteNome.toLowerCase()
       );
       let loteId;
@@ -1417,7 +1451,7 @@ export default function App() {
       } else {
         loteId = uid("lot");
         const novoLote = {
-          id: loteId, fazendaId: fazendaAtivaId, safraId, retiroId, nome: grupo.loteNome,
+          id: loteId, fazendaId: fazendaId, safraId, retiroId, nome: grupo.loteNome,
           categoria: grupo.categoria, raca: grupo.raca, mesParicao: grupo.mesParicao, ordem: grupo.ordemMaisAvancada || ORDENS_IATF[0],
           numeroAnimais: grupo.animais.length, animais: grupo.animais,
         };
@@ -1436,14 +1470,32 @@ export default function App() {
       if (!infoLote) return;
       const ordem = normalizarOrdemIATF(linha.ordem) || ORDENS_IATF[0];
       const chave = `${infoLote.loteId}|${ordem}|${linha.dataInseminacao}`;
-      if (!gruposInsem.has(chave)) gruposInsem.set(chave, { infoLote, ordem, data: linha.dataInseminacao, inseminador: null, tipoManejo: null, protocolo: null, animais: [] });
+      if (!gruposInsem.has(chave)) gruposInsem.set(chave, {
+        infoLote, ordem, data: linha.dataInseminacao, inseminador: null, tipoManejo: null, protocolo: null,
+        implanteId: null, benzoatoId: null, doseBenzoato: null, prostaglandinaId: null, doseProstaglandina: null,
+        cipionatoId: null, doseCipionato: null, ecgHcgId: null, doseEcgHcg: null, animais: [],
+      });
       const grupoInsem = gruposInsem.get(chave);
       if (!grupoInsem.inseminador && linha.inseminador?.trim()) grupoInsem.inseminador = linha.inseminador.trim();
       if (!grupoInsem.tipoManejo && linha.numeroManejos?.trim()) grupoInsem.tipoManejo = linha.numeroManejos.trim();
       if (!grupoInsem.protocolo && linha.duracaoProtocolo?.trim()) grupoInsem.protocolo = linha.duracaoProtocolo.trim();
+      // protocolo hormonal do D0/Retirada: um valor só por lote+ordem+data (o mesmo protocolo
+      // vale pro lote inteiro), não por animal — por isso só preenche na primeira linha que trouxer
+      // cada campo, igual já acontecia com inseminador/tipoManejo/protocolo.
+      if (!grupoInsem.implanteId && linha.implante?.trim()) grupoInsem.implanteId = acharInsumoPorNome(linha.implante);
+      if (!grupoInsem.benzoatoId && linha.benzoato?.trim()) grupoInsem.benzoatoId = acharInsumoPorNome(linha.benzoato);
+      if (grupoInsem.doseBenzoato == null && linha.doseBenzoato?.trim()) grupoInsem.doseBenzoato = numBR(linha.doseBenzoato);
+      if (!grupoInsem.prostaglandinaId && linha.prostaglandina?.trim()) grupoInsem.prostaglandinaId = acharInsumoPorNome(linha.prostaglandina);
+      if (grupoInsem.doseProstaglandina == null && linha.doseProstaglandina?.trim()) grupoInsem.doseProstaglandina = numBR(linha.doseProstaglandina);
+      if (!grupoInsem.cipionatoId && linha.cipionato?.trim()) grupoInsem.cipionatoId = acharInsumoPorNome(linha.cipionato);
+      if (grupoInsem.doseCipionato == null && linha.doseCipionato?.trim()) grupoInsem.doseCipionato = numBR(linha.doseCipionato);
+      if (!grupoInsem.ecgHcgId && linha.ecgHcg?.trim()) grupoInsem.ecgHcgId = acharInsumoPorNome(linha.ecgHcg);
+      if (grupoInsem.doseEcgHcg == null && linha.doseEcgHcg?.trim()) grupoInsem.doseEcgHcg = numBR(linha.doseEcgHcg);
       grupoInsem.animais.push({
-        brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro), touroInformado: linha.touro?.trim() || null,
-        racaTouro: linha.racaTouro?.trim() || null, ecc: linha.ecc?.trim() || null,
+        brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro, linha.partida || null), touroInformado: linha.touro?.trim() || null,
+        racaTouro: linha.racaTouro?.trim() || null, ecc: linha.ecc?.trim() || null, partidaInformada: linha.partida || null,
+        // GnRH é dado na Inseminação em si (por animal), não no protocolo do D0/Retirada.
+        gnrhId: acharInsumoPorNome(linha.gnrh), doseGnrh: linha.doseGnrh?.trim() ? numBR(linha.doseGnrh) : null,
       });
     });
     gruposInsem.forEach((grupo) => criarOuAtualizarManejo("inseminacao", grupo, grupo.animais));
@@ -1641,11 +1693,13 @@ export default function App() {
     [sugestoesRessinc, fazendaAtivaId, safraAtivaId]
   );
   const criarSugestaoRessinc = (loteId, brincos, origemManejoId, dataOrigem) => {
+    const id = uid("sug");
     setSugestoesRessinc((a) => [...a, {
-      id: uid("sug"), loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
+      id, loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
       data: dataOrigem || todayISO(), status: "pendente", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
     }]);
     marcaPendencia();
+    return id;
   };
   const descartarSugestaoRessinc = (id) => {
     setSugestoesRessinc((a) => a.map((s) => s.id === id ? { ...s, status: "descartada", atualizadoEm: new Date().toISOString() } : s));
@@ -2592,7 +2646,7 @@ export default function App() {
               addSafra={addSafra} removeSafra={removeSafra} toggleSafraLancamentos={toggleSafraLancamentos} toggleFazendaLicenciada={toggleFazendaLicenciada} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} perfil={currentUser.perfil} />
           </div>
           <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
-            <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} importarLotesHistoricos={importarLotesHistoricos} />
+            <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} lotesTodos={lotes} importarLotesHistoricos={importarLotesHistoricos} perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveis} />
           </div>
           <div style={{ display: section === "fazendas" ? "block" : "none" }}>
             <AbaFazendasAdmin fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addRetiro={addRetiro} toggleSafraLancamentos={toggleSafraLancamentos} />
@@ -3186,8 +3240,15 @@ const MAPA_COLUNAS_IMPORTACAO = {
   ordem: "ordem",
   numerodemanejos: "numeroManejos", numerodemanejo: "numeroManejos", numeromanejos: "numeroManejos",
   duracaodoprotocolo: "duracaoProtocolo", duracaodeprotocolo: "duracaoProtocolo", duracaoprotocolo: "duracaoProtocolo",
+  implante: "implante",
+  benzoato: "benzoato", dosebenzoato: "doseBenzoato",
+  prostaglandina: "prostaglandina", doseprostaglandina: "doseProstaglandina",
+  cipionato: "cipionato", dosecipionato: "doseCipionato",
+  ecghcg: "ecgHcg", doseecghcg: "doseEcgHcg",
+  gnrh: "gnrh", dosegnrh: "doseGnrh",
   datainseminacao: "dataInseminacao", datadeinseminacao: "dataInseminacao",
   touro: "touro",
+  partida: "partida", partidadotouro: "partida", partidadosemen: "partida",
   racadotouro: "racaTouro", racatouro: "racaTouro",
   eccnainseminacao: "ecc", ecc: "ecc",
   inseminador: "inseminador",
@@ -3220,7 +3281,11 @@ const paraDataISO = (valor) => {
   return null;
 };
 
-function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) {
+function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, importarLotesHistoricos, perfil, fazendasVisiveis }) {
+  const ehSuporteAdm = perfil === "Suporte Adm";
+  const [fazendaAlvoId, setFazendaAlvoId] = useState("");
+  const fazendaAlvo = ehSuporteAdm ? (fazendasVisiveis || []).find((f) => f.id === fazendaAlvoId) : fazendaAtiva;
+  const lotesDoAlvo = ehSuporteAdm ? (lotesTodos || []).filter((l) => l.fazendaId === fazendaAlvoId) : lotes;
   const [arquivoNome, setArquivoNome] = useState("");
   const [linhasValidas, setLinhasValidas] = useState([]);
   const [linhasComErro, setLinhasComErro] = useState([]);
@@ -3231,8 +3296,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
 
   const baixarModelo = () => {
     const dadosModelo = [
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,00", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", "Raça do touro": "Angus", "ECC na Inseminação": "3,25", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", Implante: "Sincrogest", Benzoato: "Bioestrogen", "Dose Benzoato": "2", Prostaglandina: "Ciosin", "Dose Prostaglandina": "2", Cipionato: "", "Dose Cipionato": "", "ECG/HCG": "Novormon", "Dose ECG/HCG": "1,5", GnRH: "", "Dose GnRH": "", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", Partida: "01/08/2023", "Raça do touro": "Angus", "ECC na Inseminação": "3,00", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", Implante: "Sincrogest", Benzoato: "Bioestrogen", "Dose Benzoato": "2", Prostaglandina: "Ciosin", "Dose Prostaglandina": "2", Cipionato: "", "Dose Cipionato": "", "ECG/HCG": "Novormon", "Dose ECG/HCG": "1,5", GnRH: "", "Dose GnRH": "", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", Partida: "01/08/2023", "Raça do touro": "Angus", "ECC na Inseminação": "3,25", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
     ];
     const ws = XLSX.utils.json_to_sheet(dadosModelo);
     const wb = XLSX.utils.book_new();
@@ -3268,7 +3333,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
           const linha = {};
           Object.entries(mapaEncontrado).forEach(([colOriginal, campo]) => {
             const bruto = linhaBruta[colOriginal];
-            if (campo === "dataInseminacao" || campo === "dataDiagnostico") linha[campo] = paraDataISO(bruto) || "";
+            if (campo === "dataInseminacao" || campo === "dataDiagnostico" || campo === "partida") linha[campo] = paraDataISO(bruto) || "";
             else linha[campo] = String(bruto ?? "").trim();
           });
           if (!linha.safra || !linha.retiro || !linha.lote || !linha.brinco) comErro.push(i + 2);
@@ -3291,7 +3356,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
   const confirmarImportacao = () => {
     if (linhasValidas.length === 0) return;
     setImportando(true);
-    const r = importarLotesHistoricos(linhasValidas);
+    const r = importarLotesHistoricos(linhasValidas, ehSuporteAdm ? fazendaAlvoId : undefined);
     setResultado(r);
     setImportando(false);
     setLinhasValidas([]); setLinhasComErro([]); setArquivoNome("");
@@ -3301,9 +3366,20 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
   return (
     <div>
       <SectionTitle icon={Upload} title="Importar histórico" subtitle="Traga de uma vez os lotes, animais e o histórico de Inseminação/Diagnóstico de safras anteriores, a partir de uma planilha Excel." />
-      <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
-      {!fazendaAtiva ? (
-        <EmptyState text="Selecione uma fazenda ativa para importar dados." />
+      {ehSuporteAdm ? (
+        <div style={{ marginBottom: 16 }}>
+          <Field label="Fazenda de destino">
+            <select style={{ ...inputStyle, width: "auto", minWidth: 220 }} value={fazendaAlvoId} onChange={(e) => setFazendaAlvoId(e.target.value)}>
+              <option value="">Selecione a fazenda</option>
+              {(fazendasVisiveis || []).map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+            </select>
+          </Field>
+        </div>
+      ) : (
+        <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
+      )}
+      {!fazendaAlvo ? (
+        <EmptyState text={ehSuporteAdm ? "Selecione a fazenda de destino para importar dados." : "Selecione uma fazenda ativa para importar dados."} />
       ) : (
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
@@ -3315,9 +3391,14 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
             </p>
             <p style={{ fontSize: 12.5, color: "#4A473E", lineHeight: 1.6, margin: "0 0 14px" }}>
               Para trazer também o <strong>histórico de manejo</strong>, preencha ainda: <strong>Ordem</strong> (aceita "1", "1º", "1º IATF" — qualquer formato com o número; se vazio, assume 1º IATF),
-              <strong> Data Inseminação</strong> e <strong>Touro</strong> (cria um manejo de Inseminação — <strong>Raça do touro</strong>, <strong>ECC na Inseminação</strong> e <strong>Inseminador</strong> são opcionais e enriquecem esse manejo), e <strong>Data Diagnóstico</strong>, <strong>Resultado</strong> (P ou V) e
+              <strong> Data Inseminação</strong> e <strong>Touro</strong> (cria um manejo de Inseminação — <strong>Partida</strong>, <strong>Raça do touro</strong>, <strong>ECC na Inseminação</strong> e <strong>Inseminador</strong> são opcionais e enriquecem esse manejo), e <strong>Data Diagnóstico</strong>, <strong>Resultado</strong> (P ou V) e
               <strong> Tempo de gestação informado</strong> (cria um manejo de Diagnóstico). Animais da mesma safra/lote/ordem/data são agrupados num único manejo, igual ao que
-              aconteceria se tivessem sido lidos juntos na hora. Se o Touro informado já existir cadastrado no estoque de sêmen, o manejo já fica vinculado a ele.
+              aconteceria se tivessem sido lidos juntos na hora. Se o Touro informado já existir cadastrado no estoque de sêmen, o manejo já fica vinculado a ele — informando também a Partida, o vínculo acerta a partida certa quando o touro tiver mais de uma cadastrada.
+            </p>
+            <p style={{ fontSize: 12.5, color: "#4A473E", lineHeight: 1.6, margin: "0 0 14px" }}>
+              Também é possível informar o <strong>protocolo hormonal</strong> usado (as colunas antes de Data Inseminação): <strong>Implante</strong>, <strong>Benzoato</strong> + <strong>Dose Benzoato</strong>, <strong>Prostaglandina</strong> + <strong>Dose Prostaglandina</strong>, <strong>Cipionato</strong> + <strong>Dose Cipionato</strong>,
+              <strong> ECG/HCG</strong> + <strong>Dose ECG/HCG</strong> e <strong>GnRH</strong> + <strong>Dose GnRH</strong> — em cada coluna de produto, informe o mesmo nome do "Produto comercial" já cadastrado no Estoque. A importação de histórico <strong>nunca desconta estoque</strong>
+              (nenhuma saída é gerada), mas esses produtos entram no cálculo de Custo dos Relatórios/Exportações, usando o valor unitário que estiver cadastrado hoje no estoque de cada um.
             </p>
             <BtnGhost onClick={baixarModelo}><Download size={14} /> Baixar modelo de planilha</BtnGhost>
           </div>
@@ -3360,14 +3441,14 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, importarLotesHistoricos }) 
           </div>
 
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Lotes já cadastrados nesta fazenda</div>
-          {lotes.length === 0 ? (
+          {lotesDoAlvo.length === 0 ? (
             <EmptyState text="Nenhum lote cadastrado ainda." />
           ) : (
             <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead><tr><th>Lote</th><th>Categoria</th><th>Nº animais</th></tr></thead>
                 <tbody>
-                  {lotes.slice(0, 20).map((l) => (
+                  {lotesDoAlvo.slice(0, 20).map((l) => (
                     <tr key={l.id}>
                       <td style={{ fontWeight: 700 }}>{l.nome}</td>
                       <td>{l.categoria || "—"}</td>
@@ -4052,6 +4133,27 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
   const historicoRessinc = manejos.filter((m) => m.tipo === "ressinc").slice(0, 6);
 
+  // lotes que já tiveram Diagnóstico com algum animal Vazio na ordem atual, mas ainda não têm
+  // nem sugestão automática pendente nem D0/Ressinc registrado pra próxima ordem — cobre os
+  // casos que não passaram pelo fluxo normal de Diagnóstico (como um lote trazido por
+  // importação de histórico), permitindo iniciar o Ressinc deles manualmente mesmo assim.
+  const idsLotesComSugestaoPendenteRessinc = new Set(sugestoesRessinc.map((s) => s.loteId));
+  const lotesElegiveisRessincManual = lotes
+    .filter((l) => l.ordem && l.categoria && proximaOrdem(l.ordem) && !idsLotesComSugestaoPendenteRessinc.has(l.id))
+    .filter((l) => !manejos.some((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && m.loteId === l.id && m.ordem === proximaOrdem(l.ordem)))
+    .map((l) => {
+      const diagDoLote = manejos.filter((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === l.ordem);
+      const vazios = [...new Set(diagDoLote.flatMap((m) => (m.detalhes || []).filter((d) => d.resultado === "Vazia").map((d) => d.brinco)))];
+      const dataMaisRecente = diagDoLote.reduce((mais, atual) => (!mais || atual.data > mais.data ? atual : mais), null)?.data || null;
+      return { lote: l, vazios, dataMaisRecente };
+    })
+    .filter((x) => x.vazios.length > 0);
+
+  const iniciarRessincManual = (item) => {
+    const novoId = criarSugestaoRessinc(item.lote.id, item.vazios, null, item.dataMaisRecente || todayISO());
+    setSugestaoAbertaId(novoId);
+  };
+
   return (
     <div>
       <SectionTitle icon={ImplantIcon} title="D0" subtitle="O lote é criado aqui com os dados completos." />
@@ -4351,6 +4453,26 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Iniciar Ressinc manualmente</div>
+                  {lotesElegiveisRessincManual.length === 0 ? (
+                    <EmptyState text="Nenhum lote elegível no momento. Aparecem aqui lotes com Diagnóstico e animais Vazia na ordem atual que ainda não têm Ressinc — inclusive lotes trazidos de uma importação de histórico." />
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+                      {lotesElegiveisRessincManual.map((item) => (
+                        <div key={item.lote.id} style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                          <div>
+                            <strong style={{ fontSize: 13.5 }}>{item.lote.nome}</strong>
+                            <div style={{ fontSize: 12, color: "#6B685E", marginTop: 3 }}>
+                              {item.lote.nome} - {proximaOrdem(item.lote.ordem)} · {item.vazios.length} animal(is) vazio(s)
+                              {item.dataMaisRecente ? ` · Diagnóstico de ${fmtDate(item.dataMaisRecente)}` : ""}
+                            </div>
+                          </div>
+                          <BtnPrimary onClick={() => iniciarRessincManual(item)}>Iniciar</BtnPrimary>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </>
@@ -8004,10 +8126,9 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
     if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.raca) return insumo.raca; }
     return null;
   };
-  const partidaDoSemen = (semenId) => {
-    if (!semenId) return null;
-    const insumo = insumos.find((i) => i.id === semenId);
-    return insumo?.partida || null;
+  const partidaDoSemen = (semenId, partidaInformada) => {
+    if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.partida) return insumo.partida; }
+    return partidaInformada || null;
   };
   // custo do sêmen usado NESSE animal específico: o valor unitário do sêmen já É o preço por
   // dose (não tem "embalagem" pra dividir) — 1 palheta usada = 1 dose gasta com esse animal.
@@ -8038,6 +8159,21 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
       }, 0);
     return gasto / manejo.numeroAnimais;
   };
+  const custoUnidade = (id) => id ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === id)) || 0) : 0;
+  // protocolo hormonal do D0/Retirada vindo direto da IMPORTAÇÃO de histórico (sem manejo de D0/
+  // Retirada de verdade por trás) — o próprio manejo de Inseminação carrega os produtos/doses
+  // informados na planilha; calculado direto do valor unitário ATUAL em estoque (já "por animal").
+  const custoHormonioImportadoDoAnimal = (insem) => {
+    let total = 0;
+    if (insem.implanteId) total += custoUnidade(insem.implanteId);
+    if (insem.benzoatoId && insem.doseBenzoato) total += insem.doseBenzoato * custoUnidade(insem.benzoatoId);
+    if (insem.prostaglandinaId && insem.doseProstaglandina) total += insem.doseProstaglandina * custoUnidade(insem.prostaglandinaId);
+    if (insem.cipionatoId && insem.doseCipionato) total += insem.doseCipionato * custoUnidade(insem.cipionatoId);
+    if (insem.ecgHcgId && insem.doseEcgHcg) total += insem.doseEcgHcg * custoUnidade(insem.ecgHcgId);
+    return total;
+  };
+  // GnRH é aplicado na própria Inseminação (por animal), não no D0/Retirada.
+  const custoGnrhDoAnimal = (detIns) => (detIns.gnrhId && detIns.doseGnrh) ? detIns.doseGnrh * custoUnidade(detIns.gnrhId) : 0;
 
   const registros = [];
   inseminacoes.forEach((insem) => {
@@ -8053,7 +8189,8 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
     const inducaoDoLote = insem.ordem === ORDENS_IATF[0]
       ? inducoes.filter((m) => m.loteId === insem.loteId && m.data <= insem.data).reduce((mais, atual) => (!mais || atual.data > mais.data ? atual : mais), null)
       : null;
-    const custoHormonioOrdem = custoHormonioPorAnimalDoManejo(inducaoDoLote) + custoHormonioPorAnimalDoManejo(d0MaisRecente) + custoHormonioPorAnimalDoManejo(retiradaMaisRecente);
+    const custoHormonioOrdem = custoHormonioPorAnimalDoManejo(inducaoDoLote) + custoHormonioPorAnimalDoManejo(d0MaisRecente)
+      + custoHormonioPorAnimalDoManejo(retiradaMaisRecente) + custoHormonioImportadoDoAnimal(insem);
 
     (insem.detalhes || []).forEach((detIns) => {
       const candidatas = diagnosticos.filter((d) =>
@@ -8069,7 +8206,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
         loteId: insem.loteId || null, loteNome: lotes.find((l) => l.id === insem.loteId)?.nome || null,
         ecc: detIns.ecc || null, inseminador: detIns.inseminador || insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
-        racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro), partida: partidaDoSemen(detIns.semenId),
+        racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro), partida: partidaDoSemen(detIns.semenId, detIns.partidaInformada),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
         numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo || null,
@@ -8079,7 +8216,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
         // Inseminador/Mês/Raça/ECC.
         custoSemenAnimal: custoSemenDoAnimal(detIns.semenId),
         custoBainhaAnimal: custoBainhaDoManejo(insem.id),
-        custoHormonioAnimal: custoHormonioOrdem,
+        custoHormonioAnimal: custoHormonioOrdem + custoGnrhDoAnimal(detIns),
       });
     });
   });
@@ -8109,6 +8246,7 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
     return null;
   };
   const custoSemenDoAnimal = (semenId) => semenId ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0) : 0;
+  const custoUnidade = (id) => id ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === id)) || 0) : 0;
   const custoBainhaDoManejo = (manejoId) => {
     const mov = movimentos.find((mv) => mv.tipo === "saida" && mv.manejoId === manejoId && ehBainha(insumos.find((i) => i.id === mv.insumoId)));
     return mov ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === mov.insumoId)) || 0) : 0;
@@ -8125,6 +8263,23 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
       }, 0);
     return gasto / manejo.numeroAnimais;
   };
+  // protocolo hormonal do D0/Retirada vindo direto da IMPORTAÇÃO de histórico (sem manejo de D0/
+  // Retirada de verdade por trás, então sem saída de estoque pra buscar) — nesse caso o próprio
+  // manejo de Inseminação carrega os produtos/doses informados na planilha, e o custo é calculado
+  // direto a partir do valor unitário ATUAL em estoque de cada produto (por isso não é dividido
+  // por nº de animais como no fluxo normal: aqui já é "por animal", igual às demais parcelas).
+  const custoHormonioImportadoDoAnimal = (insem) => {
+    let total = 0;
+    if (insem.implanteId) total += custoUnidade(insem.implanteId); // 1 unidade por animal
+    if (insem.benzoatoId && insem.doseBenzoato) total += insem.doseBenzoato * custoUnidade(insem.benzoatoId);
+    if (insem.prostaglandinaId && insem.doseProstaglandina) total += insem.doseProstaglandina * custoUnidade(insem.prostaglandinaId);
+    if (insem.cipionatoId && insem.doseCipionato) total += insem.doseCipionato * custoUnidade(insem.cipionatoId);
+    if (insem.ecgHcgId && insem.doseEcgHcg) total += insem.doseEcgHcg * custoUnidade(insem.ecgHcgId);
+    return total;
+  };
+  // GnRH é aplicado na própria Inseminação (por animal), não no D0/Retirada — vale tanto pra
+  // Inseminação registrada normalmente (com saída de estoque de verdade) quanto pra importada.
+  const custoGnrhDoAnimal = (detIns) => (detIns.gnrhId && detIns.doseGnrh) ? detIns.doseGnrh * custoUnidade(detIns.gnrhId) : 0;
 
   const eventos = [];
   inseminacoes.forEach((insem) => {
@@ -8135,7 +8290,10 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
     const inducaoDoLote = insem.ordem === ORDENS_IATF[0]
       ? inducoes.filter((m) => m.loteId === insem.loteId && m.data <= insem.data).reduce((mais, atual) => (!mais || atual.data > mais.data ? atual : mais), null)
       : null;
-    const custoHormonioOrdem = custoHormonioPorAnimalDoManejo(inducaoDoLote) + custoHormonioPorAnimalDoManejo(d0MaisRecente) + custoHormonioPorAnimalDoManejo(retiradaMaisRecente);
+    // custoHormonioImportadoDoAnimal só dá resultado > 0 quando o manejo veio de uma importação
+    // de histórico (nenhuma Inseminação registrada normalmente tem esses campos preenchidos).
+    const custoHormonioOrdem = custoHormonioPorAnimalDoManejo(inducaoDoLote) + custoHormonioPorAnimalDoManejo(d0MaisRecente)
+      + custoHormonioPorAnimalDoManejo(retiradaMaisRecente) + custoHormonioImportadoDoAnimal(insem);
     const custoBainha = custoBainhaDoManejo(insem.id);
 
     (insem.detalhes || []).forEach((detIns) => {
@@ -8146,7 +8304,7 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         touro: nomeTouro(detIns.semenId, detIns.touroInformado), racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
         ecc: detIns.ecc || null,
-        custoAnimal: custoSemenDoAnimal(detIns.semenId) + custoBainha + custoHormonioOrdem,
+        custoAnimal: custoSemenDoAnimal(detIns.semenId) + custoBainha + custoHormonioOrdem + custoGnrhDoAnimal(detIns),
       });
     });
   });
