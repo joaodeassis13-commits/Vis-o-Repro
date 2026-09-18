@@ -2664,7 +2664,7 @@ export default function App() {
             <AbaImplantacao fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos}
               registrarManejo={registrarManejo} registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos}
               addLote={addLote} atualizarLote={atualizarLote} atualizarManejo={atualizarManejo} removerManejo={removerManejo}
-              sugestoesRessinc={sugestoesRessincAtivas} descartarSugestaoRessinc={descartarSugestaoRessinc} removerSugestaoRessinc={removerSugestaoRessinc}
+              sugestoesRessinc={sugestoesRessincAtivas} criarSugestaoRessinc={criarSugestaoRessinc} descartarSugestaoRessinc={descartarSugestaoRessinc} removerSugestaoRessinc={removerSugestaoRessinc}
               protocolosPadraoDaFazenda={protocolosPadraoDaFazenda} addProtocoloPadraoSeNovo={addProtocoloPadraoSeNovo} />
           </div>
           <div style={{ display: section === "manejo" && sub === "retirada" ? "block" : "none" }}>
@@ -3752,7 +3752,7 @@ const proximaOrdem = (ordemAtual) => {
   return i >= 0 && i < ORDENS_IATF.length - 1 ? ORDENS_IATF[i + 1] : ORDENS_IATF[0];
 };
 
-function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addLote, atualizarLote, atualizarManejo, removerManejo, sugestoesRessinc, descartarSugestaoRessinc, removerSugestaoRessinc, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo }) {
+function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addLote, atualizarLote, atualizarManejo, removerManejo, sugestoesRessinc, criarSugestaoRessinc, descartarSugestaoRessinc, removerSugestaoRessinc, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo }) {
   const [abaInterna, setAbaInterna] = useState("d0"); // "d0" | "ressinc"
   const [editandoManejo, setEditandoManejo] = useState(null);
 
