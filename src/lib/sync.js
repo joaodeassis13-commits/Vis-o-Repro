@@ -158,6 +158,23 @@ async function enviarColecao(colecao, itens) {
   if (colecao === "usuarios") {
     validos = itens.filter((u) => REGEX_UUID.test(u.id));
     invalidos = itens.filter((u) => !REGEX_UUID.test(u.id));
+    // A tabela "usuarios" tem RLS restrito (cada um só pode escrever a própria linha, ou uma
+    // que ele mesmo criou, ou — se for Suporte Adm — qualquer uma). Só que a cópia LOCAL de
+    // "usuarios" também guarda colegas que este usuário só tem permissão de LER (visíveis por
+    // dividir a mesma fazenda), nunca de escrever. Um upsert em lote é atômico: se UMA linha
+    // violasse a política, a sincronização inteira de "usuarios" falhava — inclusive a
+    // atualização da própria linha do usuário, que é sempre permitida. Por isso filtra aqui
+    // pra só tentar enviar o que este usuário realmente pode escrever, replicando a mesma regra
+    // das políticas "usuarios: insercao"/"usuarios: atualizacao" do schema.sql.
+    const { data: dadosAuth } = await supabase.auth.getUser();
+    const meuId = dadosAuth?.user?.id || null;
+    if (meuId) {
+      const meuUsuario = validos.find((u) => u.id === meuId) || itens.find((u) => u.id === meuId);
+      const souSuporteAdm = meuUsuario?.perfil === "Suporte Adm";
+      if (!souSuporteAdm) {
+        validos = validos.filter((u) => u.id === meuId || u.criadoPor === meuId);
+      }
+    }
   }
   // "criado_em" é obrigatório (not null) em várias tabelas; um registro sem esse campo
   // (de qualquer coleção, criado antes de alguma correção, ou por um bug futuro) travaria

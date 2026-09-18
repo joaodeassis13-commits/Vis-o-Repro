@@ -7310,18 +7310,29 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
             ) : categoria === "Sêmen" ? (
               <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
                 <table>
-                  <thead><tr><th>Touro</th><th>Raça</th><th>Partida</th><th>Estoque (doses)</th><th>Valor unitário</th><th>Valor total</th></tr></thead>
+                  <thead><tr><th>Touro</th><th>Raça</th><th>Estoque (doses)</th><th>Valor unitário</th><th>Valor total</th></tr></thead>
                   <tbody>
-                    {itens.map((i) => (
-                      <tr key={i.id}>
-                        <td style={{ fontWeight: 700 }}>{i.touro}</td>
-                        <td>{i.raca}</td>
-                        <td>{i.partida ? fmtDate(i.partida) : "—"}</td>
-                        <td>{i.estoque}</td>
-                        <td>{fmtMoeda(i.valorUnitario)}</td>
-                        <td>{fmtMoeda(i.valorUnitario != null ? i.estoque * i.valorUnitario : null)}</td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      // uma linha por touro, somando todas as partidas dele — a partida
+                      // continua existindo em cada insumo por trás (importa pra achar o
+                      // sêmen certo na Inseminação), só não aparece separada aqui.
+                      const porTouro = new Map();
+                      itens.forEach((i) => {
+                        if (!porTouro.has(i.touro)) porTouro.set(i.touro, { touro: i.touro, raca: i.raca, estoque: 0, valorTotal: 0 });
+                        const g = porTouro.get(i.touro);
+                        g.estoque += i.estoque;
+                        g.valorTotal += i.valorUnitario != null ? i.estoque * i.valorUnitario : 0;
+                      });
+                      return [...porTouro.values()].map((g) => (
+                        <tr key={g.touro}>
+                          <td style={{ fontWeight: 700 }}>{g.touro}</td>
+                          <td>{g.raca}</td>
+                          <td>{g.estoque}</td>
+                          <td>{fmtMoeda(g.estoque > 0 ? g.valorTotal / g.estoque : null)}</td>
+                          <td>{fmtMoeda(g.valorTotal)}</td>
+                        </tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
