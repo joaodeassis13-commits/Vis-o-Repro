@@ -1393,6 +1393,7 @@ export default function App() {
         const detalhesFinal = [...porBrinco.values()];
         manejosAtuais = manejosAtuais.map((m) => m.id === existente.id
           ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador,
+              categoria: grupo.infoLote.categoria || m.categoria || null,
               tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null,
               implanteId: grupo.implanteId || m.implanteId || null,
               benzoatoId: grupo.benzoatoId || m.benzoatoId || null, doseBenzoato: grupo.doseBenzoato ?? m.doseBenzoato ?? null,
@@ -1404,7 +1405,7 @@ export default function App() {
       } else {
         manejosAtuais = [...manejosAtuais, {
           id: uid("man"), tipo, fazendaId: fazendaId, safraId: grupo.infoLote.safraId,
-          loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, ordem: grupo.ordem,
+          loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, categoria: grupo.infoLote.categoria || null, ordem: grupo.ordem,
           data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos, inseminador: grupo.inseminador || null,
           tipoManejo: grupo.tipoManejo || null, protocolo: grupo.protocolo || null,
           // protocolo hormonal do D0/Retirada, quando informado na planilha — usado só pra
@@ -1428,7 +1429,7 @@ export default function App() {
       if (!gruposLote.has(chave)) {
         gruposLote.set(chave, {
           safraNome: linha.safra.trim(), retiroNome: linha.retiro.trim(), loteNome: linha.lote.trim(),
-          categoria: linha.categoria?.trim() || null, raca: linha.raca?.trim() || null, mesParicao: linha.mesParicao?.trim() || null,
+          categoria: normalizarCategoria(linha.categoria), raca: linha.raca?.trim() || null, mesParicao: normalizarMesParicao(linha.mesParicao),
           animais: [], ordemMaisAvancada: null,
         });
       }
@@ -1473,7 +1474,7 @@ export default function App() {
         lotesAtuais = [...lotesAtuais, novoLote];
         lotesCriados++;
       }
-      chaveLote.set(chave, { loteId, safraId, retiroId, loteNome: grupo.loteNome, retiroNome: grupo.retiroNome });
+      chaveLote.set(chave, { loteId, safraId, retiroId, loteNome: grupo.loteNome, retiroNome: grupo.retiroNome, categoria: grupo.categoria });
     });
 
     // 2) agrupa as linhas com dado de Inseminação (por lote + ordem + data) e cria/atualiza um manejo por grupo
@@ -3279,6 +3280,27 @@ const normalizarOrdemIATF = (valor) => {
   const digito = String(valor).match(/[123]/);
   if (!digito) return null;
   return ORDENS_IATF[Number(digito[0]) - 1] || null;
+};
+// aceita "Nulípara"/"nulipara"/"NULÍPARAS"/"Nulipara" etc. (maiúscula/minúscula, com ou sem
+// acento, singular ou plural) e devolve sempre a grafia exata usada em CATEGORIAS_LOTE — sem
+// essa normalização, uma categoria digitada de um jeito ligeiramente diferente na planilha
+// nunca bate com o texto exato que os cards de Concepção/Custo comparam, e a coluna daquela
+// categoria fica zerada mesmo com os dados importados certinho.
+const normalizarCategoria = (valor) => {
+  if (!valor) return null;
+  const limpo = normalizarCabecalho(valor);
+  if (limpo.startsWith("nulipara")) return "Nulípara";
+  if (limpo.startsWith("primipara")) return "Primípara";
+  if (limpo.startsWith("multipara")) return "Multípara";
+  return valor.trim(); // não reconhecida: mantém o que a pessoa digitou, sem inventar
+};
+// mesma ideia pro Mês de parição — aceita "março"/"MARÇO"/"Marco" etc. e devolve a grafia
+// exata usada em NOMES_MES.
+const normalizarMesParicao = (valor) => {
+  if (!valor) return null;
+  const limpo = normalizarCabecalho(valor);
+  const encontrado = NOMES_MES.find((m) => normalizarCabecalho(m) === limpo);
+  return encontrado || valor.trim();
 };
 // aceita data já como objeto Date (célula formatada como data no Excel), como texto
 // dd/mm/aaaa (comum no Brasil) ou já em aaaa-mm-dd — devolve sempre em aaaa-mm-dd.
