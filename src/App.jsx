@@ -1386,6 +1386,11 @@ export default function App() {
     // Quando encontra, mescla por brinco: quem já estava e continua na planilha é atualizado,
     // quem é novo é adicionado — nenhum animal antigo que não veio nesta reimportação é removido.
     const criarOuAtualizarManejo = (tipo, grupo, detalhesNovos) => {
+      // busca a categoria direto do LOTE de verdade (a mesma fonte que os cards de "Resumo" já
+      // usam corretamente) em vez de confiar só no valor que passou por gruposLote/chaveLote —
+      // uma camada a menos de indireção que poderia estar divergindo.
+      const loteDoGrupo = lotesAtuais.find((l) => l.id === grupo.infoLote.loteId);
+      const categoriaDoLote = loteDoGrupo?.categoria || grupo.infoLote.categoria || null;
       const existente = manejosAtuais.find((m) => m.tipo === tipo && m.loteId === grupo.infoLote.loteId && m.ordem === grupo.ordem && m.data === grupo.data);
       if (existente) {
         const porBrinco = new Map((existente.detalhes || []).map((d) => [d.brinco, d]));
@@ -1393,7 +1398,7 @@ export default function App() {
         const detalhesFinal = [...porBrinco.values()];
         manejosAtuais = manejosAtuais.map((m) => m.id === existente.id
           ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador,
-              categoria: grupo.infoLote.categoria || m.categoria || null,
+              categoria: categoriaDoLote || m.categoria || null,
               tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null,
               implanteId: grupo.implanteId || m.implanteId || null,
               benzoatoId: grupo.benzoatoId || m.benzoatoId || null, doseBenzoato: grupo.doseBenzoato ?? m.doseBenzoato ?? null,
@@ -1405,7 +1410,7 @@ export default function App() {
       } else {
         manejosAtuais = [...manejosAtuais, {
           id: uid("man"), tipo, fazendaId: fazendaId, safraId: grupo.infoLote.safraId,
-          loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, categoria: grupo.infoLote.categoria || null, ordem: grupo.ordem,
+          loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, categoria: categoriaDoLote, ordem: grupo.ordem,
           data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos, inseminador: grupo.inseminador || null,
           tipoManejo: grupo.tipoManejo || null, protocolo: grupo.protocolo || null,
           // protocolo hormonal do D0/Retirada, quando informado na planilha — usado só pra
@@ -8250,7 +8255,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
       if (!detDiag?.resultado) return;
       registros.push({
         brinco: detIns.brinco, prenha: detDiag.resultado === "Prenha", ordem: insem.ordem,
-        categoria: insem.categoria || null, retiroId: insem.retiroId || null, fazendaId: insem.fazendaId,
+        categoria: lotes.find((l) => l.id === insem.loteId)?.categoria || insem.categoria || null, retiroId: insem.retiroId || null, fazendaId: insem.fazendaId,
         loteId: insem.loteId || null, loteNome: lotes.find((l) => l.id === insem.loteId)?.nome || null,
         ecc: detIns.ecc || null, inseminador: detIns.inseminador || insem.inseminador || null,
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
@@ -8347,7 +8352,7 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
     (insem.detalhes || []).forEach((detIns) => {
       if (!detIns.brinco) return;
       eventos.push({
-        brinco: detIns.brinco, loteId: insem.loteId || null, categoria: insem.categoria || null, ordem: insem.ordem || null,
+        brinco: detIns.brinco, loteId: insem.loteId || null, categoria: lotes.find((l) => l.id === insem.loteId)?.categoria || insem.categoria || null, ordem: insem.ordem || null,
         inseminador: detIns.inseminador || insem.inseminador || null,
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         touro: nomeTouro(detIns.semenId, detIns.touroInformado), racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
