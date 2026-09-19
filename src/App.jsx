@@ -1039,10 +1039,22 @@ export default function App() {
   }, []);
 
   const [erroSincronizacao, setErroSincronizacao] = useState("");
+  // trava SÍNCRONA (não depende de re-render) contra duas sincronizações rodando ao mesmo
+  // tempo. É diferente do estado "sincronizando" (usado só pra UI): esse já existia, mas só é
+  // atualizado de verdade um efeito depois, via useEffect — então, no exato momento em que a
+  // internet volta depois do app ter sido carregado offline, os efeitos "sincronizar ao abrir"
+  // e "sincronizar ao voltar a internet" podem disparar os DOIS na mesma leva de efeitos, antes
+  // de o "sincronizandoRef" (baseado no estado) ter tido a chance de virar true — e as duas
+  // sincronizações rodam ao mesmo tempo, cada uma lendo/gravando o estado local por cima da
+  // outra. Essa trava aqui é atualizada na hora, sem esperar nenhum re-render.
+  const travaSincronizacaoRef = React.useRef(false);
   const sincronizarAgora = async () => {
     if (!supabaseConfigurado) { setPendencias(0); return; }
+    if (travaSincronizacaoRef.current) return;
+    travaSincronizacaoRef.current = true;
     setSincronizando(true);
     setErroSincronizacao("");
+    try {
     // só um Administrador pode de fato ALTERAR quem tem acesso a qual fazenda (é a única tela
     // que permite isso). Um aparelho logado como Inseminador/Supervisor não deve reenviar essa
     // informação de jeito nenhum — mesmo sem querer mudar nada, reenviar o que ele SABE
@@ -1086,8 +1098,11 @@ export default function App() {
       // mostra o motivo real em vez de falhar silenciosamente
       setErroSincronizacao(resultado.motivo || (resultado.erros || []).join(" · ") || "Falha desconhecida na sincronização.");
     }
-    setSincronizando(false);
     return resultado;
+    } finally {
+      travaSincronizacaoRef.current = false;
+      setSincronizando(false);
+    }
   };
 
   // ---------- sincronização automática ----------
