@@ -1954,7 +1954,13 @@ export default function App() {
     const grupos = {};
     listaManejos.forEach((m) => {
       if (!TIPOS_UM_POR_LOTE_ORDEM.includes(m.tipo) || !m.loteId || !m.ordem) return;
-      const chave = `${m.tipo}|${m.loteId}|${m.ordem}`;
+      // a data entra na chave de propósito: duas leituras de verdade distintas (mesmo lote e
+      // ordem, mas em dias diferentes) NÃO são duplicata uma da outra — são dois manejos
+      // legítimos (por exemplo, uma correção de ordem feita depois). Sem a data aqui, esta
+      // função tratava esse caso como duplicata e apagava um manejo real inteiro, ficando só
+      // com o mais antigo dos dois — o que explicava manejos (com leitura de animal) sumindo
+      // por completo mesmo numa sincronização de um único aparelho, numa única sessão.
+      const chave = `${m.tipo}|${m.loteId}|${m.ordem}|${m.data}`;
       (grupos[chave] = grupos[chave] || []).push(m);
     });
 
@@ -3310,6 +3316,19 @@ const normalizarMesParicao = (valor) => {
   const limpo = normalizarCabecalho(valor);
   const encontrado = NOMES_MES.find((m) => normalizarCabecalho(m) === limpo);
   return encontrado || valor.trim();
+};
+// mesma ideia pro ECC — a planilha pode trazer o número de qualquer jeito (com vírgula, com
+// ponto, sem casas decimais, como número puro do Excel...), mas os gráficos de Concepção por
+// ECC só reconhecem as faixas exatas de OPCOES_ECC ("2,50", "2,75", ...) — sem essa conversão,
+// um ECC digitado como "3" ou "3.0" nunca batia com "3,00" e o gráfico ficava sem nenhum dado.
+const normalizarEcc = (valor) => {
+  if (valor == null || String(valor).trim() === "") return null;
+  const numero = numBR(valor);
+  if (isNaN(numero)) return String(valor).trim();
+  if (numero < 2.5) return "< 2,50";
+  if (numero > 4) return "> 4,00";
+  const arredondado = Math.round(numero * 4) / 4; // pro múltiplo de 0,25 mais próximo
+  return arredondado.toFixed(2).replace(".", ",");
 };
 // aceita data já como objeto Date (célula formatada como data no Excel), como texto
 // dd/mm/aaaa (comum no Brasil) ou já em aaaa-mm-dd — devolve sempre em aaaa-mm-dd.
