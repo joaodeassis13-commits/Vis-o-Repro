@@ -1362,9 +1362,13 @@ export default function App() {
     // colunas de protocolo hormonal da planilha (Implante, Benzoato, Prostaglandina, Cipionato,
     // ECG/HCG, GnRH). Sem cadastro correspondente, o custo desse produto simplesmente não entra
     // na conta (não há valor unitário pra buscar) — mas isso não impede a importação.
+    // um insumo pode estar cadastrado no estoque da FAZENDA (fazendaId) ou no estoque EXTERNO
+    // (vinculado ao usuário que cadastrou, não à fazenda) — essa função reconhece os dois, senão
+    // qualquer produto cadastrado como "Externo" nunca seria encontrado na importação.
+    const pertenceAoEstoqueDoImportador = (i) => (i.local === "fazenda" && i.fazendaId === fazendaId) || (i.local === "externo" && i.usuarioId === currentUser?.id);
     const acharInsumoPorNome = (nomeProduto) => {
       if (!nomeProduto?.trim()) return null;
-      const encontrado = insumos.find((i) => i.categoria === "Hormônio" && i.fazendaId === fazendaId && (i.produtoComercial || "").trim().toLowerCase() === nomeProduto.trim().toLowerCase());
+      const encontrado = insumos.find((i) => i.categoria === "Hormônio" && pertenceAoEstoqueDoImportador(i) && (i.produtoComercial || "").trim().toLowerCase() === nomeProduto.trim().toLowerCase());
       return encontrado?.id || null;
     };
     // tenta achar um sêmen já cadastrado com esse touro (e, se informada, a mesma partida), para
@@ -1373,7 +1377,7 @@ export default function App() {
     // guarda touro/partida digitados mesmo assim (sem vincular estoque).
     const acharSemenPorTouro = (nomeTouro, partidaISO) => {
       if (!nomeTouro) return null;
-      const candidatos = insumos.filter((i) => i.categoria === "Sêmen" && i.fazendaId === fazendaId && (i.touro || "").trim().toLowerCase() === nomeTouro.trim().toLowerCase());
+      const candidatos = insumos.filter((i) => i.categoria === "Sêmen" && pertenceAoEstoqueDoImportador(i) && (i.touro || "").trim().toLowerCase() === nomeTouro.trim().toLowerCase());
       if (candidatos.length === 0) return null;
       if (partidaISO) {
         const comAPartida = candidatos.find((i) => i.partida === partidaISO);
