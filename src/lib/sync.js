@@ -327,7 +327,16 @@ export async function sincronizar(estado) {
   for (const colecao of Object.keys(TABELAS)) {
     if (colecao === "exclusoes") { estado = { ...estado, exclusoes: exclusoesConhecidas }; continue; }
     // nunca reenvia algo que já sabemos ter sido apagado (por este aparelho ou por outro)
-    const itensSemApagados = (estado[colecao] || []).filter((item) => !item.id || !idsApagados.has(item.id));
+    let itensSemApagados = (estado[colecao] || []).filter((item) => !item.id || !idsApagados.has(item.id));
+    // um movimento cujo manejo já não existe mais localmente (foi excluído ou fundido com um
+    // duplicado em algum momento, por qualquer motivo) nunca vai conseguir ser inserido — a
+    // chave estrangeira pra "manejos" nunca vai bater. Sem filtrar isso aqui, um único
+    // movimento órfão travava a sincronização INTEIRA de "movimentos" pra sempre, porque o
+    // envio é feito num lote só (se uma linha falha, o lote inteiro falha).
+    if (colecao === "movimentos") {
+      const idsDeManejosConhecidos = new Set((estado.manejos || []).map((m) => m.id));
+      itensSemApagados = itensSemApagados.filter((mv) => !mv.manejoId || idsDeManejosConhecidos.has(mv.manejoId));
+    }
     const resultado = await enviarColecao(colecao, itensSemApagados);
     if (!resultado.ok) erros.push(`${colecao}: ${resultado.erro}`);
     if (resultado.conflitos?.length > 0) conflitosPorColecao.push(`${colecao} (${resultado.conflitos.length})`);

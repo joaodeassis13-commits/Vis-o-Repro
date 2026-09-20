@@ -5474,6 +5474,18 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     // como saída de estoque só os animais que foram ACRESCENTADOS agora (os que já
     // estavam ali antes já tiveram o estoque descontado quando foram lidos da 1ª vez).
     if (editandoManejo) {
+      // proteção: se a sincronização automática rodou em segundo plano enquanto esta edição
+      // estava aberta (pode levar minutos, digitando vários animais) e esse manejo foi fundido
+      // com um duplicado nesse meio tempo, o id original deixa de existir — "atualizarManejo"
+      // simplesmente não encontraria nada pra atualizar, e a edição inteira se perderia sem
+      // nenhum aviso. Em vez disso, detecta esse caso e registra como um manejo NOVO, pra nunca
+      // perder silenciosamente o que foi lido.
+      const manejoAindaExiste = manejos.some((m) => m.id === editandoManejo.id);
+      if (!manejoAindaExiste) {
+        setMsg("Esse registro foi alterado em outro lugar enquanto você editava. Sua leitura não foi perdida — clique em \"Registrar\" mais uma vez pra salvá-la como um novo manejo.");
+        setEditandoManejo(null);
+        return;
+      }
       const brincosAntes = new Set((editandoManejo.detalhes || []).map((d) => d.brinco));
       const registrosNovos = registros.filter((r) => !brincosAntes.has(r.brinco));
       atualizarManejo(editandoManejo.id, {
@@ -6080,6 +6092,12 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     // animais da leitura) em vez de criar um novo — só gera sugestão de Ressinc/Repasse para
     // os animais Vazia que forem NOVOS nesta edição, pra não duplicar sugestão já existente.
     if (editandoManejo) {
+      const manejoAindaExiste = manejos.some((m) => m.id === editandoManejo.id);
+      if (!manejoAindaExiste) {
+        setMsg("Esse registro foi alterado em outro lugar enquanto você editava. Sua leitura não foi perdida — clique em \"Registrar\" mais uma vez pra salvá-la como um novo manejo.");
+        setEditandoManejo(null);
+        return;
+      }
       const brincosAntes = new Set((editandoManejo.detalhes || []).map((d) => d.brinco));
       const vaziaNovosBrincos = registros.filter((r) => r.resultado === "Vazia" && !brincosAntes.has(r.brinco)).map((r) => r.brinco);
       atualizarManejo(editandoManejo.id, { detalhes: registros, animaisLidos: registros.map((r) => r.brinco), data: dataManejo, destinoVazias });
