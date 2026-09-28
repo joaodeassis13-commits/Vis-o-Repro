@@ -1340,9 +1340,13 @@ export default function App() {
     let lotesAtuais = [...lotes];
     let manejosAtuais = [...manejos]; // começa com os já existentes — re-importar deve achar e atualizar, não duplicar
 
+    // compara safras ignorando espaços e tratando "-" como "/" — "2026-2027" e "2026/2027" são a
+    // mesma safra; sem isso, uma diferença de escrita na planilha criava uma safra NOVA (que não é
+    // a safra ativa), e os lotes importados sumiam das telas de manejo, que só listam a safra ativa.
+    const chaveSafra = (n) => String(n || "").trim().toLowerCase().replace(/\s+/g, "").replace(/[-–—\\]/g, "/");
     const acharOuCriarSafra = (nome) => {
       const nomeLimpo = nome.trim();
-      const existente = safrasAtuais.find((s) => s.fazendaId === fazendaId && s.nome.trim().toLowerCase() === nomeLimpo.toLowerCase());
+      const existente = safrasAtuais.find((s) => s.fazendaId === fazendaId && chaveSafra(s.nome) === chaveSafra(nomeLimpo));
       if (existente) return existente.id;
       const nova = { id: uid("saf"), fazendaId: fazendaId, nome: nomeLimpo };
       safrasAtuais = [...safrasAtuais, nova];
@@ -1548,7 +1552,9 @@ export default function App() {
     setLotes(lotesAtuais);
     setManejos(manejosAtuais);
     marcaPendencia();
-    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length };
+    const idsSafrasDoImport = [...new Set([...chaveLote.values()].map((i) => i.safraId))];
+    const safrasDoImport = idsSafrasDoImport.map((id) => ({ id, nome: safrasAtuais.find((s) => s.id === id)?.nome || "—" }));
+    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length, safrasDoImport };
   };
 
   /* ---------- usuários (Administrador cadastra e autoriza acesso a fazendas) ---------- */
@@ -2677,7 +2683,7 @@ export default function App() {
               addSafra={addSafra} removeSafra={removeSafra} toggleSafraLancamentos={toggleSafraLancamentos} toggleFazendaLicenciada={toggleFazendaLicenciada} fazendaAtivaId={fazendaAtivaId} setFazendaAtivaId={setFazendaAtivaId} removerFazenda={removerFazenda} perfil={currentUser.perfil} />
           </div>
           <div style={{ display: section === "cadastros" && sub === "importar" ? "block" : "none" }}>
-            <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} lotesTodos={lotes} importarLotesHistoricos={importarLotesHistoricos} perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveis} />
+            <AbaImportarHistorico fazendaAtiva={fazendaAtiva} lotes={lotesDaFazenda} lotesTodos={lotes} manejosTodos={manejos} safras={safras} safraAtivaId={safraAtivaId} importarLotesHistoricos={importarLotesHistoricos} perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveis} />
           </div>
           <div style={{ display: section === "fazendas" ? "block" : "none" }}>
             <AbaFazendasAdmin fazendas={fazendasVisiveis} retiros={retiros} safras={safras} addRetiro={addRetiro} toggleSafraLancamentos={toggleSafraLancamentos} />
@@ -3346,7 +3352,28 @@ const paraDataISO = (valor) => {
   return null;
 };
 
-function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, importarLotesHistoricos, perfil, fazendasVisiveis }) {
+// diz em qual aba de manejo um lote vai aparecer agora, seguindo as mesmas regras das telas
+// (D0 → Retirada → Inseminação → Diagnóstico, Ressinc pra quem tem vazias) — ajuda a entender por que
+// um lote importado pode não estar listado em determinada aba.
+function proximoPassoDoLote(lote, manejos) {
+  const ordem = lote.ordem;
+  if (!ordem) return "—";
+  const ms = manejos.filter((m) => m.loteId === lote.id && !m.excluido);
+  const tem = (tipo, o) => ms.some((m) => m.tipo === tipo && m.ordem === o);
+  const proxima = proximaOrdem(ordem);
+  if (tem("diagnostico", ordem)) {
+    const temVazia = ms.some((m) => m.tipo === "diagnostico" && m.ordem === ordem && (m.detalhes || []).some((d) => d.resultado === "Vazia"));
+    const jaTemProximo = proxima && ms.some((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && m.ordem === proxima);
+    if (temVazia && proxima && !jaTemProximo) return `Ciclo da ${ordem} concluído — Ressinc para as vazias (D0 › Iniciar Ressinc manualmente)`;
+    return `Ciclo da ${ordem} concluído — não aparece em nenhuma aba de manejo`;
+  }
+  if (tem("inseminacao", ordem)) return `Diagnóstico da ${ordem} (aba Diagnóstico)`;
+  if (tem("retirada", ordem)) return `Inseminação da ${ordem} (aba Inseminação)`;
+  if (tem("implantacao", ordem) || tem("ressinc", ordem)) return `Retirada da ${ordem} (aba Retirada)`;
+  return `D0 da ${ordem} (aba D0 — digite o mesmo nome do lote)`;
+}
+
+function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, safras, safraAtivaId, importarLotesHistoricos, perfil, fazendasVisiveis }) {
   const ehSuporteAdm = perfil === "Suporte Adm";
   const [fazendaAlvoId, setFazendaAlvoId] = useState("");
   const fazendaAlvo = ehSuporteAdm ? (fazendasVisiveis || []).find((f) => f.id === fazendaAlvoId) : fazendaAtiva;
@@ -3501,6 +3528,13 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, importarLotesHi
                   {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""}
                   {resultado.manejosAtualizados > 0 ? `, ${resultado.manejosAtualizados} manejo(s) já existente(s) atualizado(s)` : ""} — {resultado.animaisImportados} animal(is) no total.
                 </p>
+                {!ehSuporteAdm && (resultado.safrasDoImport || []).some((sf) => sf.id !== safraAtivaId) && (
+                  <p style={{ fontSize: 12.5, color: "#8A3E15", margin: "10px 0 0", lineHeight: 1.6, fontWeight: 600 }}>
+                    ⚠ Parte dos lotes foi para a safra {(resultado.safrasDoImport || []).filter((sf) => sf.id !== safraAtivaId).map((sf) => `"${sf.nome}"`).join(", ")}
+                    {" "}— {(safras || []).find((sf) => sf.id === safraAtivaId) ? `a safra ativa agora é "${(safras || []).find((sf) => sf.id === safraAtivaId).nome}"` : "nenhuma safra está ativa"}.
+                    As abas de manejo só listam lotes da safra ativa: para ver esses lotes lá, troque a safra ativa no menu lateral (ou confira o nome da safra na planilha).
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -3511,15 +3545,22 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, importarLotesHi
           ) : (
             <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
-                <thead><tr><th>Lote</th><th>Categoria</th><th>Nº animais</th></tr></thead>
+                <thead><tr><th>Lote</th><th>Safra</th><th>Categoria</th><th>Nº animais</th><th>Ordem</th><th>Onde aparece nos manejos</th></tr></thead>
                 <tbody>
-                  {lotesDoAlvo.slice(0, 20).map((l) => (
-                    <tr key={l.id}>
-                      <td style={{ fontWeight: 700 }}>{l.nome}</td>
-                      <td>{l.categoria || "—"}</td>
-                      <td>{(l.animais || []).length}</td>
-                    </tr>
-                  ))}
+                  {lotesDoAlvo.slice(0, 20).map((l) => {
+                    const sf = (safras || []).find((x) => x.id === l.safraId);
+                    const foraDaAtiva = !ehSuporteAdm && safraAtivaId && l.safraId !== safraAtivaId;
+                    return (
+                      <tr key={l.id}>
+                        <td style={{ fontWeight: 700 }}>{l.nome}</td>
+                        <td>{sf?.nome || "—"}{foraDaAtiva ? <div style={{ fontSize: 10.5, color: "#8A3E15", fontWeight: 600 }}>não é a safra ativa</div> : null}</td>
+                        <td>{l.categoria || "—"}</td>
+                        <td>{(l.animais || []).length}</td>
+                        <td>{l.ordem || "—"}</td>
+                        <td style={{ fontSize: 12 }}>{proximoPassoDoLote(l, manejosTodos || [])}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
