@@ -3376,9 +3376,18 @@ const paraDataISO = (valor) => {
     const ano = valor.getFullYear(), mes = String(valor.getMonth() + 1).padStart(2, "0"), dia = String(valor.getDate()).padStart(2, "0");
     return `${ano}-${mes}-${dia}`;
   }
-  const texto = String(valor).trim();
-  const m1 = texto.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m1) return `${m1[3]}-${m1[2].padStart(2, "0")}-${m1[1].padStart(2, "0")}`;
+  // data guardada como número serial do Excel (célula que não veio marcada como data)
+  if (typeof valor === "number" && valor > 20000 && valor < 80000) {
+    const d = new Date(Math.round((valor - 25569) * 86400 * 1000));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  }
+  // ignora hora colada depois da data ("18/09/2026 10:30") e aceita / - . como separador
+  const texto = String(valor).trim().split(/[ T]/)[0];
+  const m1 = texto.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4}|\d{2})$/);
+  if (m1) {
+    const ano = m1[3].length === 2 ? `20${m1[3]}` : m1[3];
+    return `${ano}-${m1[2].padStart(2, "0")}-${m1[1].padStart(2, "0")}`;
+  }
   const m2 = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m2) return `${m2[1]}-${m2[2].padStart(2, "0")}-${m2[3].padStart(2, "0")}`;
   return null;
@@ -3387,6 +3396,28 @@ const paraDataISO = (valor) => {
 // diz em qual aba de manejo um lote vai aparecer agora, seguindo as mesmas regras das telas
 // (D0 → Retirada → Inseminação → Diagnóstico, Ressinc pra quem tem vazias) — ajuda a entender por que
 // um lote importado pode não estar listado em determinada aba.
+// ordens em que o lote já teve manejo, com o nº de animais de cada uma — ex.: "1º IATF (86), 2º IATF (38)".
+// O nº vem dos animais lidos na Inseminação (ou no Diagnóstico) daquela ordem; se ainda não houve leitura,
+// usa o nº de animais do D0/Ressinc/Retirada.
+function ordensFeitasDoLote(lote, manejos) {
+  const ms = manejos.filter((m) => m.loteId === lote.id && !m.excluido);
+  const distintos = (tipo, o) => new Set(ms.filter((m) => m.tipo === tipo && m.ordem === o).flatMap((m) => m.animaisLidos || [])).size;
+  const CICLO = ["implantacao", "ressinc", "retirada", "inseminacao", "diagnostico"];
+  const resultado = [];
+  ORDENS_IATF.forEach((o) => {
+    const feitos = ms.filter((m) => m.ordem === o && CICLO.includes(m.tipo));
+    if (feitos.length === 0) return;
+    const n = distintos("inseminacao", o) || distintos("diagnostico", o) || Math.max(0, ...feitos.map((m) => Number(m.numeroAnimais) || 0));
+    resultado.push({ ordem: o, animais: n });
+  });
+  return resultado;
+}
+function textoOrdensFeitas(lote, manejos) {
+  const feitas = ordensFeitasDoLote(lote, manejos);
+  if (feitas.length > 0) return feitas.map((x) => `${x.ordem} (${x.animais})`).join(", ");
+  return lote.ordem ? `${lote.ordem} — nenhum manejo feito ainda` : "—";
+}
+
 function proximoPassoDoLote(lote, manejos) {
   const ms = manejos.filter((m) => m.loteId === lote.id && !m.excluido);
   const tem = (tipo, o) => ms.some((m) => m.tipo === tipo && m.ordem === o);
@@ -3425,6 +3456,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
   const [arquivoNome, setArquivoNome] = useState("");
   const [linhasValidas, setLinhasValidas] = useState([]);
   const [linhasComErro, setLinhasComErro] = useState([]);
+  const [datasIlegiveis, setDatasIlegiveis] = useState([]);
   const [erro, setErro] = useState("");
   const [resultado, setResultado] = useState(null);
   const [importando, setImportando] = useState(false);
@@ -3442,7 +3474,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
   };
 
   const processarArquivo = (file) => {
-    setErro(""); setResultado(null); setLinhasValidas([]); setLinhasComErro([]);
+    setErro(""); setResultado(null); setLinhasValidas([]); setLinhasComErro([]); setDatasIlegiveis([]);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -3465,18 +3497,24 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
 
         const validas = [];
         const comErro = [];
+        const ilegiveis = [];
         linhasBrutas.forEach((linhaBruta, i) => {
           const linha = {};
           Object.entries(mapaEncontrado).forEach(([colOriginal, campo]) => {
             const bruto = linhaBruta[colOriginal];
-            if (campo === "dataInseminacao" || campo === "dataDiagnostico" || campo === "partida") linha[campo] = paraDataISO(bruto) || "";
-            else linha[campo] = String(bruto ?? "").trim();
+            if (campo === "dataInseminacao" || campo === "dataDiagnostico" || campo === "partida") {
+              linha[campo] = paraDataISO(bruto) || "";
+              // célula preenchida mas em formato que não dá pra ler: antes virava vazio em silêncio e
+              // o manejo daquela linha simplesmente não era criado — agora é avisado na prévia.
+              if (!linha[campo] && String(bruto ?? "").trim() !== "") ilegiveis.push({ linha: i + 2, campo });
+            } else linha[campo] = String(bruto ?? "").trim();
           });
           if (!linha.safra || !linha.retiro || !linha.lote || !linha.brinco) comErro.push(i + 2);
           else validas.push(linha);
         });
         setLinhasValidas(validas);
         setLinhasComErro(comErro);
+        setDatasIlegiveis(ilegiveis);
         setArquivoNome(file.name);
       } catch (err) {
         setErro("Não consegui ler esse arquivo. Confirme que é um .xlsx válido.");
@@ -3495,7 +3533,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
     const r = importarLotesHistoricos(linhasValidas, ehSuporteAdm ? fazendaAlvoId : undefined);
     setResultado(r);
     setImportando(false);
-    setLinhasValidas([]); setLinhasComErro([]); setArquivoNome("");
+    setLinhasValidas([]); setLinhasComErro([]); setDatasIlegiveis([]); setArquivoNome("");
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -3558,6 +3596,12 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
                     ⚠ {linhasComErro.length} linha(s) ignorada(s) por faltar Safra, Retiro, Lote ou Brinco (linha(s) {linhasComErro.slice(0, 10).join(", ")}{linhasComErro.length > 10 ? "…" : ""} da planilha).
                   </p>
                 )}
+                {datasIlegiveis.length > 0 && (
+                  <p style={{ fontSize: 12.5, color: "#8A3E15", fontWeight: 600, margin: "6px 0 0", lineHeight: 1.6 }}>
+                    ⚠ {datasIlegiveis.length} data(s) em formato que não consegui ler — nessas linhas o manejo correspondente NÃO será criado
+                    (linha(s) {[...new Set(datasIlegiveis.map((d) => d.linha))].slice(0, 12).join(", ")}{new Set(datasIlegiveis.map((d) => d.linha)).size > 12 ? "…" : ""} da planilha). Use dd/mm/aaaa.
+                  </p>
+                )}
                 <BtnPrimary onClick={confirmarImportacao} disabled={importando} style={{ marginTop: 12 }}>
                   {importando ? "Importando…" : `Confirmar importação (${linhasValidas.length} animais)`}
                 </BtnPrimary>
@@ -3591,7 +3635,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
           ) : (
             <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
-                <thead><tr><th>Lote</th><th>Safra</th><th>Categoria</th><th>Nº animais</th><th>Ordem</th><th>Onde aparece nos manejos</th></tr></thead>
+                <thead><tr><th>Lote</th><th>Safra</th><th>Categoria</th><th>Nº animais</th><th>Ordens feitas (animais)</th><th>Onde aparece nos manejos</th></tr></thead>
                 <tbody>
                   {lotesDoAlvo.slice(0, 20).map((l) => {
                     const sf = (safras || []).find((x) => x.id === l.safraId);
@@ -3602,7 +3646,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
                         <td>{sf?.nome || "—"}{foraDaAtiva ? <div style={{ fontSize: 10.5, color: "#8A3E15", fontWeight: 600 }}>não é a safra ativa</div> : null}</td>
                         <td>{l.categoria || "—"}</td>
                         <td>{(l.animais || []).length}</td>
-                        <td>{l.ordem || "—"}</td>
+                        <td style={{ fontSize: 12.5 }}>{textoOrdensFeitas(l, manejosTodos || [])}</td>
                         <td style={{ fontSize: 12 }}>{proximoPassoDoLote(l, manejosTodos || [])}</td>
                       </tr>
                     );
