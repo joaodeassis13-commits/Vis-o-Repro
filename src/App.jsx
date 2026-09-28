@@ -1338,7 +1338,13 @@ export default function App() {
     let safrasAtuais = [...safras];
     let retirosAtuais = [...retiros];
     let lotesAtuais = [...lotes];
-    let manejosAtuais = [...manejos]; // começa com os já existentes — re-importar deve achar e atualizar, não duplicar
+    // começa com os já existentes (NÃO excluídos) — re-importar deve achar e atualizar, não duplicar.
+    // Manejos excluídos ficam de fora da busca: antes a importação "encontrava" o registro excluído,
+    // atualizava ele e ele continuava excluído — a tela dizia "manejo atualizado" e nada aparecia.
+    // Eles são devolvidos intactos no fim (seguem na lixeira da Auditoria).
+    const manejosExcluidosDoEstado = manejos.filter((m) => m.excluido);
+    let manejosAtuais = manejos.filter((m) => !m.excluido);
+    let manejosRecriadosDeExcluidos = 0;
 
     // compara safras ignorando espaços e tratando "-" como "/" — "2026-2027" e "2026/2027" são a
     // mesma safra; sem isso, uma diferença de escrita na planilha criava uma safra NOVA (que não é
@@ -1432,6 +1438,8 @@ export default function App() {
           operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
         }];
         manejosCriados++;
+        // havia um manejo igual (mesmo tipo, lote, ordem e dia) na lixeira — este é o recriado de verdade
+        if (manejosExcluidosDoEstado.some((m) => m.tipo === tipo && m.loteId === grupo.infoLote.loteId && m.ordem === grupo.ordem && m.data === grupo.data)) manejosRecriadosDeExcluidos++;
       }
     };
 
@@ -1582,11 +1590,11 @@ export default function App() {
     setSafras(safrasAtuais);
     setRetiros(retirosAtuais);
     setLotes(lotesAtuais);
-    setManejos(manejosAtuais);
+    setManejos([...manejosAtuais, ...manejosExcluidosDoEstado]);
     marcaPendencia();
     const idsSafrasDoImport = [...new Set([...chaveLote.values()].map((i) => i.safraId))];
     const safrasDoImport = idsSafrasDoImport.map((id) => ({ id, nome: safrasAtuais.find((s) => s.id === id)?.nome || "—" }));
-    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length, safrasDoImport, sugestoesDiagnosticoCriadas };
+    return { manejosRecriadosDeExcluidos, safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length, safrasDoImport, sugestoesDiagnosticoCriadas };
   };
 
   /* ---------- usuários (Administrador cadastra e autoriza acesso a fazendas) ---------- */
@@ -1991,7 +1999,10 @@ export default function App() {
   const mesclarManejosDuplicados = (listaManejos, movimentosAtuais) => {
     const grupos = {};
     listaManejos.forEach((m) => {
-      if (!TIPOS_UM_POR_LOTE_ORDEM.includes(m.tipo) || !m.loteId || !m.ordem) return;
+      // manejo excluído (lixeira da Auditoria) nunca entra na fusão: como ele costuma ser o mais
+      // ANTIGO do grupo, virava o "sobrevivente" e um manejo novo, de verdade, era absorvido por ele
+      // e sumia junto com o registro excluído.
+      if (m.excluido || !TIPOS_UM_POR_LOTE_ORDEM.includes(m.tipo) || !m.loteId || !m.ordem) return;
       // a data entra na chave de propósito: duas leituras de verdade distintas (mesmo lote e
       // ordem, mas em dias diferentes) NÃO são duplicata uma da outra — são dois manejos
       // legítimos (por exemplo, uma correção de ordem feita depois). Sem a data aqui, esta
@@ -2641,6 +2652,7 @@ export default function App() {
                 </button>
               )
             )}
+            <div style={{ fontSize: 10, color: "#6B7A6F", marginTop: 8 }}>versão {typeof __VERSAO_APP__ !== "undefined" ? __VERSAO_APP__ : "—"}</div>
           </div>
           {currentUser._recuperadoOffline && (
             <div style={{ margin: "0 10px 10px", padding: 10, background: "rgba(227, 164, 92, 0.15)", border: "1px solid #E3A45C", borderRadius: 8, fontSize: 10.5, color: "#E3A45C", lineHeight: 1.4 }}>
@@ -3615,6 +3627,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
                   {resultado.lotesAtualizados > 0 ? `, ${resultado.lotesAtualizados} lote(s) já existente(s) atualizado(s)` : ""}
                   {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""}
                   {resultado.manejosAtualizados > 0 ? `, ${resultado.manejosAtualizados} manejo(s) já existente(s) atualizado(s)` : ""} — {resultado.animaisImportados} animal(is) no total.
+                  {resultado.manejosRecriadosDeExcluidos > 0 ? ` ${resultado.manejosRecriadosDeExcluidos} manejo(s) já tinham sido excluídos e foram criados de novo pela planilha (os excluídos continuam em Auditoria › Buscar manejos excluídos).` : ""}
                   {resultado.sugestoesDiagnosticoCriadas > 0 ? ` ${resultado.sugestoesDiagnosticoCriadas} sugestão(ões) de Diagnóstico criada(s) na Agenda para inseminações ainda sem diagnóstico.` : ""}
                   {" "}Lotes com diagnóstico e animais vazios aparecem em D0 › "Iniciar Ressinc manualmente".
                 </p>

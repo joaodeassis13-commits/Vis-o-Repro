@@ -2,7 +2,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// carimbo da versão (data/hora do build) — aparece no menu lateral, pra dar pra conferir se o
+// aparelho está mesmo rodando a versão mais recente (o app só atualiza quando a pessoa confirma).
+const CARIMBO_VERSAO = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+
 export default defineConfig({
+  define: { __VERSAO_APP__: JSON.stringify(CARIMBO_VERSAO) },
   plugins: [
     react(),
     VitePWA({
