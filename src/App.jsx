@@ -1443,12 +1443,18 @@ export default function App() {
         gruposLote.set(chave, {
           safraNome: linha.safra.trim(), retiroNome: linha.retiro.trim(), loteNome: linha.lote.trim(),
           categoria: normalizarCategoria(linha.categoria), raca: linha.raca?.trim() || null, mesParicao: normalizarMesParicao(linha.mesParicao),
-          animais: [], ordemMaisAvancada: null,
+          animais: [], ordemMaisAvancada: null, animaisPorOrdem: {},
         });
       }
       const grupo = gruposLote.get(chave);
       if (linha.brinco && !grupo.animais.includes(linha.brinco.trim())) grupo.animais.push(linha.brinco.trim());
       const ordemLinha = normalizarOrdemIATF(linha.ordem);
+      // quantos animais o lote tem em CADA ordem (linha sem ordem conta como a 1ª) — o "Nº de
+      // animais" do lote deve acompanhar a ordem atual dele, não o total de todas as ordens somadas.
+      if (linha.brinco) {
+        const chaveOrdem = ordemLinha || ORDENS_IATF[0];
+        (grupo.animaisPorOrdem[chaveOrdem] = grupo.animaisPorOrdem[chaveOrdem] || new Set()).add(linha.brinco.trim());
+      }
       if (ordemLinha) {
         const indiceAtual = ORDENS_IATF.indexOf(ordemLinha);
         const indiceGrupo = grupo.ordemMaisAvancada ? ORDENS_IATF.indexOf(grupo.ordemMaisAvancada) : -1;
@@ -1471,8 +1477,12 @@ export default function App() {
           ? grupo.ordemMaisAvancada : loteExistente.ordem;
         // reimportar também corrige categoria/raça/mês de parição — usa o valor novo da planilha
         // quando preenchido; se a linha vier em branco nesse campo, mantém o que já estava.
+        const ordemDestaImportacao = grupo.ordemMaisAvancada || ORDENS_IATF[0];
+        const numeroAnimaisDaOrdem = grupo.animaisPorOrdem[ordemDestaImportacao]?.size || animaisMesclados.length;
         lotesAtuais = lotesAtuais.map((l) => l.id === loteExistente.id ? {
-          ...l, animais: animaisMesclados, numeroAnimais: animaisMesclados.length, ordem: ordemFinal,
+          ...l, animais: animaisMesclados,
+          numeroAnimais: ordemFinal === ordemDestaImportacao ? numeroAnimaisDaOrdem : (l.numeroAnimais ?? animaisMesclados.length),
+          ordem: ordemFinal,
           categoria: grupo.categoria || l.categoria, raca: grupo.raca || l.raca, mesParicao: grupo.mesParicao || l.mesParicao,
         } : l);
         lotesAtualizados++;
@@ -1482,7 +1492,7 @@ export default function App() {
         const novoLote = {
           id: loteId, fazendaId: fazendaId, safraId, retiroId, nome: grupo.loteNome,
           categoria: grupo.categoria, raca: grupo.raca, mesParicao: grupo.mesParicao, ordem: grupo.ordemMaisAvancada || ORDENS_IATF[0],
-          numeroAnimais: grupo.animais.length, animais: grupo.animais,
+          numeroAnimais: grupo.animaisPorOrdem[grupo.ordemMaisAvancada || ORDENS_IATF[0]]?.size || grupo.animais.length, animais: grupo.animais,
         };
         lotesAtuais = [...lotesAtuais, novoLote];
         lotesCriados++;
@@ -1547,6 +1557,28 @@ export default function App() {
     });
     gruposDiag.forEach((grupo) => criarOuAtualizarManejo("diagnostico", grupo, grupo.animais));
 
+    // 4) Inseminação importada SEM Diagnóstico naquela ordem gera uma sugestão de Diagnóstico na
+    // Agenda (30 dias após a inseminação, igual ao fluxo normal) — nada de estoque é mexido. Não
+    // duplica: se já existe qualquer agendamento de Diagnóstico pra esse lote+ordem (ou se a
+    // pessoa já descartou o sugerido), não cria outro, então reimportar a planilha é seguro.
+    // Só vale pra fazenda ativa (a Agenda é dela); o Suporte Adm importando pra outra fazenda pula.
+    let sugestoesDiagnosticoCriadas = 0;
+    if (fazendaId === fazendaAtivaId) {
+      const norm = (t) => String(t || "").trim().toLowerCase();
+      gruposInsem.forEach((grupo) => {
+        const temDiagnostico = manejosAtuais.some((m) => m.tipo === "diagnostico" && m.loteId === grupo.infoLote.loteId && m.ordem === grupo.ordem);
+        if (temDiagnostico) return;
+        const jaTemSugestao = agendamentos.some((ag) => ag.fazendaId === fazendaId && ag.tipo === "Diagnóstico" && (ag.ordem || null) === grupo.ordem && norm(ag.loteNome) === norm(grupo.infoLote.loteNome));
+        if (jaTemSugestao) return;
+        const dataDiag = ymd(addDays(parseISODate(grupo.data), 30));
+        criarPreAgendamento({
+          loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId || null, ordem: grupo.ordem, categoria: grupo.infoLote.categoria || null,
+          numeroAnimais: grupo.animais.length, origemAgendamentoId: null, tipo: "Diagnóstico", data: dataDiag, titulo: `Diagnóstico — ${grupo.infoLote.loteNome}`,
+        });
+        sugestoesDiagnosticoCriadas++;
+      });
+    }
+
     setSafras(safrasAtuais);
     setRetiros(retirosAtuais);
     setLotes(lotesAtuais);
@@ -1554,7 +1586,7 @@ export default function App() {
     marcaPendencia();
     const idsSafrasDoImport = [...new Set([...chaveLote.values()].map((i) => i.safraId))];
     const safrasDoImport = idsSafrasDoImport.map((id) => ({ id, nome: safrasAtuais.find((s) => s.id === id)?.nome || "—" }));
-    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length, safrasDoImport };
+    return { safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length, safrasDoImport, sugestoesDiagnosticoCriadas };
   };
 
   /* ---------- usuários (Administrador cadastra e autoriza acesso a fazendas) ---------- */
@@ -3356,21 +3388,33 @@ const paraDataISO = (valor) => {
 // (D0 → Retirada → Inseminação → Diagnóstico, Ressinc pra quem tem vazias) — ajuda a entender por que
 // um lote importado pode não estar listado em determinada aba.
 function proximoPassoDoLote(lote, manejos) {
-  const ordem = lote.ordem;
-  if (!ordem) return "—";
   const ms = manejos.filter((m) => m.loteId === lote.id && !m.excluido);
   const tem = (tipo, o) => ms.some((m) => m.tipo === tipo && m.ordem === o);
-  const proxima = proximaOrdem(ordem);
-  if (tem("diagnostico", ordem)) {
-    const temVazia = ms.some((m) => m.tipo === "diagnostico" && m.ordem === ordem && (m.detalhes || []).some((d) => d.resultado === "Vazia"));
-    const jaTemProximo = proxima && ms.some((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && m.ordem === proxima);
-    if (temVazia && proxima && !jaTemProximo) return `Ciclo da ${ordem} concluído — Ressinc para as vazias (D0 › Iniciar Ressinc manualmente)`;
-    return `Ciclo da ${ordem} concluído — não aparece em nenhuma aba de manejo`;
+  // 1) Diagnóstico pendente em qualquer ordem (lote importado pode ter várias ordens)
+  const ordemDiag = ORDENS_IATF.find((o) => tem("inseminacao", o) && !tem("diagnostico", o));
+  if (ordemDiag) return `Diagnóstico da ${ordemDiag} (aba Diagnóstico)`;
+  // 2) Ressinc: ordem com vazias em que a cadeia parou
+  const CICLO = ["implantacao", "ressinc", "retirada", "inseminacao", "diagnostico"];
+  for (const o of ORDENS_IATF) {
+    const proxima = proximaOrdem(o);
+    if (!proxima) continue;
+    const temVazia = ms.some((m) => m.tipo === "diagnostico" && m.ordem === o && (m.detalhes || []).some((d) => d.resultado === "Vazia"));
+    const seguiu = ms.some((m) => m.ordem === proxima && CICLO.includes(m.tipo));
+    if (temVazia && !seguiu) return `Ressinc da ${proxima} para as vazias da ${o} (aba D0 › Iniciar Ressinc manualmente)`;
   }
-  if (tem("inseminacao", ordem)) return `Diagnóstico da ${ordem} (aba Diagnóstico)`;
+  // 3) fluxo normal, pela ordem atual do lote
+  const ordem = lote.ordem;
+  if (!ordem) return "—";
+  if (tem("diagnostico", ordem)) return `Ciclo da ${ordem} concluído — não aparece em nenhuma aba de manejo`;
   if (tem("retirada", ordem)) return `Inseminação da ${ordem} (aba Inseminação)`;
   if (tem("implantacao", ordem) || tem("ressinc", ordem)) return `Retirada da ${ordem} (aba Retirada)`;
   return `D0 da ${ordem} (aba D0 — digite o mesmo nome do lote)`;
+}
+
+// mais recentes primeiro (por data do manejo, e pela criação em caso de empate) — as listas de
+// "registrados" mostram TODOS os manejos, inclusive os importados (que entram no fim do array).
+function ordenarManejosRecentesPrimeiro(a, b) {
+  return (b.data || "").localeCompare(a.data || "") || (b.criadoEm || "").localeCompare(a.criadoEm || "");
 }
 
 function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, safras, safraAtivaId, importarLotesHistoricos, perfil, fazendasVisiveis }) {
@@ -3527,6 +3571,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
                   {resultado.lotesAtualizados > 0 ? `, ${resultado.lotesAtualizados} lote(s) já existente(s) atualizado(s)` : ""}
                   {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""}
                   {resultado.manejosAtualizados > 0 ? `, ${resultado.manejosAtualizados} manejo(s) já existente(s) atualizado(s)` : ""} — {resultado.animaisImportados} animal(is) no total.
+                  {resultado.sugestoesDiagnosticoCriadas > 0 ? ` ${resultado.sugestoesDiagnosticoCriadas} sugestão(ões) de Diagnóstico criada(s) na Agenda para inseminações ainda sem diagnóstico.` : ""}
+                  {" "}Lotes com diagnóstico e animais vazios aparecem em D0 › "Iniciar Ressinc manualmente".
                 </p>
                 {!ehSuporteAdm && (resultado.safrasDoImport || []).some((sf) => sf.id !== safraAtivaId) && (
                   <p style={{ fontSize: 12.5, color: "#8A3E15", margin: "10px 0 0", lineHeight: 1.6, fontWeight: 600 }}>
@@ -4078,6 +4124,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   /* ---------- Ressinc: confirma as sugestões vindas do Diagnóstico (animais Vazia) ---------- */
 
   const [sugestaoAbertaId, setSugestaoAbertaId] = useState(null);
+  // ordem-alvo escolhida ao iniciar um Ressinc manualmente (a "ordem atual" do lote pode ser mais avançada)
+  const ordemAlvoRessincRef = React.useRef(null);
   const sugestaoAberta = sugestoesRessinc.find((s) => s.id === sugestaoAbertaId) || null;
   const [editandoRessinc, setEditandoRessinc] = useState(null);
   const loteDaSugestao = sugestaoAberta ? lotes.find((l) => l.id === sugestaoAberta.loteId)
@@ -4130,7 +4178,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     if (sugestaoAberta && loteDaSugestao) {
       setRessincSelecionados(sugestaoAberta.brincos);
       setCategoriaR(loteDaSugestao.categoria || CATEGORIAS_LOTE[0]);
-      setOrdemR(proximaOrdem(loteDaSugestao.ordem));
+      setOrdemR(ordemAlvoRessincRef.current || proximaOrdem(loteDaSugestao.ordem));
+      ordemAlvoRessincRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sugestaoAbertaId]);
@@ -4244,18 +4293,26 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // casos que não passaram pelo fluxo normal de Diagnóstico (como um lote trazido por
   // importação de histórico), permitindo iniciar o Ressinc deles manualmente mesmo assim.
   const idsLotesComSugestaoPendenteRessinc = new Set(sugestoesRessinc.map((s) => s.loteId));
-  const lotesElegiveisRessincManual = lotes
-    .filter((l) => l.ordem && l.categoria && proximaOrdem(l.ordem) && !idsLotesComSugestaoPendenteRessinc.has(l.id))
-    .filter((l) => !manejos.some((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && m.loteId === l.id && m.ordem === proximaOrdem(l.ordem)))
-    .map((l) => {
-      const diagDoLote = manejos.filter((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === l.ordem);
+  // olha cada ordem do lote (não só a "atual"): tem Diagnóstico com animal Vazio e nenhum manejo
+  // registrado na ordem seguinte. Um lote importado com 1ª e 2ª IATF já diagnosticadas só entra
+  // aqui pela ordem em que a cadeia realmente parou — as anteriores já seguiram adiante.
+  const TIPOS_DE_CICLO = ["implantacao", "ressinc", "retirada", "inseminacao", "diagnostico"];
+  const lotesElegiveisRessincManual = lotes.flatMap((l) => {
+    if (idsLotesComSugestaoPendenteRessinc.has(l.id)) return [];
+    return ORDENS_IATF.flatMap((o) => {
+      const proxima = proximaOrdem(o);
+      if (!proxima) return [];
+      if (manejos.some((m) => m.loteId === l.id && m.ordem === proxima && TIPOS_DE_CICLO.includes(m.tipo))) return [];
+      const diagDoLote = manejos.filter((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === o);
       const vazios = [...new Set(diagDoLote.flatMap((m) => (m.detalhes || []).filter((d) => d.resultado === "Vazia").map((d) => d.brinco)))];
+      if (vazios.length === 0) return [];
       const dataMaisRecente = diagDoLote.reduce((mais, atual) => (!mais || atual.data > mais.data ? atual : mais), null)?.data || null;
-      return { lote: l, vazios, dataMaisRecente };
-    })
-    .filter((x) => x.vazios.length > 0);
+      return [{ lote: l, ordem: o, vazios, dataMaisRecente }];
+    });
+  });
 
   const iniciarRessincManual = (item) => {
+    ordemAlvoRessincRef.current = proximaOrdem(item.ordem);
     const novoId = criarSugestaoRessinc(item.lote.id, item.vazios, null, item.dataMaisRecente || todayISO());
     setSugestaoAbertaId(novoId);
   };
@@ -4568,11 +4625,11 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
                       {lotesElegiveisRessincManual.map((item) => (
-                        <div key={item.lote.id} style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                        <div key={`${item.lote.id}|${item.ordem}`} style={{ ...cardStyle, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                           <div>
                             <strong style={{ fontSize: 13.5 }}>{item.lote.nome}</strong>
                             <div style={{ fontSize: 12, color: "#6B685E", marginTop: 3 }}>
-                              {item.lote.nome} - {proximaOrdem(item.lote.ordem)} · {item.vazios.length} animal(is) vazio(s)
+                              {item.lote.nome} - {proximaOrdem(item.ordem)} · {item.vazios.length} animal(is) vazio(s) na {item.ordem}
                               {item.dataMaisRecente ? ` · Diagnóstico de ${fmtDate(item.dataMaisRecente)}` : ""}
                             </div>
                           </div>
@@ -5599,7 +5656,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     if (chaveRascunho) limparRascunho(chaveRascunho);
   };
 
-  const historico = manejos.filter((m) => m.tipo === "inseminacao").slice(0, 6);
+  const historico = manejos.filter((m) => m.tipo === "inseminacao").sort(ordenarManejosRecentesPrimeiro);
   const nomeLote = (id) => lotes.find((l) => l.id === id)?.nome || "—";
   const nomeInsumo = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "—";
   const nomeSemen = (id) => {
@@ -5912,10 +5969,16 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   // EXCEÇÃO: o próprio lote sendo reaberto para edição continua aparecendo.
   const lotesComInseminacao = editandoManejo
     ? lotes.filter((l) => l.id === editandoManejo.loteId).map((l) => ({ ...l, ordem: editandoManejo.ordem }))
-    : lotes.filter((l) =>
-        manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem) &&
-        !manejos.some((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === l.ordem)
-      );
+    // cada lote entra com a PRIMEIRA ordem que tem Inseminação e ainda não tem Diagnóstico — não
+    // só a ordem "atual" do lote. Assim um lote importado com 1ª e 2ª IATF (que guarda só a mais
+    // avançada como ordem atual) continua aparecendo aqui pra cada diagnóstico que faltar.
+    : lotes.map((l) => {
+        const ordemPendente = ORDENS_IATF.find((o) =>
+          manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === o) &&
+          !manejos.some((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === o)
+        );
+        return ordemPendente ? { ...l, ordem: ordemPendente } : null;
+      }).filter(Boolean);
 
   const [lotesSelecionados, setLotesSelecionados] = useState(lotesComInseminacao[0] ? [lotesComInseminacao[0].id] : []);
   const [msgLote, setMsgLote] = useState("");
@@ -6161,7 +6224,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
       const lote = lotes.find((l) => l.id === idLote);
       const registrosDoLote = registros.filter((r) => r.loteId === idLote);
       if (!lote || registrosDoLote.length === 0) return;
-      const manejoId = registrarManejo({ tipo: "diagnostico", loteId: lote.id, ordem: lote.ordem || ordemComum, medicamentos: [], localEstoque: null, animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo, destinoVazias });
+      const manejoId = registrarManejo({ tipo: "diagnostico", loteId: lote.id, ordem: lotesSelecionadosObjs.find((l) => l.id === idLote)?.ordem || lote.ordem || ordemComum, medicamentos: [], localEstoque: null, animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo, destinoVazias });
       manejoIds.push(manejoId);
       // animais Vazia geram uma sugestão de Ressinc OU de Repasse (nunca as duas), conforme o
       // "Destino para vazias" escolhido — "Descarte" não gera nenhuma sugestão.
@@ -6176,7 +6239,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     if (chaveRascunho) limparRascunho(chaveRascunho);
   };
 
-  const historico = manejos.filter((m) => m.tipo === "diagnostico").slice(0, 6);
+  const historico = manejos.filter((m) => m.tipo === "diagnostico").sort(ordenarManejosRecentesPrimeiro);
   const nomeLote = (id) => lotes.find((l) => l.id === id)?.nome || "—";
 
   const [confirmandoExclusaoId, setConfirmandoExclusaoId] = useState(null);
