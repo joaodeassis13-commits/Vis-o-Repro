@@ -104,6 +104,9 @@ import logoVisaoAgropecuariaImg from "./assets/logo-visao-agropecuaria.png";
 
 const uid = (p = "id") => `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 // converte texto digitado pelo usuário (aceita vírgula OU ponto como separador decimal) em número
+// "Desconhecidos" é o lote que guarda animais sem lote definido (na leitura ou na importação) — ele
+// nunca gera sugestão de manejo seguinte (Diagnóstico, Ressinc, Repasse).
+const ehNomeDesconhecidos = (nome) => String(nome || "").trim().toLowerCase() === "desconhecidos";
 const numBR = (v) => Number(String(v ?? "").trim().replace(",", "."));
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (iso) => {
@@ -1233,10 +1236,11 @@ export default function App() {
     () => movimentos.filter((m) => m.local === "externo" ? insumos.find((i) => i.id === m.insumoId)?.usuarioId === currentUser?.id : m.fazendaId === fazendaAtivaId),
     [movimentos, fazendaAtivaId, insumos, currentUser]
   );
-  const agendamentosAtivos = useMemo(() => agendamentos.filter((a) => a.fazendaId === fazendaAtivaId), [agendamentos, fazendaAtivaId]);
+  const ehSugestaoDeDesconhecidos = (a) => a.origem === "automatico" && a.status === "pendente" && ehNomeDesconhecidos(a.loteNome);
+  const agendamentosAtivos = useMemo(() => agendamentos.filter((a) => a.fazendaId === fazendaAtivaId && !ehSugestaoDeDesconhecidos(a)), [agendamentos, fazendaAtivaId]);
   // todos os agendamentos das fazendas que o usuário logado pode acessar (para a visualização multi-fazenda na Agenda)
   const agendamentosVisiveis = useMemo(
-    () => agendamentos.filter((a) => fazendasVisiveis.some((f) => f.id === a.fazendaId)),
+    () => agendamentos.filter((a) => fazendasVisiveis.some((f) => f.id === a.fazendaId) && !ehSugestaoDeDesconhecidos(a)),
     [agendamentos, fazendasVisiveis]
   );
 
@@ -1574,6 +1578,7 @@ export default function App() {
     if (fazendaId === fazendaAtivaId) {
       const norm = (t) => String(t || "").trim().toLowerCase();
       gruposInsem.forEach((grupo) => {
+        if (ehNomeDesconhecidos(grupo.infoLote.loteNome)) return; // Desconhecidos não gera sugestão de Diagnóstico
         const temDiagnostico = manejosAtuais.some((m) => m.tipo === "diagnostico" && m.loteId === grupo.infoLote.loteId && m.ordem === grupo.ordem);
         if (temDiagnostico) return;
         const jaTemSugestao = agendamentos.some((ag) => ag.fazendaId === fazendaId && ag.tipo === "Diagnóstico" && (ag.ordem || null) === grupo.ordem && norm(ag.loteNome) === norm(grupo.infoLote.loteNome));
@@ -1760,10 +1765,11 @@ export default function App() {
   const [sugestoesRessinc, setSugestoesRessinc] = useState([]);
   React.useEffect(() => { if (podeGravar) gravarColecao("sugestoesRessinc", sugestoesRessinc); }, [podeGravar, sugestoesRessinc]);
   const sugestoesRessincAtivas = useMemo(
-    () => sugestoesRessinc.filter((s) => s.fazendaId === fazendaAtivaId && (safraAtivaId ? s.safraId === safraAtivaId : true) && s.status === "pendente"),
-    [sugestoesRessinc, fazendaAtivaId, safraAtivaId]
+    () => sugestoesRessinc.filter((s) => s.fazendaId === fazendaAtivaId && (safraAtivaId ? s.safraId === safraAtivaId : true) && s.status === "pendente" && !ehNomeDesconhecidos(lotes.find((l) => l.id === s.loteId)?.nome)),
+    [sugestoesRessinc, fazendaAtivaId, safraAtivaId, lotes]
   );
   const criarSugestaoRessinc = (loteId, brincos, origemManejoId, dataOrigem) => {
+    if (ehNomeDesconhecidos(lotes.find((l) => l.id === loteId)?.nome)) return null; // Desconhecidos não gera sugestão
     const id = uid("sug");
     setSugestoesRessinc((a) => [...a, {
       id, loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
@@ -1787,10 +1793,11 @@ export default function App() {
   const [sugestoesRepasse, setSugestoesRepasse] = useState([]);
   React.useEffect(() => { if (podeGravar) gravarColecao("sugestoesRepasse", sugestoesRepasse); }, [podeGravar, sugestoesRepasse]);
   const sugestoesRepasseAtivas = useMemo(
-    () => sugestoesRepasse.filter((s) => s.fazendaId === fazendaAtivaId && (safraAtivaId ? s.safraId === safraAtivaId : true) && s.status === "pendente"),
-    [sugestoesRepasse, fazendaAtivaId, safraAtivaId]
+    () => sugestoesRepasse.filter((s) => s.fazendaId === fazendaAtivaId && (safraAtivaId ? s.safraId === safraAtivaId : true) && s.status === "pendente" && !ehNomeDesconhecidos(lotes.find((l) => l.id === s.loteId)?.nome)),
+    [sugestoesRepasse, fazendaAtivaId, safraAtivaId, lotes]
   );
   const criarSugestaoRepasse = (loteId, brincos, origemManejoId, dataOrigem) => {
+    if (ehNomeDesconhecidos(lotes.find((l) => l.id === loteId)?.nome)) return null; // Desconhecidos não gera sugestão
     setSugestoesRepasse((a) => [...a, {
       id: uid("sug"), loteId, brincos, origemManejoId, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null,
       data: dataOrigem || todayISO(), status: "pendente", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
@@ -2121,6 +2128,7 @@ export default function App() {
   };
 
   const gerarPreAgendamentos = (m) => {
+    if (ehNomeDesconhecidos(m.loteNome)) return; // Desconhecidos não gera sugestão de manejo seguinte
     const addDiasISO = (iso, n) => ymd(addDays(parseISODate(iso), n));
     const base = { loteNome: m.loteNome || "", retiroId: m.retiroId || null, ordem: m.ordem || null, categoria: m.categoria || null, origemAgendamentoId: m.origemAgendamentoId || null, numeroAnimais: m.numeroAnimais || null };
     // se essa sugestão já tinha sido apagada manualmente antes (a partir desta MESMA origem),
@@ -2185,6 +2193,7 @@ export default function App() {
   // aparecem normalmente e o próprio usuário decide qual manter, na seção "Agendamentos duplicados"
   // da Agenda (veja gruposDuplicados em AbaAgenda).
   const criarPreAgendamento = (ag) => {
+    if (ehNomeDesconhecidos(ag.loteNome)) return; // idem
     if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação que originou este pré-agendamento já avisou
     if (fazendaAtivaNaoLicenciada) return; // idem
     const id = uid("ag");
@@ -3431,6 +3440,7 @@ function textoOrdensFeitas(lote, manejos) {
 }
 
 function proximoPassoDoLote(lote, manejos) {
+  if (ehNomeDesconhecidos(lote.nome)) return "Animais sem lote definido — não gera manejos seguintes";
   const ms = manejos.filter((m) => m.loteId === lote.id && !m.excluido);
   const tem = (tipo, o) => ms.some((m) => m.tipo === tipo && m.ordem === o);
   // 1) Diagnóstico pendente em qualquer ordem (lote importado pode ter várias ordens)
@@ -4355,7 +4365,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // aqui pela ordem em que a cadeia realmente parou — as anteriores já seguiram adiante.
   const TIPOS_DE_CICLO = ["implantacao", "ressinc", "retirada", "inseminacao", "diagnostico"];
   const lotesElegiveisRessincManual = lotes.flatMap((l) => {
-    if (idsLotesComSugestaoPendenteRessinc.has(l.id)) return [];
+    if (idsLotesComSugestaoPendenteRessinc.has(l.id) || ehNomeDesconhecidos(l.nome)) return [];
     return ORDENS_IATF.flatMap((o) => {
       const proxima = proximaOrdem(o);
       if (!proxima) return [];
@@ -6029,7 +6039,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     // cada lote entra com a PRIMEIRA ordem que tem Inseminação e ainda não tem Diagnóstico — não
     // só a ordem "atual" do lote. Assim um lote importado com 1ª e 2ª IATF (que guarda só a mais
     // avançada como ordem atual) continua aparecendo aqui pra cada diagnóstico que faltar.
-    : lotes.map((l) => {
+    : lotes.filter((l) => !ehNomeDesconhecidos(l.nome)).map((l) => {
         const ordemPendente = ORDENS_IATF.find((o) =>
           manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === o) &&
           !manejos.some((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === o)
