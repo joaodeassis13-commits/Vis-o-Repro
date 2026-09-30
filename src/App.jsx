@@ -1068,7 +1068,7 @@ export default function App() {
     const usuariosParaEnviar = ["Administrador", "Suporte Adm"].includes(currentUser?.perfil)
       ? users
       : users.map((u) => { const { fazendasAutorizadas, ...resto } = u; return resto; });
-    const resultado = await sincronizar({ usuarios: usuariosParaEnviar, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes });
+    const resultado = await sincronizar({ usuarios: usuariosParaEnviar, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes }, currentUser?.perfil);
     // aplica o que veio certo mesmo que outra tabela tenha falhado — nunca descarta dados
     // válidos só porque outra parte da sincronização deu erro.
     if (resultado.atualizado) {

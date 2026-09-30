@@ -301,7 +301,7 @@ function mesclarComLocal(local, doServidor) {
   return [...doServidor, ...somenteLocais];
 }
 
-export async function sincronizar(estado) {
+export async function sincronizar(estado, perfilUsuario) {
   if (!supabaseConfigurado) {
     return { ok: false, motivo: "Supabase não configurado. Veja src/lib/supabaseClient.js." };
   }
@@ -324,8 +324,16 @@ export async function sincronizar(estado) {
   const idsApagados = new Set(exclusoesConhecidas.map((e) => e.id));
 
   const conflitosPorColecao = [];
+  // Suporte Adm nunca tem permissão de escrever em agendamentos/insumos/movimentos, em NENHUMA
+  // fazenda — é regra do próprio banco (fazenda_autorizada() não faz exceção pro perfil dele
+  // nessas três tabelas; só em fazendas/retiros/safras/lotes/manejos/usuarios, que têm política
+  // própria via eh_suporte_adm()). O "push tudo" genérico tentava reenviar esses dados mesmo
+  // assim (por exemplo, os que vieram na sincronização anterior só pra leitura), e isso travava
+  // a sincronização inteira dessas coleções pra sempre, em qualquer fazenda — nem tenta.
+  const COLECOES_PROIBIDAS_PARA_SUPORTE_ADM = new Set(["agendamentos", "insumos", "movimentos"]);
   for (const colecao of Object.keys(TABELAS)) {
     if (colecao === "exclusoes") { estado = { ...estado, exclusoes: exclusoesConhecidas }; continue; }
+    if (perfilUsuario === "Suporte Adm" && COLECOES_PROIBIDAS_PARA_SUPORTE_ADM.has(colecao)) continue;
     // nunca reenvia algo que já sabemos ter sido apagado (por este aparelho ou por outro)
     let itensSemApagados = (estado[colecao] || []).filter((item) => !item.id || !idsApagados.has(item.id));
     // um movimento cujo manejo já não existe mais localmente (foi excluído ou fundido com um
