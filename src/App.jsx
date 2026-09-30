@@ -1569,29 +1569,6 @@ export default function App() {
     });
     gruposDiag.forEach((grupo) => criarOuAtualizarManejo("diagnostico", grupo, grupo.animais));
 
-    // 4) Inseminação importada SEM Diagnóstico naquela ordem gera uma sugestão de Diagnóstico na
-    // Agenda (30 dias após a inseminação, igual ao fluxo normal) — nada de estoque é mexido. Não
-    // duplica: se já existe qualquer agendamento de Diagnóstico pra esse lote+ordem (ou se a
-    // pessoa já descartou o sugerido), não cria outro, então reimportar a planilha é seguro.
-    // Só vale pra fazenda ativa (a Agenda é dela); o Suporte Adm importando pra outra fazenda pula.
-    let sugestoesDiagnosticoCriadas = 0;
-    if (fazendaId === fazendaAtivaId) {
-      const norm = (t) => String(t || "").trim().toLowerCase();
-      gruposInsem.forEach((grupo) => {
-        if (ehNomeDesconhecidos(grupo.infoLote.loteNome)) return; // Desconhecidos não gera sugestão de Diagnóstico
-        const temDiagnostico = manejosAtuais.some((m) => m.tipo === "diagnostico" && m.loteId === grupo.infoLote.loteId && m.ordem === grupo.ordem);
-        if (temDiagnostico) return;
-        const jaTemSugestao = agendamentos.some((ag) => ag.fazendaId === fazendaId && ag.tipo === "Diagnóstico" && (ag.ordem || null) === grupo.ordem && norm(ag.loteNome) === norm(grupo.infoLote.loteNome));
-        if (jaTemSugestao) return;
-        const dataDiag = ymd(addDays(parseISODate(grupo.data), 30));
-        criarPreAgendamento({
-          loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId || null, ordem: grupo.ordem, categoria: grupo.infoLote.categoria || null,
-          numeroAnimais: grupo.animais.length, origemAgendamentoId: null, tipo: "Diagnóstico", data: dataDiag, titulo: `Diagnóstico — ${grupo.infoLote.loteNome}`,
-        });
-        sugestoesDiagnosticoCriadas++;
-      });
-    }
-
     setSafras(safrasAtuais);
     setRetiros(retirosAtuais);
     setLotes(lotesAtuais);
@@ -1599,7 +1576,7 @@ export default function App() {
     marcaPendencia();
     const idsSafrasDoImport = [...new Set([...chaveLote.values()].map((i) => i.safraId))];
     const safrasDoImport = idsSafrasDoImport.map((id) => ({ id, nome: safrasAtuais.find((s) => s.id === id)?.nome || "—" }));
-    return { manejosRecriadosDeExcluidos, safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length, safrasDoImport, sugestoesDiagnosticoCriadas };
+    return { manejosRecriadosDeExcluidos, safrasCriadas, retirosCriados, lotesCriados, lotesAtualizados, manejosCriados, manejosAtualizados, animaisImportados: linhas.length, safrasDoImport };
   };
 
   /* ---------- usuários (Administrador cadastra e autoriza acesso a fazendas) ---------- */
@@ -3638,8 +3615,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
                   {resultado.manejosCriados > 0 ? `, ${resultado.manejosCriados} manejo(s) de Inseminação/Diagnóstico criado(s)` : ""}
                   {resultado.manejosAtualizados > 0 ? `, ${resultado.manejosAtualizados} manejo(s) já existente(s) atualizado(s)` : ""} — {resultado.animaisImportados} animal(is) no total.
                   {resultado.manejosRecriadosDeExcluidos > 0 ? ` ${resultado.manejosRecriadosDeExcluidos} manejo(s) já tinham sido excluídos e foram criados de novo pela planilha (os excluídos continuam em Auditoria › Buscar manejos excluídos).` : ""}
-                  {resultado.sugestoesDiagnosticoCriadas > 0 ? ` ${resultado.sugestoesDiagnosticoCriadas} sugestão(ões) de Diagnóstico criada(s) na Agenda para inseminações ainda sem diagnóstico.` : ""}
-                  {" "}Lotes com diagnóstico e animais vazios aparecem em D0 › "Iniciar Ressinc manualmente".
+                  {" "}A importação não cria nenhum agendamento na Agenda. Inseminações sem Diagnóstico aparecem na aba Diagnóstico, e lotes com diagnóstico e animais vazios aparecem em D0 › "Iniciar Ressinc manualmente".
                 </p>
                 {!ehSuporteAdm && (resultado.safrasDoImport || []).some((sf) => sf.id !== safraAtivaId) && (
                   <p style={{ fontSize: 12.5, color: "#8A3E15", margin: "10px 0 0", lineHeight: 1.6, fontWeight: 600 }}>

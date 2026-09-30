@@ -337,6 +337,14 @@ export async function sincronizar(estado) {
       const idsDeManejosConhecidos = new Set((estado.manejos || []).map((m) => m.id));
       itensSemApagados = itensSemApagados.filter((mv) => !mv.manejoId || idsDeManejosConhecidos.has(mv.manejoId));
     }
+    // agendamento de fazenda NÃO licenciada só pode ser inserido/atualizado no banco se a linha já
+    // existir lá (regra de segurança do banco). Um agendamento assim criado antes dessa restrição
+    // (ou por algum caminho que não conferia isso) trava a sincronização INTEIRA de "agendamentos"
+    // pra sempre, do mesmo jeito que um movimento órfão — por isso some daqui também.
+    if (colecao === "agendamentos") {
+      const idsFazendasLicenciadas = new Set((estado.fazendas || []).filter((f) => f.licenciada !== false).map((f) => f.id));
+      itensSemApagados = itensSemApagados.filter((ag) => idsFazendasLicenciadas.has(ag.fazendaId));
+    }
     const resultado = await enviarColecao(colecao, itensSemApagados);
     if (!resultado.ok) erros.push(`${colecao}: ${resultado.erro}`);
     if (resultado.conflitos?.length > 0) conflitosPorColecao.push(`${colecao} (${resultado.conflitos.length})`);
