@@ -205,6 +205,15 @@ alter table manejos add column if not exists raca_touro text;  -- Repasse: raça
 -- Buscar manejos excluídos, caso precise recuperar as informações manualmente depois.
 alter table manejos add column if not exists excluido boolean not null default false;
 alter table manejos add column if not exists excluido_em timestamptz;
+-- nome de reserva de cada produto do protocolo hormonal (Implante/Benzoato/Prostaglandina/
+-- Cipionato/ECG-HCG), usado quando a importação de histórico não conseguiu resolver o id do
+-- insumo (por exemplo, Suporte Adm importando sem enxergar o Estoque da fazenda) — o nome fica
+-- guardado como reserva, e o cálculo de Custo resolve o produto por esse nome na hora de calcular.
+alter table manejos add column if not exists implante_nome text;
+alter table manejos add column if not exists benzoato_nome text;
+alter table manejos add column if not exists prostaglandina_nome text;
+alter table manejos add column if not exists cipionato_nome text;
+alter table manejos add column if not exists ecg_hcg_nome text;
 
 -- garante que a restrição de "tipo" já aceite os manejos mais novos mesmo em
 -- bancos criados antes deles existirem (o nome da constraint é o padrão gerado pelo Postgres).
