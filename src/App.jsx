@@ -1937,7 +1937,7 @@ export default function App() {
       if (agendamentoCorrespondente) {
         const idsRemover = new Set(coletarDescendentesIds(agendamentoCorrespondente.id, agendamentos));
         if (idsRemover.size > 0) setAgendamentos((a) => a.filter((ag) => !idsRemover.has(ag.id)));
-      } else {
+      } else if (!fazendaAtivaNaoLicenciada) {
         setAgendamentos((a) => [...a, {
           id: uid("ag"), fazendaId: fazendaAtivaId, tipo: tipoAgenda, data: manejoCompleto.data,
           loteNome: manejoCompleto.loteNome, retiroId: manejoCompleto.retiroId || null, ordem: manejoCompleto.ordem || null,
@@ -2259,7 +2259,7 @@ export default function App() {
           const filho = nova.find((ag) => ag.origemAgendamentoId === id && ag.tipo === prox.tipo);
           if (filho) {
             if (filho.data !== prox.data) nova = nova.map((ag) => ag.id === filho.id ? { ...ag, data: prox.data, atualizadoEm: new Date().toISOString() } : ag);
-          } else if (!(atualizado.sugestoesDescartadas || []).includes(prox.tipo)) {
+          } else if (!fazendaAtivaNaoLicenciada && !(atualizado.sugestoesDescartadas || []).includes(prox.tipo)) {
             nova = [...nova, {
               loteNome: atualizado.loteNome || "", retiroId: atualizado.retiroId || null, ordem: atualizado.ordem || null,
               categoria: atualizado.categoria || null, numeroAnimais: atualizado.numeroAnimais || null,
