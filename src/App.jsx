@@ -10433,6 +10433,7 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, insumos, manejos, manejosE
 function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: retirosProp, insumos: insumosProp, manejos: manejosProp, movimentos: movimentosProp, perfil, fazendasVisiveis, safras, lotesTodos, retirosTodos, insumosTodos, manejosTodos, movimentosTodos }) {
   const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtiva?.id || "");
   const [filtroSafraId, setFiltroSafraId] = useState("");
+  const [erroPDF, setErroPDF] = useState("");
   const usaFiltroAdmin = ["Administrador", "Suporte Adm"].includes(perfil); // Suporte Adm também não tem fazenda ativa — precisa do mesmo filtro multi-fazenda, senão tudo aparece vazio/zerado pra ele
   const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
   const safraExibida = usaFiltroAdmin ? (safras.find((s) => s.id === filtroSafraId) || null) : safraAtiva;
@@ -10672,6 +10673,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
   };
 
   const gerarRelatorioDetalhadoPDF = async () => {
+    setErroPDF("");
+    try {
     const [logoVarepro, logoVisao] = await Promise.all([
       carregarImagemBase64(logoVareproPdfImg),
       carregarImagemBase64(logoVisaoAgropecuariaImg),
@@ -10951,6 +10954,10 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
 
     doc.save(`visaorepro_relatorio-detalhado_${sufixoArquivo()}.pdf`);
+    } catch (erro) {
+      console.error("Falha ao gerar o Relatório Detalhado:", erro);
+      setErroPDF(erro?.message || "Falha desconhecida ao gerar o PDF.");
+    }
   };
 
   const totalAnimais = lotes.reduce((s, l) => s + (l.animais?.length || 0), 0);
@@ -10971,6 +10978,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
               Um PDF com tabelas prontas para apresentar: resumo zootécnico geral e detalhamento por retiro, lote, inseminador, mês de parição, raça de touro e ECC — com Concepção, Fertilidade, Nº de IATF por matriz e Custos por animal/inseminação/prenhez.
             </p>
             <BtnPrimary onClick={gerarRelatorioDetalhadoPDF} disabled={lotes.length === 0}><FileDown size={15} /> Exportar Relatório Detalhado (.pdf)</BtnPrimary>
+            {erroPDF && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 8 }}>Não foi possível gerar o PDF: {erroPDF}</p>}
           </div>
           <div style={cardStyle}>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 6 }}>Exportação por Animal</div>
