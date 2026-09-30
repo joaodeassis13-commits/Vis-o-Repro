@@ -804,26 +804,23 @@ grant execute on function benchmarking_taxa_prenhez_grupo(text) to authenticated
 drop function if exists benchmarking_taxa_fertilidade_sistema();
 create or replace function benchmarking_taxa_fertilidade_sistema(p_safra_nome text default null)
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
-  with prenhas_por_fazenda as (
-    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+  with diagnosticados_por_fazenda as (
+    -- Fertilidade = Prenhas ÷ animais COM DIAGNÓSTICO (quem só tem Inseminação, sem
+    -- diagnóstico ainda, não entra no denominador).
+    select m.fazenda_id,
+      count(*) as diagnosticados,
+      count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
+    join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico'
+    where m.tipo = 'diagnostico' and l.nome <> 'Desconhecidos'
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
   ),
-  animais_por_fazenda as (
-    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
-    from lotes l
-    where l.nome <> 'Desconhecidos'
-      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
-    group by l.fazenda_id
-  ),
   por_fazenda as (
-    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
-    from animais_por_fazenda a
-    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
-    where a.total_animais > 0
+    select fazenda_id, round(100.0 * prenhas / diagnosticados, 1) as taxa
+    from diagnosticados_por_fazenda
+    where diagnosticados > 0
   ),
   tamanho as (
     select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda
@@ -847,28 +844,24 @@ grant execute on function benchmarking_taxa_fertilidade_sistema(text) to authent
 drop function if exists benchmarking_taxa_fertilidade_grupo();
 create or replace function benchmarking_taxa_fertilidade_grupo(p_safra_nome text default null)
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
-  with prenhas_por_fazenda as (
-    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+  with diagnosticados_por_fazenda as (
+    -- Fertilidade = Prenhas ÷ animais COM DIAGNÓSTICO (quem só tem Inseminação, sem
+    -- diagnóstico ainda, não entra no denominador).
+    select m.fazenda_id,
+      count(*) as diagnosticados,
+      count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
+    join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico'
+    where m.tipo = 'diagnostico' and l.nome <> 'Desconhecidos'
       and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
   ),
-  animais_por_fazenda as (
-    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
-    from lotes l
-    where l.nome <> 'Desconhecidos'
-      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = l.fazenda_id)
-      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
-    group by l.fazenda_id
-  ),
   por_fazenda as (
-    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
-    from animais_por_fazenda a
-    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
-    where a.total_animais > 0
+    select fazenda_id, round(100.0 * prenhas / diagnosticados, 1) as taxa
+    from diagnosticados_por_fazenda
+    where diagnosticados > 0
   ),
   tamanho as (
     select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda
@@ -1017,31 +1010,26 @@ $$ language sql stable security definer set search_path = public;
 grant execute on function benchmarking_concepcao_por_categoria_grupo(text, text) to authenticated;
 
 -- ---------- fertilidade POR CATEGORIA (Nulípara/Primípara/Multípara) ----------
--- Prenhas daquela categoria / total de animais nos lotes daquela categoria (não só quem tem Diagnóstico).
+-- Prenhas daquela categoria / animais COM DIAGNÓSTICO daquela categoria (quem só tem Inseminação,
+-- sem diagnóstico ainda, não entra no denominador).
 drop function if exists benchmarking_fertilidade_por_categoria_sistema(text);
 create or replace function benchmarking_fertilidade_por_categoria_sistema(p_categoria text, p_safra_nome text default null)
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
-  with prenhas_por_fazenda as (
-    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+  with diagnosticados_por_fazenda as (
+    select m.fazenda_id,
+      count(*) as diagnosticados,
+      count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
     join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico' and l.categoria = p_categoria
+    where m.tipo = 'diagnostico' and l.categoria = p_categoria and l.nome <> 'Desconhecidos'
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
   ),
-  animais_por_fazenda as (
-    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
-    from lotes l
-    where l.nome <> 'Desconhecidos' and l.categoria = p_categoria
-      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
-    group by l.fazenda_id
-  ),
   por_fazenda as (
-    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
-    from animais_por_fazenda a
-    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
-    where a.total_animais > 0
+    select fazenda_id, round(100.0 * prenhas / diagnosticados, 1) as taxa
+    from diagnosticados_por_fazenda
+    where diagnosticados > 0
   ),
   tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
   ranqueadas as (
@@ -1060,29 +1048,22 @@ grant execute on function benchmarking_fertilidade_por_categoria_sistema(text, t
 drop function if exists benchmarking_fertilidade_por_categoria_grupo(text);
 create or replace function benchmarking_fertilidade_por_categoria_grupo(p_categoria text, p_safra_nome text default null)
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
-  with prenhas_por_fazenda as (
-    select m.fazenda_id, count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
+  with diagnosticados_por_fazenda as (
+    select m.fazenda_id,
+      count(*) as diagnosticados,
+      count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
     join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico' and l.categoria = p_categoria
+    where m.tipo = 'diagnostico' and l.categoria = p_categoria and l.nome <> 'Desconhecidos'
       and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
   ),
-  animais_por_fazenda as (
-    select l.fazenda_id, sum(coalesce(array_length(l.animais, 1), 0)) as total_animais
-    from lotes l
-    where l.nome <> 'Desconhecidos' and l.categoria = p_categoria
-      and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = l.fazenda_id)
-      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
-    group by l.fazenda_id
-  ),
   por_fazenda as (
-    select a.fazenda_id, round(100.0 * coalesce(p.prenhas, 0) / a.total_animais, 1) as taxa
-    from animais_por_fazenda a
-    left join prenhas_por_fazenda p on p.fazenda_id = a.fazenda_id
-    where a.total_animais > 0
+    select fazenda_id, round(100.0 * prenhas / diagnosticados, 1) as taxa
+    from diagnosticados_por_fazenda
+    where diagnosticados > 0
   ),
   tamanho as ( select greatest(1, round(count(*) * 0.25)) as qtd from por_fazenda ),
   ranqueadas as (

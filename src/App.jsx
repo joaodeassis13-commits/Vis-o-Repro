@@ -8870,13 +8870,20 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     agruparConcepcao(registros.filter((r) => r.categoria === cat), () => `${cat}s`)[0]
   );
 
-  // Taxa de fertilidade = total de Prenhas / total de animais submetidos (diferente da Taxa de
-  // concepção, que só considera quem já tem Inseminação + Diagnóstico cruzados).
-  const taxaFertilidade = totalAnimais > 0 ? Math.round((totalPrenhas / totalAnimais) * 1000) / 10 : null;
+  // Taxa de fertilidade = total de Prenhas / total de animais COM DIAGNÓSTICO registrado — quem
+  // só tem Inseminação, sem diagnóstico ainda, não entra no denominador.
+  const contarDiagnosticados = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).length, 0);
+  const totalDiagnosticados = contarDiagnosticados(diagnosticosValidos) + contarDiagnosticados(diagnosticosRepasseValidos);
+  const diagnosticadosPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
+    label: `${cat}s`,
+    valor: contarDiagnosticados(diagnosticosValidos.filter((m) => categoriaDoLote(m.loteId) === cat))
+      + contarDiagnosticados(diagnosticosRepasseValidos.filter((m) => categoriaDoLote(m.loteId) === cat)),
+  }));
+  const taxaFertilidade = totalDiagnosticados > 0 ? Math.round((totalPrenhas / totalDiagnosticados) * 1000) / 10 : null;
   const fertilidadeComCategoria = comColunasPorCategoria(
-    [{ label: "Geral", n: totalAnimais, taxa: taxaFertilidade }],
+    [{ label: "Geral", n: totalDiagnosticados, taxa: taxaFertilidade }],
     (cat) => {
-      const totalCat = animaisPorCategoria.find((a) => a.label === `${cat}s`)?.valor || 0;
+      const totalCat = diagnosticadosPorCategoria.find((a) => a.label === `${cat}s`)?.valor || 0;
       const prenhasCat = prenhasPorCategoria.find((p) => p.label === `${cat}s`)?.valor || 0;
       return { label: `${cat}s`, n: totalCat, taxa: totalCat > 0 ? Math.round((prenhasCat / totalCat) * 1000) / 10 : 0 };
     }
@@ -9315,19 +9322,17 @@ function taxasDePrenhezPorFazenda(listaManejos) {
     .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
 }
 
-// taxa de FERTILIDADE por fazenda = Prenhas / total de animais nos lotes (diferente da taxa de
-// prenhez/concepção acima, que só considera quem já tem Diagnóstico). Lote "Desconhecidos" nunca entra.
+// taxa de FERTILIDADE por fazenda = Prenhas / total de animais COM DIAGNÓSTICO (quem só tem
+// Inseminação sem diagnóstico não entra no denominador). Lote "Desconhecidos" nunca entra.
 function taxasDeFertilidadePorFazenda(listaLotes, listaManejos) {
   const idsDesconhecidos = new Set(listaLotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
-  const animaisPorFazenda = {};
-  listaLotes.filter((l) => !idsDesconhecidos.has(l.id)).forEach((l) => {
-    animaisPorFazenda[l.fazendaId] = (animaisPorFazenda[l.fazendaId] || 0) + (l.animais || []).length;
-  });
+  const diagnosticadosPorFazenda = {};
   const prenhasPorFazenda = {};
   listaManejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId)).forEach((m) => {
+    diagnosticadosPorFazenda[m.fazendaId] = (diagnosticadosPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).length;
     prenhasPorFazenda[m.fazendaId] = (prenhasPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length;
   });
-  return Object.entries(animaisPorFazenda)
+  return Object.entries(diagnosticadosPorFazenda)
     .filter(([, total]) => total > 0)
     .map(([fazendaId, total]) => ({ fazendaId, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
 }
@@ -9366,19 +9371,17 @@ function taxasDePrenhezPorCategoriaPorFazenda(listaManejos, listaLotes, categori
     .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
 }
 
-// fertilidade por CATEGORIA — Prenhas daquela categoria / total de animais nos lotes daquela categoria.
+// fertilidade por CATEGORIA — Prenhas daquela categoria / animais COM DIAGNÓSTICO daquela categoria.
 function taxasDeFertilidadePorCategoriaPorFazenda(listaLotes, listaManejos, categoria) {
   const idsDesconhecidos = new Set(listaLotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
   const categoriaDoLote = (loteId) => listaLotes.find((l) => l.id === loteId)?.categoria;
-  const animaisPorFazenda = {};
-  listaLotes.filter((l) => !idsDesconhecidos.has(l.id) && l.categoria === categoria).forEach((l) => {
-    animaisPorFazenda[l.fazendaId] = (animaisPorFazenda[l.fazendaId] || 0) + (l.animais || []).length;
-  });
+  const diagnosticadosPorFazenda = {};
   const prenhasPorFazenda = {};
   listaManejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId) && categoriaDoLote(m.loteId) === categoria).forEach((m) => {
+    diagnosticadosPorFazenda[m.fazendaId] = (diagnosticadosPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).length;
     prenhasPorFazenda[m.fazendaId] = (prenhasPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length;
   });
-  return Object.entries(animaisPorFazenda)
+  return Object.entries(diagnosticadosPorFazenda)
     .filter(([, total]) => total > 0)
     .map(([fazendaId, total]) => ({ fazendaId, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
 }
@@ -9803,7 +9806,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
           </div>
 
           <p style={{ fontSize: 11, color: "#9B9686" }}>
-            Concepção considera só quem já tem Inseminação e Diagnóstico registrados; Fertilidade compara Prenhas com o total de animais nos lotes. Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.
+            Concepção considera só quem já tem Inseminação e Diagnóstico registrados; Fertilidade compara Prenhas com o total de animais diagnosticados (quem só tem Inseminação, sem diagnóstico ainda, não entra na conta). Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.
           </p>
         </>
       )}
@@ -10743,8 +10746,10 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const registrosCat = registrosPDF.filter((r) => r.categoria === cat);
       const custosCat = calcularCustosPDF(idsLotesCat);
       const totalCat = statsGrupoPDF(registrosCat);
-      const totalAnimaisCat = lotes.filter((l) => l.categoria === cat).reduce((s, l) => s + (l.animais || []).length, 0);
-      const fertilidadeCat = totalAnimaisCat > 0 ? (totalCat.prenhas / totalAnimaisCat) * 100 : null;
+      // Fertilidade = Prenhas ÷ animais COM DIAGNÓSTICO daquela categoria (registrosCat só existe
+      // quando há Diagnóstico casado com a Inseminação — quem só tem Inseminação não entra aqui).
+      const totalDiagnosticadosCat = registrosCat.length;
+      const fertilidadeCat = totalDiagnosticadosCat > 0 ? (totalCat.prenhas / totalDiagnosticadosCat) * 100 : null;
       const iatfCat = iatfPorMatrizPDF(idsLotesCat);
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosCat.filter((r) => r.ordem === ordem));
