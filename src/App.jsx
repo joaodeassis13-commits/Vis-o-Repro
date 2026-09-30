@@ -1544,7 +1544,7 @@ export default function App() {
       if (grupoInsem.doseEcgHcg == null && linha.doseEcgHcg?.trim()) grupoInsem.doseEcgHcg = numBR(linha.doseEcgHcg);
       grupoInsem.animais.push({
         brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro, linha.partida || null), touroInformado: linha.touro?.trim() || null,
-        racaTouro: linha.racaTouro?.trim() || null, ecc: linha.ecc?.trim() || null, partidaInformada: linha.partida || null,
+        racaTouro: linha.racaTouro?.trim() || null, ecc: normalizarEcc(linha.ecc), partidaInformada: linha.partida || null,
         // GnRH é dado na Inseminação em si (por animal), não no protocolo do D0/Retirada.
         gnrhId: acharInsumoPorNome(linha.gnrh), doseGnrh: linha.doseGnrh?.trim() ? numBR(linha.doseGnrh) : null,
       });
@@ -9858,7 +9858,7 @@ function AbaNovosAnimais({ fazendaAtiva, safraAtiva, manejos, registrarManejo, r
           brincosJaNaLista.add(brinco);
           novos.push({
             brinco, raca: colRaca ? String(linha[colRaca] ?? "").trim() || null : null,
-            ecc: colEcc ? String(linha[colEcc] ?? "").trim() || null : null,
+            ecc: colEcc ? normalizarEcc(linha[colEcc]) : null,
             peso: colPeso && linha[colPeso] !== "" ? numBR(String(linha[colPeso])) : null,
             statusPrenhez, observacoes: colObs ? String(linha[colObs] ?? "").trim() || null : null,
           });
