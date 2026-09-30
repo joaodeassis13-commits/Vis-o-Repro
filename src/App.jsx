@@ -134,13 +134,19 @@ const resumoMedicamentos = (arr, insumos) => {
 // importação realmente ligou os produtos certos — sem isso não tinha como ver esse dado em
 // lugar nenhum, só o resultado final (o Custo) já calculado.
 const resumoProtocoloHormonal = (m, insumos) => {
-  const nome = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "?";
+  // se o id não foi resolvido na importação, mostra o nome digitado na planilha mesmo assim
+  // (com um "?" indicando que ainda não achou o insumo correspondente) — o custo é resolvido
+  // por esse nome na hora de calcular, então o produto não fica de fora só por causa disso.
+  const nomeIdOuReserva = (id, nomeReserva) => {
+    if (id) return insumos.find((i) => i.id === id)?.produtoComercial || "?";
+    return nomeReserva ? `${nomeReserva} (?)` : null;
+  };
   const partes = [];
-  if (m.implanteId) partes.push(nome(m.implanteId));
-  if (m.benzoatoId) partes.push(`${nome(m.benzoatoId)} (${m.doseBenzoato ?? "—"})`);
-  if (m.prostaglandinaId) partes.push(`${nome(m.prostaglandinaId)} (${m.doseProstaglandina ?? "—"})`);
-  if (m.cipionatoId) partes.push(`${nome(m.cipionatoId)} (${m.doseCipionato ?? "—"})`);
-  if (m.ecgHcgId) partes.push(`${nome(m.ecgHcgId)} (${m.doseEcgHcg ?? "—"})`);
+  const implante = nomeIdOuReserva(m.implanteId, m.implanteNome); if (implante) partes.push(implante);
+  const benzoato = nomeIdOuReserva(m.benzoatoId, m.benzoatoNome); if (benzoato) partes.push(`${benzoato} (${m.doseBenzoato ?? "—"})`);
+  const prostaglandina = nomeIdOuReserva(m.prostaglandinaId, m.prostaglandinaNome); if (prostaglandina) partes.push(`${prostaglandina} (${m.doseProstaglandina ?? "—"})`);
+  const cipionato = nomeIdOuReserva(m.cipionatoId, m.cipionatoNome); if (cipionato) partes.push(`${cipionato} (${m.doseCipionato ?? "—"})`);
+  const ecgHcg = nomeIdOuReserva(m.ecgHcgId, m.ecgHcgNome); if (ecgHcg) partes.push(`${ecgHcg} (${m.doseEcgHcg ?? "—"})`);
   return partes.length > 0 ? partes.join(" · ") : "—";
 };
 
@@ -1433,11 +1439,11 @@ export default function App() {
           ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador,
               categoria: categoriaDoLote || m.categoria || null,
               tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null,
-              implanteId: grupo.implanteId || m.implanteId || null,
-              benzoatoId: grupo.benzoatoId || m.benzoatoId || null, doseBenzoato: grupo.doseBenzoato ?? m.doseBenzoato ?? null,
-              prostaglandinaId: grupo.prostaglandinaId || m.prostaglandinaId || null, doseProstaglandina: grupo.doseProstaglandina ?? m.doseProstaglandina ?? null,
-              cipionatoId: grupo.cipionatoId || m.cipionatoId || null, doseCipionato: grupo.doseCipionato ?? m.doseCipionato ?? null,
-              ecgHcgId: grupo.ecgHcgId || m.ecgHcgId || null, doseEcgHcg: grupo.doseEcgHcg ?? m.doseEcgHcg ?? null }
+              implanteId: grupo.implanteId || m.implanteId || null, implanteNome: grupo.implanteNome || m.implanteNome || null,
+              benzoatoId: grupo.benzoatoId || m.benzoatoId || null, benzoatoNome: grupo.benzoatoNome || m.benzoatoNome || null, doseBenzoato: grupo.doseBenzoato ?? m.doseBenzoato ?? null,
+              prostaglandinaId: grupo.prostaglandinaId || m.prostaglandinaId || null, prostaglandinaNome: grupo.prostaglandinaNome || m.prostaglandinaNome || null, doseProstaglandina: grupo.doseProstaglandina ?? m.doseProstaglandina ?? null,
+              cipionatoId: grupo.cipionatoId || m.cipionatoId || null, cipionatoNome: grupo.cipionatoNome || m.cipionatoNome || null, doseCipionato: grupo.doseCipionato ?? m.doseCipionato ?? null,
+              ecgHcgId: grupo.ecgHcgId || m.ecgHcgId || null, ecgHcgNome: grupo.ecgHcgNome || m.ecgHcgNome || null, doseEcgHcg: grupo.doseEcgHcg ?? m.doseEcgHcg ?? null }
           : m);
         manejosAtualizados++;
       } else {
@@ -1449,11 +1455,11 @@ export default function App() {
           // protocolo hormonal do D0/Retirada, quando informado na planilha — usado só pra
           // calcular custo (ver construirEventosCustoInseminacao/construirRegistrosConcepcao),
           // nunca gera saída de estoque (a importação de histórico nunca desconta estoque).
-          implanteId: grupo.implanteId || null,
-          benzoatoId: grupo.benzoatoId || null, doseBenzoato: grupo.doseBenzoato ?? null,
-          prostaglandinaId: grupo.prostaglandinaId || null, doseProstaglandina: grupo.doseProstaglandina ?? null,
-          cipionatoId: grupo.cipionatoId || null, doseCipionato: grupo.doseCipionato ?? null,
-          ecgHcgId: grupo.ecgHcgId || null, doseEcgHcg: grupo.doseEcgHcg ?? null,
+          implanteId: grupo.implanteId || null, implanteNome: grupo.implanteNome || null,
+          benzoatoId: grupo.benzoatoId || null, benzoatoNome: grupo.benzoatoNome || null, doseBenzoato: grupo.doseBenzoato ?? null,
+          prostaglandinaId: grupo.prostaglandinaId || null, prostaglandinaNome: grupo.prostaglandinaNome || null, doseProstaglandina: grupo.doseProstaglandina ?? null,
+          cipionatoId: grupo.cipionatoId || null, cipionatoNome: grupo.cipionatoNome || null, doseCipionato: grupo.doseCipionato ?? null,
+          ecgHcgId: grupo.ecgHcgId || null, ecgHcgNome: grupo.ecgHcgNome || null, doseEcgHcg: grupo.doseEcgHcg ?? null,
           operador: currentUser?.nome || "Importação", criadoEm: new Date().toISOString(),
         }];
         manejosCriados++;
@@ -1538,8 +1544,11 @@ export default function App() {
       const chave = `${infoLote.loteId}|${ordem}|${linha.dataInseminacao}`;
       if (!gruposInsem.has(chave)) gruposInsem.set(chave, {
         infoLote, ordem, data: linha.dataInseminacao, inseminador: null, tipoManejo: null, protocolo: null,
-        implanteId: null, benzoatoId: null, doseBenzoato: null, prostaglandinaId: null, doseProstaglandina: null,
-        cipionatoId: null, doseCipionato: null, ecgHcgId: null, doseEcgHcg: null, animais: [],
+        implanteId: null, implanteNome: null,
+        benzoatoId: null, benzoatoNome: null, doseBenzoato: null,
+        prostaglandinaId: null, prostaglandinaNome: null, doseProstaglandina: null,
+        cipionatoId: null, cipionatoNome: null, doseCipionato: null,
+        ecgHcgId: null, ecgHcgNome: null, doseEcgHcg: null, animais: [],
       });
       const grupoInsem = gruposInsem.get(chave);
       if (!grupoInsem.inseminador && linha.inseminador?.trim()) grupoInsem.inseminador = linha.inseminador.trim();
@@ -1548,20 +1557,24 @@ export default function App() {
       // protocolo hormonal do D0/Retirada: um valor só por lote+ordem+data (o mesmo protocolo
       // vale pro lote inteiro), não por animal — por isso só preenche na primeira linha que trouxer
       // cada campo, igual já acontecia com inseminador/tipoManejo/protocolo.
-      if (!grupoInsem.implanteId && linha.implante?.trim()) grupoInsem.implanteId = acharInsumoPorNome(linha.implante);
-      if (!grupoInsem.benzoatoId && linha.benzoato?.trim()) grupoInsem.benzoatoId = acharInsumoPorNome(linha.benzoato);
+      // Guarda também o NOME digitado (Nome), mesmo sem achar o id agora: quem importa (por
+      // exemplo o Suporte Adm) pode não ter acesso ao Estoque daquela fazenda pra resolver o id
+      // na hora — o nome fica como reserva pra achar o produto depois, na hora de calcular o
+      // Custo, usando o Estoque de quem estiver olhando o relatório.
+      if (!grupoInsem.implanteId && linha.implante?.trim()) { grupoInsem.implanteId = acharInsumoPorNome(linha.implante); grupoInsem.implanteNome = linha.implante.trim(); }
+      if (!grupoInsem.benzoatoId && linha.benzoato?.trim()) { grupoInsem.benzoatoId = acharInsumoPorNome(linha.benzoato); grupoInsem.benzoatoNome = linha.benzoato.trim(); }
       if (grupoInsem.doseBenzoato == null && linha.doseBenzoato?.trim()) grupoInsem.doseBenzoato = numBR(linha.doseBenzoato);
-      if (!grupoInsem.prostaglandinaId && linha.prostaglandina?.trim()) grupoInsem.prostaglandinaId = acharInsumoPorNome(linha.prostaglandina);
+      if (!grupoInsem.prostaglandinaId && linha.prostaglandina?.trim()) { grupoInsem.prostaglandinaId = acharInsumoPorNome(linha.prostaglandina); grupoInsem.prostaglandinaNome = linha.prostaglandina.trim(); }
       if (grupoInsem.doseProstaglandina == null && linha.doseProstaglandina?.trim()) grupoInsem.doseProstaglandina = numBR(linha.doseProstaglandina);
-      if (!grupoInsem.cipionatoId && linha.cipionato?.trim()) grupoInsem.cipionatoId = acharInsumoPorNome(linha.cipionato);
+      if (!grupoInsem.cipionatoId && linha.cipionato?.trim()) { grupoInsem.cipionatoId = acharInsumoPorNome(linha.cipionato); grupoInsem.cipionatoNome = linha.cipionato.trim(); }
       if (grupoInsem.doseCipionato == null && linha.doseCipionato?.trim()) grupoInsem.doseCipionato = numBR(linha.doseCipionato);
-      if (!grupoInsem.ecgHcgId && linha.ecgHcg?.trim()) grupoInsem.ecgHcgId = acharInsumoPorNome(linha.ecgHcg);
+      if (!grupoInsem.ecgHcgId && linha.ecgHcg?.trim()) { grupoInsem.ecgHcgId = acharInsumoPorNome(linha.ecgHcg); grupoInsem.ecgHcgNome = linha.ecgHcg.trim(); }
       if (grupoInsem.doseEcgHcg == null && linha.doseEcgHcg?.trim()) grupoInsem.doseEcgHcg = numBR(linha.doseEcgHcg);
       grupoInsem.animais.push({
         brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro, linha.partida || null), touroInformado: linha.touro?.trim() || null,
         racaTouro: linha.racaTouro?.trim() || null, ecc: normalizarEcc(linha.ecc), partidaInformada: linha.partida || null,
         // GnRH é dado na Inseminação em si (por animal), não no protocolo do D0/Retirada.
-        gnrhId: acharInsumoPorNome(linha.gnrh), doseGnrh: linha.doseGnrh?.trim() ? numBR(linha.doseGnrh) : null,
+        gnrhId: acharInsumoPorNome(linha.gnrh), gnrhNome: linha.gnrh?.trim() || null, doseGnrh: linha.doseGnrh?.trim() ? numBR(linha.doseGnrh) : null,
       });
     });
     gruposInsem.forEach((grupo) => criarOuAtualizarManejo("inseminacao", grupo, grupo.animais));
@@ -8390,9 +8403,15 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
   };
   // custo do sêmen usado NESSE animal específico: o valor unitário do sêmen já É o preço por
   // dose (não tem "embalagem" pra dividir) — 1 palheta usada = 1 dose gasta com esse animal.
-  const custoSemenDoAnimal = (semenId) => {
-    if (!semenId) return 0;
-    return custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0;
+  // Sem id resolvido (ex.: importado por quem não tinha acesso ao Estoque), tenta pelo nome do
+  // touro informado — usa a partida se bater, senão o primeiro sêmen daquele touro que achar.
+  const custoSemenDoAnimal = (semenId, touroInformado, partidaInformada) => {
+    if (semenId) return custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0;
+    if (!touroInformado) return 0;
+    const candidatos = insumos.filter((i) => i.categoria === "Sêmen" && (i.touro || "").trim().toLowerCase() === touroInformado.trim().toLowerCase());
+    if (candidatos.length === 0) return 0;
+    const comAPartida = partidaInformada ? candidatos.find((i) => i.partida === partidaInformada) : null;
+    return custoPorUnidadeInsumo(comAPartida || candidatos[0]) || 0;
   };
   // custo da bainha usada NESSE manejo de Inseminação — sempre 1 unidade por animal, então o
   // valor unitário do produto já É o custo por animal, sem precisar dividir por nada.
@@ -8418,20 +8437,31 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
     return gasto / manejo.numeroAnimais;
   };
   const custoUnidade = (id) => id ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === id)) || 0) : 0;
+  // resolve pelo id quando já tem; sem id, tenta pelo NOME (categoria Hormônio) direto no
+  // Estoque de quem está calculando isso agora — cobre o caso de quem IMPORTOU o histórico não
+  // ter acesso ao Estoque daquela fazenda pra resolver o id na hora (ex.: Suporte Adm, que nunca
+  // enxerga Estoque de fazenda nenhuma). Sem essa reserva, o custo desses produtos ficava sempre
+  // zerado quando a importação era feita por alguém sem esse acesso, mesmo com tudo mais certo.
+  const custoUnidadePorIdOuNome = (id, nome) => {
+    if (id) return custoUnidade(id);
+    if (!nome) return 0;
+    const encontrado = insumos.find((i) => i.categoria === "Hormônio" && (i.produtoComercial || "").trim().toLowerCase() === nome.trim().toLowerCase());
+    return encontrado ? (custoPorUnidadeInsumo(encontrado) || 0) : 0;
+  };
   // protocolo hormonal do D0/Retirada vindo direto da IMPORTAÇÃO de histórico (sem manejo de D0/
   // Retirada de verdade por trás) — o próprio manejo de Inseminação carrega os produtos/doses
   // informados na planilha; calculado direto do valor unitário ATUAL em estoque (já "por animal").
   const custoHormonioImportadoDoAnimal = (insem) => {
     let total = 0;
-    if (insem.implanteId) total += custoUnidade(insem.implanteId);
-    if (insem.benzoatoId && insem.doseBenzoato) total += insem.doseBenzoato * custoUnidade(insem.benzoatoId);
-    if (insem.prostaglandinaId && insem.doseProstaglandina) total += insem.doseProstaglandina * custoUnidade(insem.prostaglandinaId);
-    if (insem.cipionatoId && insem.doseCipionato) total += insem.doseCipionato * custoUnidade(insem.cipionatoId);
-    if (insem.ecgHcgId && insem.doseEcgHcg) total += insem.doseEcgHcg * custoUnidade(insem.ecgHcgId);
+    if (insem.implanteId || insem.implanteNome) total += custoUnidadePorIdOuNome(insem.implanteId, insem.implanteNome);
+    if ((insem.benzoatoId || insem.benzoatoNome) && insem.doseBenzoato) total += insem.doseBenzoato * custoUnidadePorIdOuNome(insem.benzoatoId, insem.benzoatoNome);
+    if ((insem.prostaglandinaId || insem.prostaglandinaNome) && insem.doseProstaglandina) total += insem.doseProstaglandina * custoUnidadePorIdOuNome(insem.prostaglandinaId, insem.prostaglandinaNome);
+    if ((insem.cipionatoId || insem.cipionatoNome) && insem.doseCipionato) total += insem.doseCipionato * custoUnidadePorIdOuNome(insem.cipionatoId, insem.cipionatoNome);
+    if ((insem.ecgHcgId || insem.ecgHcgNome) && insem.doseEcgHcg) total += insem.doseEcgHcg * custoUnidadePorIdOuNome(insem.ecgHcgId, insem.ecgHcgNome);
     return total;
   };
   // GnRH é aplicado na própria Inseminação (por animal), não no D0/Retirada.
-  const custoGnrhDoAnimal = (detIns) => (detIns.gnrhId && detIns.doseGnrh) ? detIns.doseGnrh * custoUnidade(detIns.gnrhId) : 0;
+  const custoGnrhDoAnimal = (detIns) => (detIns.doseGnrh && (detIns.gnrhId || detIns.gnrhNome)) ? detIns.doseGnrh * custoUnidadePorIdOuNome(detIns.gnrhId, detIns.gnrhNome) : 0;
 
   const registros = [];
   inseminacoes.forEach((insem) => {
@@ -8472,7 +8502,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
         // custo real gasto NESSE animal (sêmen usado nele + bainha da inseminação + a fração
         // do hormônio do protocolo daquela ordem) — usado pra calcular custo por
         // Inseminador/Mês/Raça/ECC.
-        custoSemenAnimal: custoSemenDoAnimal(detIns.semenId),
+        custoSemenAnimal: custoSemenDoAnimal(detIns.semenId, detIns.touroInformado, detIns.partidaInformada),
         custoBainhaAnimal: custoBainhaDoManejo(insem.id),
         custoHormonioAnimal: custoHormonioOrdem + custoGnrhDoAnimal(detIns),
       });
@@ -8503,7 +8533,16 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
     if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.raca) return insumo.raca; }
     return null;
   };
-  const custoSemenDoAnimal = (semenId) => semenId ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0) : 0;
+  // sem id resolvido (ex.: importado por quem não tinha acesso ao Estoque), tenta pelo nome do
+  // touro informado — usa a partida se bater, senão o primeiro sêmen daquele touro que achar.
+  const custoSemenDoAnimal = (semenId, touroInformado, partidaInformada) => {
+    if (semenId) return custoPorUnidadeInsumo(insumos.find((i) => i.id === semenId)) || 0;
+    if (!touroInformado) return 0;
+    const candidatos = insumos.filter((i) => i.categoria === "Sêmen" && (i.touro || "").trim().toLowerCase() === touroInformado.trim().toLowerCase());
+    if (candidatos.length === 0) return 0;
+    const comAPartida = partidaInformada ? candidatos.find((i) => i.partida === partidaInformada) : null;
+    return custoPorUnidadeInsumo(comAPartida || candidatos[0]) || 0;
+  };
   const custoUnidade = (id) => id ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === id)) || 0) : 0;
   const custoBainhaDoManejo = (manejoId) => {
     const mov = movimentos.find((mv) => mv.tipo === "saida" && mv.manejoId === manejoId && ehBainha(insumos.find((i) => i.id === mv.insumoId)));
@@ -8526,18 +8565,28 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
   // manejo de Inseminação carrega os produtos/doses informados na planilha, e o custo é calculado
   // direto a partir do valor unitário ATUAL em estoque de cada produto (por isso não é dividido
   // por nº de animais como no fluxo normal: aqui já é "por animal", igual às demais parcelas).
+  // resolve pelo id quando já tem; sem id, tenta pelo NOME (categoria Hormônio) direto no
+  // Estoque de quem está calculando isso agora — cobre o caso de quem IMPORTOU o histórico não
+  // ter acesso ao Estoque daquela fazenda pra resolver o id na hora (ex.: Suporte Adm, que nunca
+  // enxerga Estoque de fazenda nenhuma).
+  const custoUnidadePorIdOuNome = (id, nome) => {
+    if (id) return custoUnidade(id);
+    if (!nome) return 0;
+    const encontrado = insumos.find((i) => i.categoria === "Hormônio" && (i.produtoComercial || "").trim().toLowerCase() === nome.trim().toLowerCase());
+    return encontrado ? (custoPorUnidadeInsumo(encontrado) || 0) : 0;
+  };
   const custoHormonioImportadoDoAnimal = (insem) => {
     let total = 0;
-    if (insem.implanteId) total += custoUnidade(insem.implanteId); // 1 unidade por animal
-    if (insem.benzoatoId && insem.doseBenzoato) total += insem.doseBenzoato * custoUnidade(insem.benzoatoId);
-    if (insem.prostaglandinaId && insem.doseProstaglandina) total += insem.doseProstaglandina * custoUnidade(insem.prostaglandinaId);
-    if (insem.cipionatoId && insem.doseCipionato) total += insem.doseCipionato * custoUnidade(insem.cipionatoId);
-    if (insem.ecgHcgId && insem.doseEcgHcg) total += insem.doseEcgHcg * custoUnidade(insem.ecgHcgId);
+    if (insem.implanteId || insem.implanteNome) total += custoUnidadePorIdOuNome(insem.implanteId, insem.implanteNome); // 1 unidade por animal
+    if ((insem.benzoatoId || insem.benzoatoNome) && insem.doseBenzoato) total += insem.doseBenzoato * custoUnidadePorIdOuNome(insem.benzoatoId, insem.benzoatoNome);
+    if ((insem.prostaglandinaId || insem.prostaglandinaNome) && insem.doseProstaglandina) total += insem.doseProstaglandina * custoUnidadePorIdOuNome(insem.prostaglandinaId, insem.prostaglandinaNome);
+    if ((insem.cipionatoId || insem.cipionatoNome) && insem.doseCipionato) total += insem.doseCipionato * custoUnidadePorIdOuNome(insem.cipionatoId, insem.cipionatoNome);
+    if ((insem.ecgHcgId || insem.ecgHcgNome) && insem.doseEcgHcg) total += insem.doseEcgHcg * custoUnidadePorIdOuNome(insem.ecgHcgId, insem.ecgHcgNome);
     return total;
   };
   // GnRH é aplicado na própria Inseminação (por animal), não no D0/Retirada — vale tanto pra
   // Inseminação registrada normalmente (com saída de estoque de verdade) quanto pra importada.
-  const custoGnrhDoAnimal = (detIns) => (detIns.gnrhId && detIns.doseGnrh) ? detIns.doseGnrh * custoUnidade(detIns.gnrhId) : 0;
+  const custoGnrhDoAnimal = (detIns) => (detIns.doseGnrh && (detIns.gnrhId || detIns.gnrhNome)) ? detIns.doseGnrh * custoUnidadePorIdOuNome(detIns.gnrhId, detIns.gnrhNome) : 0;
 
   const eventos = [];
   inseminacoes.forEach((insem) => {
@@ -8562,7 +8611,7 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         touro: nomeTouro(detIns.semenId, detIns.touroInformado), racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
         ecc: detIns.ecc || null,
-        custoAnimal: custoSemenDoAnimal(detIns.semenId) + custoBainha + custoHormonioOrdem + custoGnrhDoAnimal(detIns),
+        custoAnimal: custoSemenDoAnimal(detIns.semenId, detIns.touroInformado, detIns.partidaInformada) + custoBainha + custoHormonioOrdem + custoGnrhDoAnimal(detIns),
       });
     });
   });
