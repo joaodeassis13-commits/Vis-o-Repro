@@ -10733,7 +10733,12 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
             const yLinha = linha.y + linha.height;
             doc.setDrawColor(0, 0, 0);
             doc.setLineWidth(0.5);
-            doc.line(data.table.margin.left, yLinha, data.table.margin.left + data.table.width, yLinha);
+            // usa as margens já conhecidas aqui fora (margemEsq/largPagina) em vez de tentar ler
+            // de "data.table" — essa versão do jsPDF-autotable guarda a margem em
+            // "data.table.settings.margin", não direto em "data.table.margin" (que não existe),
+            // e não tem uma propriedade simples "data.table.width" — por isso a exportação
+            // quebrava com "Cannot read properties of undefined (reading 'left')" sempre.
+            doc.line(margemEsq, yLinha, largPagina - margemEsq, yLinha);
           });
         },
       };
