@@ -128,6 +128,21 @@ const resumoMedicamentos = (arr, insumos) => {
     return `${item?.produtoComercial || "?"} (${m.dose} ${item?.unidadeEmbalagem || ""})`;
   }).join(", ");
 };
+// resume o protocolo hormonal do D0/Retirada gravado NO PRÓPRIO manejo de Inseminação — só
+// existe quando veio de uma importação de histórico (uma Inseminação registrada na tela normal
+// nunca tem esses campos preenchidos). Existe pra dar pra CONFERIR, direto na tela, se a
+// importação realmente ligou os produtos certos — sem isso não tinha como ver esse dado em
+// lugar nenhum, só o resultado final (o Custo) já calculado.
+const resumoProtocoloHormonal = (m, insumos) => {
+  const nome = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "?";
+  const partes = [];
+  if (m.implanteId) partes.push(nome(m.implanteId));
+  if (m.benzoatoId) partes.push(`${nome(m.benzoatoId)} (${m.doseBenzoato ?? "—"})`);
+  if (m.prostaglandinaId) partes.push(`${nome(m.prostaglandinaId)} (${m.doseProstaglandina ?? "—"})`);
+  if (m.cipionatoId) partes.push(`${nome(m.cipionatoId)} (${m.doseCipionato ?? "—"})`);
+  if (m.ecgHcgId) partes.push(`${nome(m.ecgHcgId)} (${m.doseEcgHcg ?? "—"})`);
+  return partes.length > 0 ? partes.join(" · ") : "—";
+};
 
 /* ---------- dados iniciais de demonstração ---------- */
 
@@ -5958,6 +5973,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     <th>Ordem</th>
                     <th>Animais inseminados</th>
                     <th>Medicamentos</th>
+                    <th>Protocolo (custo)</th>
                     <th>Local</th>
                     <th>Data</th>
                     <th>Ações</th>
@@ -5971,6 +5987,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       <td>{m.ordem || "—"}</td>
                       <td>{m.animaisLidos.length}</td>
                       <td>{resumoMedicamentos(m.medicamentos, insumos)}</td>
+                      <td style={{ fontSize: 11.5 }}>{resumoProtocoloHormonal(m, insumos)}</td>
                       <td>{m.localEstoque === "externo" ? "Externo" : "Fazenda"}</td>
                       <td>{fmtDate(m.data)}</td>
                       <td>
@@ -8599,7 +8616,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   // de uma fazenda); os demais perfis sempre veem só a fazenda/safra ativa, como antes.
   const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtiva?.id || "");
   const [filtroSafraId, setFiltroSafraId] = useState("");
-  const usaFiltroAdmin = perfil === "Administrador";
+  const usaFiltroAdmin = ["Administrador", "Suporte Adm"].includes(perfil); // Suporte Adm também não tem fazenda ativa — precisa do mesmo filtro multi-fazenda, senão tudo aparece vazio/zerado pra ele
   const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
   const lotes = usaFiltroAdmin ? lotesTodos.filter((l) => l.fazendaId === filtroFazendaId && (filtroSafraId ? l.safraId === filtroSafraId : true)) : lotesAtivosProp;
   const retiros = usaFiltroAdmin ? retirosTodos.filter((r) => r.fazendaId === filtroFazendaId) : retirosAtivosProp;
@@ -9466,7 +9483,7 @@ function GraficoBenchmark({ titulo, descricao, suaFazenda, stats, carregando, av
 function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDoGrupo, safraAtiva, safras, perfil, fazendasVisiveis }) {
   const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtivaId || "");
   const [filtroSafraId, setFiltroSafraId] = useState("");
-  const usaFiltroAdmin = perfil === "Administrador";
+  const usaFiltroAdmin = ["Administrador", "Suporte Adm"].includes(perfil); // Suporte Adm também não tem fazenda ativa — precisa do mesmo filtro multi-fazenda, senão tudo aparece vazio/zerado pra ele
   const fazendaIdAtual = usaFiltroAdmin ? filtroFazendaId : fazendaAtivaId;
   const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
   const safraAtual = usaFiltroAdmin ? (safras.find((s) => s.id === filtroSafraId) || null) : safraAtiva;
@@ -10364,7 +10381,7 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, insumos, manejos, manejosE
 function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: retirosProp, insumos: insumosProp, manejos: manejosProp, movimentos: movimentosProp, perfil, fazendasVisiveis, safras, lotesTodos, retirosTodos, insumosTodos, manejosTodos, movimentosTodos }) {
   const [filtroFazendaId, setFiltroFazendaId] = useState(fazendaAtiva?.id || "");
   const [filtroSafraId, setFiltroSafraId] = useState("");
-  const usaFiltroAdmin = perfil === "Administrador";
+  const usaFiltroAdmin = ["Administrador", "Suporte Adm"].includes(perfil); // Suporte Adm também não tem fazenda ativa — precisa do mesmo filtro multi-fazenda, senão tudo aparece vazio/zerado pra ele
   const fazendaExibida = usaFiltroAdmin ? (fazendasVisiveis.find((f) => f.id === filtroFazendaId) || fazendaAtiva) : fazendaAtiva;
   const safraExibida = usaFiltroAdmin ? (safras.find((s) => s.id === filtroSafraId) || null) : safraAtiva;
   const lotes = usaFiltroAdmin ? lotesTodos.filter((l) => l.fazendaId === filtroFazendaId && (filtroSafraId ? l.safraId === filtroSafraId : true)) : lotesProp;
