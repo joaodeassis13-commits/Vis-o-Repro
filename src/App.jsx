@@ -10730,7 +10730,13 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           limites.forEach((idx) => {
             const linha = data.table.body[idx];
             if (!linha) return;
-            const yLinha = linha.y + linha.height;
+            // a Row do autotable não tem uma posição Y própria — só as células dela têm .y/.height.
+            // Uma linha dentro de um bloco mesclado pode ter algumas colunas sem célula (fazem
+            // parte do rowSpan de uma linha anterior), então pega a Y da primeira célula real
+            // que essa linha realmente tiver.
+            const celulas = Object.values(linha.cells || {});
+            if (celulas.length === 0) return;
+            const yLinha = celulas[0].y + celulas[0].height;
             doc.setDrawColor(0, 0, 0);
             doc.setLineWidth(0.5);
             // usa as margens já conhecidas aqui fora (margemEsq/largPagina) em vez de tentar ler
