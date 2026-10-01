@@ -2482,7 +2482,10 @@ export default function App() {
         input.campo-dose::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input.campo-dose { -moz-appearance: textfield; appearance: textfield; }
         /* Relatórios: 3 gráficos lado a lado no computador, empilhados no celular */
-        .grid-relatorios-3 { grid-template-columns: repeat(3, 1fr); }
+        /* minmax(0, 1fr) em vez de só "1fr": sem isso, um card com conteúdo largo (ex.: uma
+           fileira longa de botões de opção) empurra a coluna dele pra ficar mais larga que as
+           outras duas — o "1fr" sozinho só reparte igual quando o conteúdo cabe. */
+        .grid-relatorios-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         /* Benchmarking: Resumo (1/3) + Taxa de concepção/fertilidade (2/3) lado a lado, empilhados no celular */
         .grid-bench-2 { grid-template-columns: 1fr 2fr; }
         /* Formulários (Fazendas, Estoque, etc.): 3 colunas no computador, no máximo 2 no celular
