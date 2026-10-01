@@ -9438,14 +9438,14 @@ function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSi
         {opcoes.map((op) => (
           <button key={op.key} onClick={() => setOpcaoAtual(op.key)}
             style={{
-              padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+              padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600,
               background: opcaoAtual === op.key ? "#166336" : "transparent", color: opcaoAtual === op.key ? "#FFFFFF" : "#6B685E",
             }}>{op.label}</button>
         ))}
       </div>
       <div style={{ flex: 1, overflow: "hidden" }}>
         {escopo === "ladoAlado" ? (
-          <BarrasConcepcao dados={taxasGrupo
+          <BarrasConcepcao ordenarPorTaxaDesc dados={taxasGrupo
             .filter((f) => fazendasVisiveis?.some((fz) => fz.id === f.fazendaId))
             .map((f) => ({ label: fazendasVisiveis.find((fz) => fz.id === f.fazendaId)?.nome || f.fazendaId, n: f.n ?? null, taxa: f.taxa }))} />
         ) : carregando && escopo === "sistema" ? (
@@ -9696,7 +9696,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
                 {Object.entries(OPCOES_RESUMO_BENCH).filter(([key]) => escopo !== "ladoAlado" || key !== "prenhas").map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoResumo(key)}
                     style={{
-                      padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                      padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600,
                       background: visaoResumo === key ? "#166336" : "transparent", color: visaoResumo === key ? "#FFFFFF" : "#6B685E",
                     }}>{op.label}</button>
                 ))}
@@ -9716,7 +9716,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de fertilidade</div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {escopo === "ladoAlado" ? (
-                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoFertilidade)} />
+                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoFertilidade)} ordenarPorTaxaDesc />
                 ) : carregandoSistema && escopo === "sistema" ? (
                   <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
                 ) : avisoSistema ? (
@@ -9747,7 +9747,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de concepção</div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {escopo === "ladoAlado" ? (
-                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoConcepcao)} />
+                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoConcepcao)} ordenarPorTaxaDesc />
                 ) : carregandoSistema && escopo === "sistema" ? (
                   <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
                 ) : avisoSistema ? (
