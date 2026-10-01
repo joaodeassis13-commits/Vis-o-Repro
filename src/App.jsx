@@ -10722,12 +10722,20 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         acumulado += tam;
         if (i < gruposTamanhos.length - 1) limites.add(acumulado);
       });
+      // "didDrawPage" dispara uma vez POR PÁGINA que a tabela ocupar — mas cada disparo tenta
+      // desenhar TODOS os limites da tabela inteira, inclusive os de linhas que só vão ser
+      // desenhadas numa página seguinte (ainda sem posição de verdade, ficando com Y zerado ou
+      // de uma tabela anterior) — isso criava uma linha perdida lá no topo da página atual.
+      // Por isso cada limite só é desenhado uma vez (no primeiro disparo em que a linha dele já
+      // estiver realmente posicionada).
+      const jaDesenhados = new Set();
       return {
         // desenha DEPOIS que toda a página da tabela já foi renderizada — se desenhasse célula a
         // célula (didDrawCell), a linha da borda de um grupo acabava sendo sobrescrita assim que
         // as linhas do grupo seguinte eram desenhadas por cima.
         didDrawPage: (data) => {
           limites.forEach((idx) => {
+            if (jaDesenhados.has(idx)) return;
             const linha = data.table.body[idx];
             if (!linha) return;
             // a Row do autotable não tem uma posição Y própria — só as células dela têm .y/.height.
@@ -10736,6 +10744,10 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
             // que essa linha realmente tiver.
             const celulas = Object.values(linha.cells || {});
             if (celulas.length === 0) return;
+            // Y ainda zerado = essa linha está numa página seguinte, não foi desenhada ainda
+            // nesta — espera o disparo daquela página pra desenhar o separador dela.
+            if (!celulas[0].y) return;
+            jaDesenhados.add(idx);
             const yLinha = celulas[0].y + celulas[0].height;
             doc.setDrawColor(0, 0, 0);
             doc.setLineWidth(0.5);
@@ -10767,7 +10779,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const iatfCat = iatfPorMatrizPDF(idsLotesCat);
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosCat.filter((r) => r.ordem === ordem));
-        linhasResumo.push([cat, ordem, st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        const totalInseminacoesOrdem = eventosCustoPDF.filter((e) => e.categoria === cat && e.ordem === ordem).length;
+        linhasResumo.push([cat, ordem, totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalCat.concepcao), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
       });
       const repasseManejosCat = manejos.filter((m) => m.tipo === "repasse" && idsLotesCat.has(m.loteId));
@@ -10775,7 +10788,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const insemRepasse = repasseManejosCat.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
       const prenhasRepasse = contarPrenhasDetPDF(diagRepasseCat);
       const totalDiagRepasse = diagRepasseCat.reduce((s, m) => s + (m.detalhes || []).length, 0);
-      linhasResumo.push([cat, "Repasse", insemRepasse || "—", prenhasRepasse, totalDiagRepasse - prenhasRepasse,
+      linhasResumo.push([cat, "Repasse", insemRepasse || "—", totalDiagRepasse || "—", prenhasRepasse, totalDiagRepasse - prenhasRepasse,
         fmtPctPDF(totalDiagRepasse > 0 ? (prenhasRepasse / totalDiagRepasse) * 100 : null),
         fmtPctPDF(totalCat.concepcao), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
       gruposResumo.push(ORDENS_IATF.length + 1);
@@ -10783,8 +10796,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposResumo),
-      head: [["Categoria", "Ordem", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasResumo, gruposResumo, [0, 6, 7, 8, 9, 10, 11]),
+      head: [["Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasResumo, gruposResumo, [0, 7, 8, 9, 10, 11, 12]),
     });
     y = doc.lastAutoTable.finalY + 20;
 
@@ -10801,8 +10814,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       let tamGrupo = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const st = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat));
-        if (st.inseminados === 0) return;
-        linhasRetiro.push([ret.nome, cat, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        const totalInseminacoesRetCat = eventosCustoPDF.filter((e) => idsLotesRet.has(e.loteId) && e.categoria === cat).length;
+        if (st.inseminados === 0 && totalInseminacoesRetCat === 0) return;
+        linhasRetiro.push([ret.nome, cat, totalInseminacoesRetCat || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalRet.concepcao), iatfRet != null ? iatfRet.toFixed(2) : "—", ...linhaCustosPDF(custosRet)]);
         tamGrupo++;
       });
@@ -10811,8 +10825,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRetiro),
-      head: [["Retiro", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasRetiro, gruposRetiro, [0, 6, 7, 8, 9, 10]),
+      head: [["Retiro", "Categoria", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasRetiro, gruposRetiro, [0, 7, 8, 9, 10, 11]),
     });
     y = doc.lastAutoTable.finalY + 20;
 
@@ -10830,8 +10844,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       let tamGrupo = 0;
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosLote.filter((r) => r.ordem === ordem));
-        if (st.inseminados === 0) return;
-        linhasLote.push([lote.nome, lote.categoria || "—", ordem, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        const totalInseminacoesLoteOrdem = eventosCustoPDF.filter((e) => e.loteId === lote.id && e.ordem === ordem).length;
+        if (st.inseminados === 0 && totalInseminacoesLoteOrdem === 0) return;
+        linhasLote.push([lote.nome, lote.categoria || "—", ordem, totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalLote.concepcao), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
         tamGrupo++;
       });
@@ -10840,8 +10855,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposLote),
-      head: [["Lote", "Categoria", "Ordem", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 7, 8, 9, 10, 11]),
+      head: [["Lote", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 8, 9, 10, 11, 12]),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
@@ -10860,8 +10875,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       let tamGrupo = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const st = statsGrupoPDF(registrosIns.filter((r) => r.categoria === cat));
-        if (st.inseminados === 0) return;
-        linhasInseminador.push([nome, cat, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        const totalInseminacoesInsCat = eventosIns.filter((e) => e.categoria === cat).length;
+        if (st.inseminados === 0 && totalInseminacoesInsCat === 0) return;
+        linhasInseminador.push([nome, cat, totalInseminacoesInsCat || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalIns.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosIns)]);
         tamGrupo++;
       });
@@ -10870,8 +10886,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposInseminador),
-      head: [["Inseminador", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasInseminador, gruposInseminador, [0, 6, 7, 8, 9, 10]),
+      head: [["Inseminador", "Categoria", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasInseminador, gruposInseminador, [0, 7, 8, 9, 10, 11]),
     });
     y = doc.lastAutoTable.finalY + 20;
 
@@ -10889,8 +10905,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       let tamGrupo = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat));
-        if (st.inseminados === 0) return;
-        linhasMes.push([mes, cat, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        const totalInseminacoesMesCat = eventosMes.filter((e) => e.categoria === cat).length;
+        if (st.inseminados === 0 && totalInseminacoesMesCat === 0) return;
+        linhasMes.push([mes, cat, totalInseminacoesMesCat || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalMes.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosMes)]);
         tamGrupo++;
       });
@@ -10899,8 +10916,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposMesPDF),
-      head: [["Mês", "Categoria", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasMes, gruposMesPDF, [0, 6, 7, 8, 9, 10]),
+      head: [["Mês", "Categoria", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasMes, gruposMesPDF, [0, 7, 8, 9, 10, 11]),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
@@ -10921,8 +10938,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const registrosTouro = registrosRaca.filter((r) => r.touro === touro);
         const eventosTouro = eventosCustoPDF.filter((e) => e.racaTouro === raca && e.touro === touro);
         const st = statsGrupoPDF(registrosTouro);
-        if (st.inseminados === 0) return;
-        linhasRaca.push([raca, touro, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        if (st.inseminados === 0 && eventosTouro.length === 0) return;
+        linhasRaca.push([raca, touro, eventosTouro.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalRaca.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro))]);
         tamGrupo++;
       });
@@ -10931,8 +10948,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRaca),
-      head: [["Raça", "Touro", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasRaca, gruposRaca, [0, 6]),
+      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasRaca, gruposRaca, [0, 7]),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
@@ -10952,7 +10969,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const registrosEcc = registrosCat.filter((r) => r.ecc === ecc);
         const eventosEcc = eventosCustoPDF.filter((e) => e.categoria === cat && e.ecc === ecc);
         const st = statsGrupoPDF(registrosEcc);
-        linhasEcc.push([cat, ecc, st.inseminados, st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        linhasEcc.push([cat, ecc, eventosEcc.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalCat.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorEventosPDF(eventosEcc, registrosEcc))]);
       });
       gruposEcc.push(eccs.length);
@@ -10960,8 +10977,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposEcc),
-      head: [["Categoria", "ECC", "Inseminados", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasEcc, gruposEcc, [0, 6]),
+      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasEcc, gruposEcc, [0, 7]),
     });
 
     doc.save(`visaorepro_relatorio-detalhado_${sufixoArquivo()}.pdf`);
