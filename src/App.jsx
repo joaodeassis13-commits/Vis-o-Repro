@@ -9401,7 +9401,7 @@ function taxasDeConcepcaoPorAtributoProtocolo(registrosGrupo, campo, valor) {
   });
   return Object.entries(porFazenda)
     .filter(([, v]) => v.avaliadas > 0)
-    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+    .map(([fazendaId, v]) => ({ fazendaId, n: v.avaliadas, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
 }
 
 // card genérico de comparação (Sua Fazenda / Média Geral / Melhores / Piores) com botões pra
