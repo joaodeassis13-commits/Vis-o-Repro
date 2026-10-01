@@ -10671,6 +10671,26 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     });
     return saida.map((l) => l.filter((c) => c !== null));
   };
+  // mesma ideia, mas pra quando duas colunas diferentes precisam mesclar em TAMANHOS de bloco
+  // diferentes na MESMA tabela (ex.: "Retiro" mescla ao longo de todas as categorias/ordens dele,
+  // enquanto "Categoria"/"Animais" mescla só ao longo das ordens daquela categoria em específico,
+  // dentro do retiro) — cada nível opera nas suas próprias colunas, então não conflitam entre si.
+  const mesclarColunasPDFMultiNivel = (linhas, niveis) => {
+    const saida = linhas.map((l) => [...l]);
+    niveis.forEach(({ tamanhos, indices }) => {
+      let inicio = 0;
+      tamanhos.forEach((tam) => {
+        if (tam > 1) {
+          indices.forEach((idx) => {
+            saida[inicio][idx] = { content: saida[inicio][idx], rowSpan: tam, styles: { valign: "middle" } };
+            for (let i = inicio + 1; i < inicio + tam; i++) saida[i][idx] = null;
+          });
+        }
+        inicio += tam;
+      });
+    });
+    return saida.map((l) => l.filter((c) => c !== null));
+  };
 
   const gerarRelatorioDetalhadoPDF = async () => {
     setErroPDF("");
@@ -10797,10 +10817,37 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         fmtPctPDF(totalCat.concepcao), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
       gruposResumo.push(ORDENS_IATF.length + 1);
     });
+    // último bloco: "Geral" — mesma estrutura de cada categoria, só que somando todas elas juntas
+    // (mesmo cálculo, sem o filtro por categoria).
+    {
+      const lotesGeral = lotes.filter((l) => CATEGORIAS_RESUMO.includes(l.categoria));
+      const idsLotesGeral = new Set(lotesGeral.map((l) => l.id));
+      const totalAnimaisGeral = lotesGeral.reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
+      const custosGeralResumo = calcularCustosPDF(idsLotesGeral);
+      const totalGeralResumo = statsGrupoPDF(registrosPDF);
+      const totalDiagnosticadosGeral = registrosPDF.length;
+      const fertilidadeGeral = totalDiagnosticadosGeral > 0 ? (totalGeralResumo.prenhas / totalDiagnosticadosGeral) * 100 : null;
+      const iatfGeralResumo = iatfPorMatrizPDF(idsLotesGeral);
+      ORDENS_IATF.forEach((ordem) => {
+        const st = statsGrupoPDF(registrosPDF.filter((r) => r.ordem === ordem));
+        const totalInseminacoesOrdem = eventosCustoPDF.filter((e) => e.ordem === ordem).length;
+        linhasResumo.push(["Geral", totalAnimaisGeral, ordem, totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalGeralResumo.concepcao), fmtPctPDF(fertilidadeGeral), iatfGeralResumo != null ? iatfGeralResumo.toFixed(2) : "—", ...linhaCustosPDF(custosGeralResumo)]);
+      });
+      const repasseManejosGeral = manejos.filter((m) => m.tipo === "repasse" && idsLotesGeral.has(m.loteId));
+      const diagRepasseGeral = manejos.filter((m) => m.tipo === "diagnostico_repasse" && idsLotesGeral.has(m.loteId));
+      const insemRepasseGeral = repasseManejosGeral.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+      const prenhasRepasseGeral = contarPrenhasDetPDF(diagRepasseGeral);
+      const totalDiagRepasseGeral = diagRepasseGeral.reduce((s, m) => s + (m.detalhes || []).length, 0);
+      linhasResumo.push(["Geral", totalAnimaisGeral, "Repasse", insemRepasseGeral || "—", totalDiagRepasseGeral || "—", prenhasRepasseGeral, totalDiagRepasseGeral - prenhasRepasseGeral,
+        fmtPctPDF(totalDiagRepasseGeral > 0 ? (prenhasRepasseGeral / totalDiagRepasseGeral) * 100 : null),
+        fmtPctPDF(totalGeralResumo.concepcao), fmtPctPDF(fertilidadeGeral), iatfGeralResumo != null ? iatfGeralResumo.toFixed(2) : "—", ...linhaCustosPDF(custosGeralResumo)]);
+      gruposResumo.push(ORDENS_IATF.length + 1);
+    }
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposResumo),
-      head: [["Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      head: [["Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasResumo, gruposResumo, [0, 1, 8, 9, 10, 11, 12, 13]),
     });
     y = doc.lastAutoTable.finalY + 20;
@@ -10809,34 +10856,129 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     novaSecao("Detalhamento por retiro:");
     const linhasRetiro = [];
     const gruposRetiro = [];
+    const gruposCategoriaRetiro = [];
     retiros.forEach((ret) => {
       const idsLotesRet = new Set(lotes.filter((l) => l.retiroId === ret.id).map((l) => l.id));
       if (idsLotesRet.size === 0) return;
       const custosRet = calcularCustosPDF(idsLotesRet);
       const totalRet = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId)));
+      // Fertilidade = Prenhas ÷ animais com Diagnóstico (totalRet.inseminados, apesar do nome,
+      // já é a contagem de registros diagnosticados — ver statsGrupoPDF).
+      const totalDiagnosticadosRet = totalRet.inseminados;
+      const fertilidadeRet = totalDiagnosticadosRet > 0 ? (totalRet.prenhas / totalDiagnosticadosRet) * 100 : null;
       const iatfRet = iatfPorMatrizPDF(idsLotesRet);
-      let tamGrupo = 0;
+      let tamGrupoRet = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
-        const st = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat));
-        const totalInseminacoesRetCat = eventosCustoPDF.filter((e) => idsLotesRet.has(e.loteId) && e.categoria === cat).length;
         const totalAnimaisRetCat = lotes.filter((l) => idsLotesRet.has(l.id) && l.categoria === cat)
           .reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
-        if (st.inseminados === 0 && totalInseminacoesRetCat === 0) return;
-        linhasRetiro.push([ret.nome, cat, totalAnimaisRetCat || "—", totalInseminacoesRetCat || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalRet.concepcao), iatfRet != null ? iatfRet.toFixed(2) : "—", ...linhaCustosPDF(custosRet)]);
-        tamGrupo++;
+        let tamGrupoCat = 0;
+        ORDENS_IATF.forEach((ordem) => {
+          const st = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat && r.ordem === ordem));
+          const totalInseminacoesRetCatOrdem = eventosCustoPDF.filter((e) => idsLotesRet.has(e.loteId) && e.categoria === cat && e.ordem === ordem).length;
+          if (st.inseminados === 0 && totalInseminacoesRetCatOrdem === 0) return;
+          linhasRetiro.push([ret.nome, cat, totalAnimaisRetCat || "—", ordem, totalInseminacoesRetCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+            fmtPctPDF(totalRet.concepcao), fmtPctPDF(fertilidadeRet), iatfRet != null ? iatfRet.toFixed(2) : "—", ...linhaCustosPDF(custosRet)]);
+          tamGrupoCat++;
+        });
+        if (tamGrupoCat > 0) { gruposCategoriaRetiro.push(tamGrupoCat); tamGrupoRet += tamGrupoCat; }
       });
-      if (tamGrupo > 0) gruposRetiro.push(tamGrupo);
+      if (tamGrupoRet > 0) gruposRetiro.push(tamGrupoRet);
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRetiro),
-      head: [["Retiro", "Categoria", "Animais", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasRetiro, gruposRetiro, [0, 8, 9, 10, 11, 12]),
+      head: [["Retiro", "Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDFMultiNivel(linhasRetiro, [
+        { tamanhos: gruposRetiro, indices: [0, 9, 10, 11, 12, 13, 14] },
+        { tamanhos: gruposCategoriaRetiro, indices: [1, 2] },
+      ]),
     });
     y = doc.lastAutoTable.finalY + 20;
 
-    // 3) Detalhamento por lotes trabalhados
+    // 3) Detalhamento por mês de parição (custo = sêmen + fração do hormônio dos animais
+    // daquele mês; só considera os meses informados — mês de parição é opcional)
+    novaSecao("Detalhamento por mês de parição:");
+    const meses = [...new Set(registrosPDF.map((r) => r.mesParicao).filter(Boolean))].sort((a, b) => NOMES_MES.indexOf(a) - NOMES_MES.indexOf(b));
+    const linhasMes = [];
+    const gruposMesPDF = [];
+    const gruposCategoriaMes = [];
+    meses.forEach((mes) => {
+      const registrosMes = registrosPDF.filter((r) => r.mesParicao === mes);
+      const eventosMes = eventosCustoPDF.filter((e) => e.mesParicao === mes);
+      const totalMes = statsGrupoPDF(registrosMes);
+      // Fertilidade = Prenhas ÷ animais com Diagnóstico (totalMes.inseminados é a contagem de
+      // registros diagnosticados — ver statsGrupoPDF).
+      const totalDiagnosticadosMes = totalMes.inseminados;
+      const fertilidadeMes = totalDiagnosticadosMes > 0 ? (totalMes.prenhas / totalDiagnosticadosMes) * 100 : null;
+      const custosMes = custosPorEventosPDF(eventosMes, registrosMes);
+      let tamGrupoMes = 0;
+      CATEGORIAS_RESUMO.forEach((cat) => {
+        const totalAnimaisMesCat = lotes.filter((l) => l.mesParicao === mes && l.categoria === cat)
+          .reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
+        let tamGrupoCat = 0;
+        ORDENS_IATF.forEach((ordem) => {
+          const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat && r.ordem === ordem));
+          const totalInseminacoesMesCatOrdem = eventosMes.filter((e) => e.categoria === cat && e.ordem === ordem).length;
+          if (st.inseminados === 0 && totalInseminacoesMesCatOrdem === 0) return;
+          linhasMes.push([mes, cat, totalAnimaisMesCat || "—", ordem, totalInseminacoesMesCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+            fmtPctPDF(totalMes.concepcao), fmtPctPDF(fertilidadeMes), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosMes)]);
+          tamGrupoCat++;
+        });
+        if (tamGrupoCat > 0) { gruposCategoriaMes.push(tamGrupoCat); tamGrupoMes += tamGrupoCat; }
+      });
+      if (tamGrupoMes > 0) gruposMesPDF.push(tamGrupoMes);
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposMesPDF),
+      head: [["Mês", "Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDFMultiNivel(linhasMes, [
+        { tamanhos: gruposMesPDF, indices: [0, 9, 10, 11, 12, 13, 14] },
+        { tamanhos: gruposCategoriaMes, indices: [1, 2] },
+      ]),
+    });
+    y = doc.lastAutoTable.finalY + 20;
+    if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
+
+    // 4) Detalhamento por inseminador (custo = sêmen + fração do hormônio realmente usados
+    // nos animais que passaram por aquele inseminador)
+    novaSecao("Detalhamento por inseminador:");
+    const inseminadores = [...new Set(registrosPDF.map((r) => r.inseminador).filter(Boolean))];
+    const linhasInseminador = [];
+    const gruposInseminador = [];
+    const gruposCategoriaIns = [];
+    inseminadores.forEach((nome) => {
+      const registrosIns = registrosPDF.filter((r) => r.inseminador === nome);
+      const eventosIns = eventosCustoPDF.filter((e) => e.inseminador === nome);
+      const totalIns = statsGrupoPDF(registrosIns);
+      const custosIns = custosPorEventosPDF(eventosIns, registrosIns);
+      let tamGrupoIns = 0;
+      CATEGORIAS_RESUMO.forEach((cat) => {
+        let tamGrupoCat = 0;
+        ORDENS_IATF.forEach((ordem) => {
+          const st = statsGrupoPDF(registrosIns.filter((r) => r.categoria === cat && r.ordem === ordem));
+          const totalInseminacoesInsCatOrdem = eventosIns.filter((e) => e.categoria === cat && e.ordem === ordem).length;
+          if (st.inseminados === 0 && totalInseminacoesInsCatOrdem === 0) return;
+          linhasInseminador.push([nome, cat, ordem, totalInseminacoesInsCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+            fmtPctPDF(totalIns.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosIns)]);
+          tamGrupoCat++;
+        });
+        if (tamGrupoCat > 0) { gruposCategoriaIns.push(tamGrupoCat); tamGrupoIns += tamGrupoCat; }
+      });
+      if (tamGrupoIns > 0) gruposInseminador.push(tamGrupoIns);
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposInseminador),
+      head: [["Inseminador", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDFMultiNivel(linhasInseminador, [
+        { tamanhos: gruposInseminador, indices: [0, 8, 9, 10, 11, 12] },
+        { tamanhos: gruposCategoriaIns, indices: [1] },
+      ]),
+    });
+    y = doc.lastAutoTable.finalY + 20;
+
+    // 5) Detalhamento por lotes trabalhados
     novaSecao("Detalhamento por lotes trabalhados:");
     const linhasLote = [];
     const gruposLote = [];
@@ -10861,71 +11003,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposLote),
-      head: [["Lote", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      head: [["Lote", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 8, 9, 10, 11, 12]),
-    });
-    y = doc.lastAutoTable.finalY + 20;
-    if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
-
-    // 4) Detalhamento por inseminador (custo = sêmen + fração do hormônio realmente usados
-    // nos animais que passaram por aquele inseminador)
-    novaSecao("Detalhamento por inseminador:");
-    const inseminadores = [...new Set(registrosPDF.map((r) => r.inseminador).filter(Boolean))];
-    const linhasInseminador = [];
-    const gruposInseminador = [];
-    inseminadores.forEach((nome) => {
-      const registrosIns = registrosPDF.filter((r) => r.inseminador === nome);
-      const eventosIns = eventosCustoPDF.filter((e) => e.inseminador === nome);
-      const totalIns = statsGrupoPDF(registrosIns);
-      const custosIns = custosPorEventosPDF(eventosIns, registrosIns);
-      let tamGrupo = 0;
-      CATEGORIAS_RESUMO.forEach((cat) => {
-        const st = statsGrupoPDF(registrosIns.filter((r) => r.categoria === cat));
-        const totalInseminacoesInsCat = eventosIns.filter((e) => e.categoria === cat).length;
-        if (st.inseminados === 0 && totalInseminacoesInsCat === 0) return;
-        linhasInseminador.push([nome, cat, totalInseminacoesInsCat || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalIns.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosIns)]);
-        tamGrupo++;
-      });
-      if (tamGrupo > 0) gruposInseminador.push(tamGrupo);
-    });
-    autoTable(doc, {
-      ...opcoesTabela, startY: y,
-      ...separadoresDeGrupo(gruposInseminador),
-      head: [["Inseminador", "Categoria", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasInseminador, gruposInseminador, [0, 7, 8, 9, 10, 11]),
-    });
-    y = doc.lastAutoTable.finalY + 20;
-
-    // 5) Detalhamento por mês de parição (custo = sêmen + fração do hormônio dos animais
-    // daquele mês; só considera os meses informados — mês de parição é opcional)
-    novaSecao("Detalhamento por mês de parição:");
-    const meses = [...new Set(registrosPDF.map((r) => r.mesParicao).filter(Boolean))].sort((a, b) => NOMES_MES.indexOf(a) - NOMES_MES.indexOf(b));
-    const linhasMes = [];
-    const gruposMesPDF = [];
-    meses.forEach((mes) => {
-      const registrosMes = registrosPDF.filter((r) => r.mesParicao === mes);
-      const eventosMes = eventosCustoPDF.filter((e) => e.mesParicao === mes);
-      const totalMes = statsGrupoPDF(registrosMes);
-      const custosMes = custosPorEventosPDF(eventosMes, registrosMes);
-      let tamGrupo = 0;
-      CATEGORIAS_RESUMO.forEach((cat) => {
-        const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat));
-        const totalInseminacoesMesCat = eventosMes.filter((e) => e.categoria === cat).length;
-        const totalAnimaisMesCat = lotes.filter((l) => l.mesParicao === mes && l.categoria === cat)
-          .reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
-        if (st.inseminados === 0 && totalInseminacoesMesCat === 0) return;
-        linhasMes.push([mes, cat, totalAnimaisMesCat || "—", totalInseminacoesMesCat || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalMes.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosMes)]);
-        tamGrupo++;
-      });
-      if (tamGrupo > 0) gruposMesPDF.push(tamGrupo);
-    });
-    autoTable(doc, {
-      ...opcoesTabela, startY: y,
-      ...separadoresDeGrupo(gruposMesPDF),
-      head: [["Mês", "Categoria", "Animais", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasMes, gruposMesPDF, [0, 8, 9, 10, 11, 12]),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
@@ -10956,7 +11035,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRaca),
-      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasRaca, gruposRaca, [0, 7]),
     });
     y = doc.lastAutoTable.finalY + 20;
@@ -10985,7 +11064,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposEcc),
-      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/inseminação", "Custo/prenhez"]],
+      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasEcc, gruposEcc, [0, 7]),
     });
 
