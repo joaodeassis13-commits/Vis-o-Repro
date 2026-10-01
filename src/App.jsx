@@ -9319,7 +9319,7 @@ function taxasDePrenhezPorFazenda(listaManejos) {
   });
   return Object.entries(porFazenda)
     .filter(([, v]) => v.avaliadas > 0)
-    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+    .map(([fazendaId, v]) => ({ fazendaId, n: v.avaliadas, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
 }
 
 // taxa de FERTILIDADE por fazenda = Prenhas / total de animais COM DIAGNÓSTICO (quem só tem
@@ -9334,7 +9334,7 @@ function taxasDeFertilidadePorFazenda(listaLotes, listaManejos) {
   });
   return Object.entries(diagnosticadosPorFazenda)
     .filter(([, total]) => total > 0)
-    .map(([fazendaId, total]) => ({ fazendaId, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
+    .map(([fazendaId, total]) => ({ fazendaId, n: total, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
 }
 
 // concepção por ORDEM (1º/2º/3º IATF ou "Repasse"), calculada no cliente para o escopo "Meu Grupo".
@@ -9351,7 +9351,7 @@ function taxasDePrenhezPorOrdemPorFazenda(listaManejos, ordem) {
     });
   return Object.entries(porFazenda)
     .filter(([, v]) => v.avaliadas > 0)
-    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+    .map(([fazendaId, v]) => ({ fazendaId, n: v.avaliadas, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
 }
 
 // concepção por CATEGORIA (Nulípara/Primípara/Multípara) — a categoria não fica salva no manejo
@@ -9368,7 +9368,7 @@ function taxasDePrenhezPorCategoriaPorFazenda(listaManejos, listaLotes, categori
   });
   return Object.entries(porFazenda)
     .filter(([, v]) => v.avaliadas > 0)
-    .map(([fazendaId, v]) => ({ fazendaId, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
+    .map(([fazendaId, v]) => ({ fazendaId, n: v.avaliadas, taxa: Math.round((v.prenhas / v.avaliadas) * 1000) / 10 }));
 }
 
 // fertilidade por CATEGORIA — Prenhas daquela categoria / animais COM DIAGNÓSTICO daquela categoria.
@@ -9383,7 +9383,7 @@ function taxasDeFertilidadePorCategoriaPorFazenda(listaLotes, listaManejos, cate
   });
   return Object.entries(diagnosticadosPorFazenda)
     .filter(([, total]) => total > 0)
-    .map(([fazendaId, total]) => ({ fazendaId, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
+    .map(([fazendaId, total]) => ({ fazendaId, n: total, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
 }
 
 // concepção por atributo do protocolo (número de manejos "3/4 manejos", ou duração) — usa os
@@ -9445,7 +9445,7 @@ function CardBenchComparacao({ titulo, opcoes, calcularTaxasGrupo, buscarTaxasSi
       </div>
       <div style={{ flex: 1, overflow: "hidden" }}>
         {escopo === "ladoAlado" ? (
-          <BarrasConcepcao compacto dados={taxasGrupo
+          <BarrasConcepcao dados={taxasGrupo
             .filter((f) => fazendasVisiveis?.some((fz) => fz.id === f.fazendaId))
             .map((f) => ({ label: fazendasVisiveis.find((fz) => fz.id === f.fazendaId)?.nome || f.fazendaId, n: f.n ?? null, taxa: f.taxa }))} />
         ) : carregando && escopo === "sistema" ? (
@@ -9716,7 +9716,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de fertilidade</div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {escopo === "ladoAlado" ? (
-                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoFertilidade)} compacto />
+                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoFertilidade)} />
                 ) : carregandoSistema && escopo === "sistema" ? (
                   <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
                 ) : avisoSistema ? (
@@ -9747,7 +9747,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de concepção</div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {escopo === "ladoAlado" ? (
-                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoConcepcao)} compacto />
+                  <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoConcepcao)} />
                 ) : carregandoSistema && escopo === "sistema" ? (
                   <p style={{ fontSize: 12, color: "#9B9686" }}>Carregando…</p>
                 ) : avisoSistema ? (
@@ -10940,7 +10940,42 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
 
-    // 4) Detalhamento por inseminador (custo = sêmen + fração do hormônio realmente usados
+    // 4) Detalhamento por lotes trabalhados
+    novaSecao("Detalhamento por lotes trabalhados:");
+    const linhasLote = [];
+    const gruposLote = [];
+    lotes.filter((l) => !idsDesconhecidosPDF.has(l.id)).forEach((lote) => {
+      const idsLoteUnico = new Set([lote.id]);
+      const registrosLote = registrosPDF.filter((r) => r.loteId === lote.id);
+      if (registrosLote.length === 0) return;
+      const custosLote = calcularCustosPDF(idsLoteUnico);
+      const totalLote = statsGrupoPDF(registrosLote);
+      // Fertilidade = Prenhas ÷ animais com Diagnóstico (totalLote.inseminados é a contagem de
+      // registros diagnosticados — ver statsGrupoPDF).
+      const totalDiagnosticadosLote = totalLote.inseminados;
+      const fertilidadeLote = totalDiagnosticadosLote > 0 ? (totalLote.prenhas / totalDiagnosticadosLote) * 100 : null;
+      const iatfLote = iatfPorMatrizPDF(idsLoteUnico);
+      let tamGrupo = 0;
+      ORDENS_IATF.forEach((ordem) => {
+        const st = statsGrupoPDF(registrosLote.filter((r) => r.ordem === ordem));
+        const totalInseminacoesLoteOrdem = eventosCustoPDF.filter((e) => e.loteId === lote.id && e.ordem === ordem).length;
+        if (st.inseminados === 0 && totalInseminacoesLoteOrdem === 0) return;
+        linhasLote.push([lote.nome, lote.categoria || "—", ordem, totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalLote.concepcao), fmtPctPDF(fertilidadeLote), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
+        tamGrupo++;
+      });
+      if (tamGrupo > 0) gruposLote.push(tamGrupo);
+    });
+    autoTable(doc, {
+      ...opcoesTabela, startY: y,
+      ...separadoresDeGrupo(gruposLote),
+      head: [["Lote", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 8, 9, 10, 11, 12, 13]),
+    });
+    y = doc.lastAutoTable.finalY + 20;
+    if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
+
+    // 5) Detalhamento por inseminador (custo = sêmen + fração do hormônio realmente usados
     // nos animais que passaram por aquele inseminador)
     novaSecao("Detalhamento por inseminador:");
     const inseminadores = [...new Set(registrosPDF.map((r) => r.inseminador).filter(Boolean))];
@@ -10977,37 +11012,6 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       ]),
     });
     y = doc.lastAutoTable.finalY + 20;
-
-    // 5) Detalhamento por lotes trabalhados
-    novaSecao("Detalhamento por lotes trabalhados:");
-    const linhasLote = [];
-    const gruposLote = [];
-    lotes.filter((l) => !idsDesconhecidosPDF.has(l.id)).forEach((lote) => {
-      const idsLoteUnico = new Set([lote.id]);
-      const registrosLote = registrosPDF.filter((r) => r.loteId === lote.id);
-      if (registrosLote.length === 0) return;
-      const custosLote = calcularCustosPDF(idsLoteUnico);
-      const totalLote = statsGrupoPDF(registrosLote);
-      const iatfLote = iatfPorMatrizPDF(idsLoteUnico);
-      let tamGrupo = 0;
-      ORDENS_IATF.forEach((ordem) => {
-        const st = statsGrupoPDF(registrosLote.filter((r) => r.ordem === ordem));
-        const totalInseminacoesLoteOrdem = eventosCustoPDF.filter((e) => e.loteId === lote.id && e.ordem === ordem).length;
-        if (st.inseminados === 0 && totalInseminacoesLoteOrdem === 0) return;
-        linhasLote.push([lote.nome, lote.categoria || "—", ordem, totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalLote.concepcao), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
-        tamGrupo++;
-      });
-      if (tamGrupo > 0) gruposLote.push(tamGrupo);
-    });
-    autoTable(doc, {
-      ...opcoesTabela, startY: y,
-      ...separadoresDeGrupo(gruposLote),
-      head: [["Lote", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 8, 9, 10, 11, 12]),
-    });
-    y = doc.lastAutoTable.finalY + 20;
-    if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
 
     // 6) Detalhamento por raça de touro usado na inseminação (custo = sêmen + fração do
     // hormônio dos animais inseminados com aquele touro — por isso só Raça e Concepção Final
