@@ -8797,6 +8797,25 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     { label: "Repasse", valor: contarPrenhas(diagnosticosRepasseValidos) },
   ];
 
+  // Diagnósticos: Realizados (quem já tem Diagnóstico) e Pendentes (Inseminações realizadas
+  // menos Diagnósticos realizados, por ordem — inclui Repasse, cujo "inseminação" é o próprio
+  // manejo de Repasse e cujo "diagnóstico" é o Diagnóstico - repasse).
+  const repassesValidos = manejosFiltrados.filter((m) => m.tipo === "repasse" && !idsDesconhecidosResumo.has(m.loteId));
+  const contarDetalhes = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).length, 0);
+  const diagRealizadosPorOrdem = [
+    ...ORDENS_IATF.map((ordem) => ({ label: ordem, valor: contarDetalhes(diagnosticosValidos.filter((m) => m.ordem === ordem)) })),
+    { label: "Repasse", valor: contarDetalhes(diagnosticosRepasseValidos) },
+  ];
+  const inseminacoesPorOrdemComRepasse = [
+    ...ORDENS_IATF.map((ordem) => ({ label: ordem, valor: inseminacoesValidas.filter((m) => m.ordem === ordem).reduce((s, m) => s + (m.animaisLidos || []).length, 0) })),
+    { label: "Repasse", valor: repassesValidos.reduce((s, m) => s + (m.animaisLidos || []).length, 0) },
+  ];
+  const diagPendentesPorOrdem = inseminacoesPorOrdemComRepasse.map((ins, i) => ({
+    label: ins.label, valor: Math.max(0, ins.valor - diagRealizadosPorOrdem[i].valor),
+  }));
+  const totalDiagRealizados = diagRealizadosPorOrdem.reduce((s, x) => s + x.valor, 0);
+  const totalDiagPendentes = diagPendentesPorOrdem.reduce((s, x) => s + x.valor, 0);
+
   // ---------- Custo por Animal / Inseminação / Prenhez ----------
   // valor gasto = soma das SAÍDAS de estoque de Hormônio e Sêmen (quantidade × valor unitário
   // do insumo) cujo manejo de origem está dentro do recorte de Retiro/Lote/Categoria escolhido
@@ -8855,6 +8874,10 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     inseminacoes: { label: "Inseminações", grupos: [
       { titulo: "Por categoria", total: totalInseminacoes, itens: inseminacoesPorCategoria },
       { titulo: "Por ordem", total: totalInseminacoes, itens: inseminacoesPorOrdem },
+    ] },
+    diagnosticos: { label: "Diagnósticos", grupos: [
+      { titulo: "Realizados", total: totalDiagRealizados, itens: diagRealizadosPorOrdem },
+      { titulo: "Pendentes", total: totalDiagPendentes, itens: diagPendentesPorOrdem },
     ] },
     prenhas: { label: "Prenhas", grupos: [
       { titulo: "Por categoria", total: totalPrenhas, itens: prenhasPorCategoria },
