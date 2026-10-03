@@ -552,13 +552,13 @@ function CampoMedicamentoMultiplo({ insumos, local, selecionados, setSelecionado
   const remover = (id) => setSelecionados((a) => a.filter((s) => s.medicamentoId !== id));
   const mudarDose = (id, valor) => setSelecionados((a) => a.map((s) => (s.medicamentoId === id ? { ...s, dose: valor } : s)));
 
-  if (medicamentosDisponiveis.length === 0) return null;
-
   return (
     <>
       <Field label={`Medicamento${selecionados.length > 0 ? "s" : ""} (opcional)`}>
-        <select style={inputStyle} value="" onChange={(e) => adicionar(e.target.value)}>
-          <option value="">{disponiveisNaoSelecionados.length === 0 ? "— todos já selecionados —" : "— selecionar —"}</option>
+        <select style={inputStyle} value="" onChange={(e) => adicionar(e.target.value)} disabled={medicamentosDisponiveis.length === 0}>
+          <option value="">
+            {medicamentosDisponiveis.length === 0 ? "— nenhum cadastrado em Estoque —" : disponiveisNaoSelecionados.length === 0 ? "— todos já selecionados —" : "— selecionar —"}
+          </option>
           {disponiveisNaoSelecionados.map((m) => <option key={m.id} value={m.id}>{m.produtoComercial}</option>)}
         </select>
       </Field>
@@ -10715,30 +10715,52 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
   ];
   const COLUNAS_FIXAS = ["Identificação", "Categoria", "Lote", "Mês de parição"];
 
+  // id resolvido → nome do insumo; sem id (ex.: importado sem acesso ao Estoque na hora) →
+  // nome de reserva guardado pela importação (xNome), com "(?)" pra indicar que não achou o
+  // insumo correspondente pra confirmar; sem nenhum dos dois → "—".
+  const nomeIdOuReserva = (id, nomeReserva) => {
+    if (id) return nomeInsumo(id);
+    return nomeReserva ? `${nomeReserva} (?)` : null;
+  };
+
   const dadosDoBloco = (lote, brinco, ordem) => {
-    const d0 = buscarManejoLoteOrdem(["implantacao", "ressinc"], lote.id, ordem);
-    const retirada = buscarManejoLoteOrdem(["retirada"], lote.id, ordem);
+    const d0Separado = buscarManejoLoteOrdem(["implantacao", "ressinc"], lote.id, ordem);
+    const retiradaSeparada = buscarManejoLoteOrdem(["retirada"], lote.id, ordem);
     const insem = buscarManejoLoteOrdem(["inseminacao"], lote.id, ordem);
     const diag = buscarManejoLoteOrdem(["diagnostico"], lote.id, ordem);
     const detalheInsem = insem?.detalhes?.find((d) => d.brinco === brinco) || null;
     const detalheDiag = diag?.detalhes?.find((d) => d.brinco === brinco) || null;
     const semenInsumo = detalheInsem ? insumos.find((i) => i.id === detalheInsem.semenId) : null;
+    // um animal IMPORTADO não tem manejo de D0/Retirada separado — a importação grava o
+    // protocolo hormonal direto no próprio manejo de Inseminação. Usa o separado quando existe
+    // (fluxo normal, registrado na tela); sem ele, cai pro que estiver gravado na Inseminação.
+    const d0 = d0Separado || insem;
+    const retirada = retiradaSeparada || insem;
+    const touro = semenInsumo?.touro || detalheInsem?.touroInformado || null;
+    const partida = semenInsumo?.partida || detalheInsem?.partidaInformada || null;
+
+    const implante = d0 ? nomeIdOuReserva(d0.implanteId, d0.implanteNome) : null;
+    const benzoato = d0 ? nomeIdOuReserva(d0.benzoatoId, d0.benzoatoNome) : null;
+    const prostaglandinaD0 = d0 ? nomeIdOuReserva(d0.prostaglandinaId, d0.prostaglandinaNome) : null;
+    const prostaglandinaRet = retirada ? nomeIdOuReserva(retirada.prostaglandinaId, retirada.prostaglandinaNome) : null;
+    const cipionato = retirada ? nomeIdOuReserva(retirada.cipionatoId, retirada.cipionatoNome) : null;
+    const ecgHcg = retirada ? nomeIdOuReserva(retirada.ecgHcgId, retirada.ecgHcgNome) : null;
 
     return [
-      d0 ? paraData(d0.data) : "—",
+      d0Separado ? paraData(d0Separado.data) : "—",
       detalheInsem && insem ? paraData(insem.data) : "—",
       detalheDiag && diag ? paraData(diag.data) : "—",
       d0?.tipoManejo || "—",
       d0?.protocolo || "—",
-      d0 ? nomeInsumo(d0.implanteId) : "—",
-      d0 ? `${nomeInsumo(d0.benzoatoId)} (${d0.doseBenzoato} mL)` : "—",
-      d0 ? `${nomeInsumo(d0.prostaglandinaId)} (${d0.doseProstaglandina} mL)` : "—",
+      implante || "—",
+      benzoato ? `${benzoato} (${d0.doseBenzoato} mL)` : "—",
+      prostaglandinaD0 ? `${prostaglandinaD0} (${d0.doseProstaglandina} mL)` : "—",
       d0 ? resumoMedicamentos(d0.medicamentos, insumos) : "—",
-      retirada ? `${nomeInsumo(retirada.prostaglandinaId)} (${retirada.doseProstaglandina} mL)` : "—",
-      retirada ? `${nomeInsumo(retirada.cipionatoId)} (${retirada.doseCipionato} mL)` : "—",
-      retirada ? `${nomeInsumo(retirada.ecgHcgId)} (${retirada.doseEcgHcg} mL)` : "—",
-      semenInsumo?.touro || "—",
-      semenInsumo?.partida ? paraData(semenInsumo.partida) : "—",
+      prostaglandinaRet ? `${prostaglandinaRet} (${retirada.doseProstaglandina} mL)` : "—",
+      cipionato ? `${cipionato} (${retirada.doseCipionato} mL)` : "—",
+      ecgHcg ? `${ecgHcg} (${retirada.doseEcgHcg} mL)` : "—",
+      touro || "—",
+      partida ? paraData(partida) : "—",
       detalheInsem?.ecc || "—",
       detalheInsem?.peso || "—",
       detalheInsem?.observacoes || "—",
