@@ -11121,7 +11121,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const idsLotesCat = new Set(lotesCat.map((l) => l.id));
       // nº de animais da categoria (contagem oficial do lote, igual ao card "Resumo" dos
       // Relatórios) — independente de já ter sido inseminado/diagnosticado ou não.
-      const totalAnimaisCat = lotesCat.reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
+      const totalAnimaisCat = lotesCat.reduce((s, l) => s + (l.animais || []).length, 0);
       const registrosCat = registrosPDF.filter((r) => r.categoria === cat);
       const custosCat = calcularCustosPDF(idsLotesCat);
       const totalCat = statsGrupoPDF(registrosCat);
@@ -11151,7 +11151,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     {
       const lotesGeral = lotes.filter((l) => CATEGORIAS_RESUMO.includes(l.categoria));
       const idsLotesGeral = new Set(lotesGeral.map((l) => l.id));
-      const totalAnimaisGeral = lotesGeral.reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
+      const totalAnimaisGeral = lotesGeral.reduce((s, l) => s + (l.animais || []).length, 0);
       const custosGeralResumo = calcularCustosPDF(idsLotesGeral);
       const totalGeralResumo = statsGrupoPDF(registrosPDF);
       const totalDiagnosticadosGeral = registrosPDF.length;
@@ -11199,7 +11199,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       let tamGrupoRet = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const totalAnimaisRetCat = lotes.filter((l) => idsLotesRet.has(l.id) && l.categoria === cat)
-          .reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
+          .reduce((s, l) => s + (l.animais || []).length, 0);
         let tamGrupoCat = 0;
         ORDENS_IATF.forEach((ordem) => {
           const st = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat && r.ordem === ordem));
@@ -11243,7 +11243,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       let tamGrupoMes = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const totalAnimaisMesCat = lotes.filter((l) => l.mesParicao === mes && l.categoria === cat)
-          .reduce((s, l) => s + (l.numeroAnimais != null ? l.numeroAnimais : (l.animais || []).length), 0);
+          .reduce((s, l) => s + (l.animais || []).length, 0);
         let tamGrupoCat = 0;
         ORDENS_IATF.forEach((ordem) => {
           const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat && r.ordem === ordem));
