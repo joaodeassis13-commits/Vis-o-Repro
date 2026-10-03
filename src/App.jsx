@@ -536,6 +536,48 @@ function BotaoCameraLeitura({ onLido, disabled }) {
   );
 }
 
+// seletor de Medicamento pra usar DENTRO da mesma caixa de campos do manejo (ao lado de
+// Implante/Benzoato/etc, não como uma seção separada) — escolhe um de cada vez no dropdown,
+// que entra numa lista; cada item da lista ganha seu próprio campo de Dose, porque mais de um
+// medicamento pode ser usado no mesmo manejo, cada um com uma dose diferente.
+function CampoMedicamentoMultiplo({ insumos, local, selecionados, setSelecionados }) {
+  const medicamentosDisponiveis = insumos.filter((i) => i.categoria === "Medicamento" && (!local || i.local === local));
+  const idsSelecionados = new Set(selecionados.map((s) => s.medicamentoId));
+  const disponiveisNaoSelecionados = medicamentosDisponiveis.filter((m) => !idsSelecionados.has(m.id));
+
+  const adicionar = (id) => {
+    if (!id || idsSelecionados.has(id)) return;
+    setSelecionados((a) => [...a, { medicamentoId: id, dose: "" }]);
+  };
+  const remover = (id) => setSelecionados((a) => a.filter((s) => s.medicamentoId !== id));
+  const mudarDose = (id, valor) => setSelecionados((a) => a.map((s) => (s.medicamentoId === id ? { ...s, dose: valor } : s)));
+
+  if (medicamentosDisponiveis.length === 0) return null;
+
+  return (
+    <>
+      <Field label={`Medicamento${selecionados.length > 0 ? "s" : ""} (opcional)`}>
+        <select style={inputStyle} value="" onChange={(e) => adicionar(e.target.value)}>
+          <option value="">{disponiveisNaoSelecionados.length === 0 ? "— todos já selecionados —" : "— selecionar —"}</option>
+          {disponiveisNaoSelecionados.map((m) => <option key={m.id} value={m.id}>{m.produtoComercial}</option>)}
+        </select>
+      </Field>
+      {selecionados.map((s) => {
+        const m = insumos.find((i) => i.id === s.medicamentoId);
+        return (
+          <Field key={s.medicamentoId} label={`Dose — ${m?.produtoComercial || "?"}`}>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input className="campo-dose" style={inputStyle} type="number" step="any" value={s.dose}
+                onChange={(e) => mudarDose(s.medicamentoId, e.target.value)} placeholder={m?.unidadeEmbalagem || "un"} />
+              <button type="button" onClick={() => remover(s.medicamentoId)} title="Remover" style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", display: "flex", alignItems: "center" }}><X size={16} /></button>
+            </div>
+          </Field>
+        );
+      })}
+    </>
+  );
+}
+
 function CampoMedicamentos({ insumos, local, selecionados, setSelecionados }) {
   const medicamentos = insumos.filter((i) => i.categoria === "Medicamento" && (!local || i.local === local));
   const [medicamentoId, setMedicamentoId] = useState(medicamentos[0]?.id || "");
@@ -1089,27 +1131,57 @@ export default function App() {
     const usuariosParaEnviar = ["Administrador", "Suporte Adm"].includes(currentUser?.perfil)
       ? users
       : users.map((u) => { const { fazendasAutorizadas, ...resto } = u; return resto; });
-    const resultado = await sincronizar({ usuarios: usuariosParaEnviar, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes }, currentUser?.perfil);
+    // numa rede instável, a requisição pode ficar pendurada sem nunca dar erro nem terminar —
+    // sem um limite de tempo, isso deixava "Sincronizando" preso na tela indefinidamente. Com o
+    // limite, a tentativa é encerrada (e tenta de novo sozinha depois, pelo ciclo automático de
+    // 3 em 3 minutos ou assim que a internet voltar) em vez de travar o app numa espera sem fim.
+    const resultado = await Promise.race([
+      sincronizar({ usuarios: usuariosParaEnviar, fazendas, retiros, safras, lotes, insumos, manejos, movimentos, agendamentos, sugestoesRessinc, sugestoesRepasse, protocolosPadrao, exclusoes }, currentUser?.perfil),
+      new Promise((resolve) => setTimeout(() => resolve({ ok: false, motivo: "A internet parece instável — a sincronização foi cancelada e vai tentar de novo automaticamente." }), 25000)),
+    ]).catch((erro) => ({ ok: false, motivo: `Erro inesperado ao sincronizar: ${erro?.message || erro}` }));
     // aplica o que veio certo mesmo que outra tabela tenha falhado — nunca descarta dados
     // válidos só porque outra parte da sincronização deu erro.
     if (resultado.atualizado) {
       const a = resultado.atualizado;
+      // o PULL de cada coleção sempre reflete SÓ o que o servidor confirma ter recebido — se o
+      // ENVIO de algum item tiver falhado silenciosamente (por exemplo, por causa de uma coluna
+      // nova que esse banco ainda não tem, exigindo rodar o schema.sql de novo), aquele item
+      // nunca chega no servidor, e usar o resultado do PULL como substituto direto do estado
+      // local apagava justamente o que tinha acabado de ser criado offline. Por isso, antes de
+      // aplicar, preserva qualquer item LOCAL que o servidor ainda não confirma conhecer — e que
+      // também não foi explicitamente excluído (via "exclusoes") — em vez de presumir que
+      // "ausente na resposta do servidor" significa "não existe mais".
+      const idsExcluidosConhecidos = new Set((a.exclusoes || exclusoes || []).map((e) => e.id));
+      const comPendentesPreservados = (colecaoLocal, doServidor) => {
+        const idsNoServidor = new Set(doServidor.map((item) => item.id));
+        const pendentes = colecaoLocal.filter((item) => !idsNoServidor.has(item.id) && !idsExcluidosConhecidos.has(item.id));
+        return pendentes.length > 0 ? [...doServidor, ...pendentes] : doServidor;
+      };
       // "fazendasAutorizadas" agora vem sincronizado de verdade (via usuario_fazendas,
       // resolvido dentro de sincronizar()) — o servidor já é a fonte confiável aqui.
-      if (a.usuarios) setUsers(a.usuarios);
-      if (a.fazendas) setFazendas(a.fazendas);
-      if (a.retiros) setRetiros(a.retiros);
-      if (a.safras) setSafras(a.safras);
-      if (a.lotes) setLotes(a.lotes);
-      if (a.insumos) setInsumos(a.insumos);
-      if (a.movimentos) setMovimentos(a.movimentos);
+      if (a.usuarios) setUsers(comPendentesPreservados(users, a.usuarios));
+      if (a.fazendas) setFazendas(comPendentesPreservados(fazendas, a.fazendas));
+      if (a.retiros) setRetiros(comPendentesPreservados(retiros, a.retiros));
+      if (a.safras) setSafras(comPendentesPreservados(safras, a.safras));
+      // junta lotes "Desconhecidos" duplicados (de aparelhos diferentes offline) ANTES de
+      // aplicar — e já reatribui os manejos que apontavam pros duplicados pro sobrevivente,
+      // pra lotes e manejos nunca ficarem inconsistentes entre si mesmo por um instante.
+      const lotesCombinados = a.lotes ? comPendentesPreservados(lotes, a.lotes) : lotes;
+      const manejosCombinadosPreDedup = a.manejos ? comPendentesPreservados(manejos, a.manejos) : manejos;
+      const { lotes: lotesSemDesconhecidosDuplicados, manejos: manejosRealocados, idsRemovidos: idsDesconhecidosRemovidos } =
+        mesclarLotesDesconhecidosDuplicados(lotesCombinados, manejosCombinadosPreDedup);
+      if (a.lotes) setLotes(lotesSemDesconhecidosDuplicados);
+      idsDesconhecidosRemovidos.forEach((id) => excluirComLapide("lotes", id));
+      if (a.insumos) setInsumos(comPendentesPreservados(insumos, a.insumos));
+      const movimentosAplicados = a.movimentos ? comPendentesPreservados(movimentos, a.movimentos) : movimentos;
+      if (a.movimentos) setMovimentos(movimentosAplicados);
       // roda a mesclagem DEPOIS de já ter aplicado "movimentos" (ela precisa poder realocar
       // saídas de estoque pra cima da versão mais atual, não da anterior a esta sincronização).
-      if (a.manejos) setManejos(mesclarManejosDuplicados(a.manejos, a.movimentos || movimentos));
-      if (a.agendamentos) setAgendamentos(a.agendamentos);
-      if (a.sugestoesRessinc) setSugestoesRessinc(a.sugestoesRessinc);
-      if (a.sugestoesRepasse) setSugestoesRepasse(a.sugestoesRepasse);
-      if (a.protocolosPadrao) setProtocolosPadrao(a.protocolosPadrao);
+      if (a.manejos) setManejos(mesclarManejosDuplicados(manejosRealocados, movimentosAplicados));
+      if (a.agendamentos) setAgendamentos(comPendentesPreservados(agendamentos, a.agendamentos));
+      if (a.sugestoesRessinc) setSugestoesRessinc(comPendentesPreservados(sugestoesRessinc, a.sugestoesRessinc));
+      if (a.sugestoesRepasse) setSugestoesRepasse(comPendentesPreservados(sugestoesRepasse, a.sugestoesRepasse));
+      if (a.protocolosPadrao) setProtocolosPadrao(comPendentesPreservados(protocolosPadrao, a.protocolosPadrao));
       if (a.exclusoes) setExclusoes(a.exclusoes);
     }
     if (resultado.ok) {
@@ -1480,13 +1552,13 @@ export default function App() {
         });
       }
       const grupo = gruposLote.get(chave);
-      if (linha.brinco && !grupo.animais.includes(linha.brinco.trim())) grupo.animais.push(linha.brinco.trim());
+      if (linha.brinco && !grupo.animais.includes(linha.brinco.trim().toUpperCase())) grupo.animais.push(linha.brinco.trim().toUpperCase());
       const ordemLinha = normalizarOrdemIATF(linha.ordem);
       // quantos animais o lote tem em CADA ordem (linha sem ordem conta como a 1ª) — o "Nº de
       // animais" do lote deve acompanhar a ordem atual dele, não o total de todas as ordens somadas.
       if (linha.brinco) {
         const chaveOrdem = ordemLinha || ORDENS_IATF[0];
-        (grupo.animaisPorOrdem[chaveOrdem] = grupo.animaisPorOrdem[chaveOrdem] || new Set()).add(linha.brinco.trim());
+        (grupo.animaisPorOrdem[chaveOrdem] = grupo.animaisPorOrdem[chaveOrdem] || new Set()).add(linha.brinco.trim().toUpperCase());
       }
       if (ordemLinha) {
         const indiceAtual = ORDENS_IATF.indexOf(ordemLinha);
@@ -1571,7 +1643,7 @@ export default function App() {
       if (!grupoInsem.ecgHcgId && linha.ecgHcg?.trim()) { grupoInsem.ecgHcgId = acharInsumoPorNome(linha.ecgHcg); grupoInsem.ecgHcgNome = linha.ecgHcg.trim(); }
       if (grupoInsem.doseEcgHcg == null && linha.doseEcgHcg?.trim()) grupoInsem.doseEcgHcg = numBR(linha.doseEcgHcg);
       grupoInsem.animais.push({
-        brinco: linha.brinco.trim(), semenId: acharSemenPorTouro(linha.touro, linha.partida || null), touroInformado: linha.touro?.trim() || null,
+        brinco: linha.brinco.trim().toUpperCase(), semenId: acharSemenPorTouro(linha.touro, linha.partida || null), touroInformado: linha.touro?.trim() || null,
         racaTouro: linha.racaTouro?.trim() || null, ecc: normalizarEcc(linha.ecc), partidaInformada: linha.partida || null,
         // GnRH é dado na Inseminação em si (por animal), não no protocolo do D0/Retirada.
         gnrhId: acharInsumoPorNome(linha.gnrh), gnrhNome: linha.gnrh?.trim() || null, doseGnrh: linha.doseGnrh?.trim() ? numBR(linha.doseGnrh) : null,
@@ -1591,7 +1663,7 @@ export default function App() {
       const resultadoNormalizado = linha.resultado.trim().toUpperCase().startsWith("P") ? "Prenha" : "Vazia";
       if (!gruposDiag.has(chave)) gruposDiag.set(chave, { infoLote, ordem, data: linha.dataDiagnostico, animais: [] });
       gruposDiag.get(chave).animais.push({
-        brinco: linha.brinco.trim(), resultado: resultadoNormalizado,
+        brinco: linha.brinco.trim().toUpperCase(), resultado: resultadoNormalizado,
         tempoGestacaoInformado: linha.tempoGestacaoInformado?.trim() ? numBR(linha.tempoGestacaoInformado) : null,
       });
     });
@@ -1682,7 +1754,10 @@ export default function App() {
     marcaPendencia();
   };
   const addAnimalAoLote = (loteId, brinco) => {
-    setLotes((a) => a.map((l) => l.id === loteId && !l.animais.includes(brinco) ? { ...l, animais: [...l.animais, brinco], atualizadoEm: new Date().toISOString() } : l));
+    // compara ignorando maiúscula/minúscula — reconhece um animal já existente no lote mesmo
+    // que a grafia salva antes (de uma importação feita antes desta correção, por exemplo)
+    // esteja em minúscula e a leitura de agora venha em maiúscula.
+    setLotes((a) => a.map((l) => l.id === loteId && !l.animais.some((existente) => existente.toUpperCase() === brinco.toUpperCase()) ? { ...l, animais: [...l.animais, brinco], atualizadoEm: new Date().toISOString() } : l));
     marcaPendencia();
   };
   const removeAnimalDoLote = (loteId, brinco) => {
@@ -2024,6 +2099,43 @@ export default function App() {
   // sem saber do outro), a sincronização não detecta conflito nenhum (são registros com id
   // diferente) e os dois acabam existindo ao mesmo tempo, cada um com parte da leitura.
   const TIPOS_UM_POR_LOTE_ORDEM = ["implantacao", "ressinc", "retirada", "inseminacao", "diagnostico"];
+
+  // mesmo problema do comentário abaixo (dois aparelhos offline criando o "mesmo" registro
+  // sem saber um do outro), mas pro lote "Desconhecidos": "garantirLoteDesconhecidos" só
+  // confere se JÁ existe um antes de criar — mas dois aparelhos offline, cada um olhando só
+  // pro que já tem localmente, podem concluir ao mesmo tempo que "ainda não existe" e criar
+  // CADA UM o seu. Só deveria existir UM lote "Desconhecidos" por fazenda/safra; isso junta
+  // os duplicados que a sincronização trouxer, mantendo o mais antigo como sobrevivente e
+  // reatribuindo a ele os manejos que apontavam pros outros.
+  const mesclarLotesDesconhecidosDuplicados = (listaLotes, listaManejos) => {
+    const grupos = new Map();
+    listaLotes.forEach((l) => {
+      if (!ehNomeDesconhecidos(l.nome)) return;
+      const chave = `${l.fazendaId}|${l.safraId || ""}`;
+      if (!grupos.has(chave)) grupos.set(chave, []);
+      grupos.get(chave).push(l);
+    });
+    const mapaParaSobrevivente = new Map();
+    let lotesSaida = listaLotes;
+    grupos.forEach((grupo) => {
+      if (grupo.length <= 1) return;
+      const ordenado = [...grupo].sort((a, b) => (a.criadoEm || "").localeCompare(b.criadoEm || ""));
+      const sobrevivente = ordenado[0];
+      const duplicados = ordenado.slice(1);
+      const todosAnimais = new Set(sobrevivente.animais || []);
+      duplicados.forEach((d) => {
+        (d.animais || []).forEach((a) => todosAnimais.add(a));
+        mapaParaSobrevivente.set(d.id, sobrevivente.id);
+      });
+      const idsDuplicados = new Set(duplicados.map((d) => d.id));
+      lotesSaida = lotesSaida
+        .filter((l) => !idsDuplicados.has(l.id))
+        .map((l) => (l.id === sobrevivente.id ? { ...l, animais: [...todosAnimais] } : l));
+    });
+    if (mapaParaSobrevivente.size === 0) return { lotes: listaLotes, manejos: listaManejos, idsRemovidos: [] };
+    const manejosSaida = listaManejos.map((m) => (mapaParaSobrevivente.has(m.loteId) ? { ...m, loteId: mapaParaSobrevivente.get(m.loteId) } : m));
+    return { lotes: lotesSaida, manejos: manejosSaida, idsRemovidos: [...mapaParaSobrevivente.keys()] };
+  };
 
   // roda depois de toda sincronização bem-sucedida: procura grupos de manejos duplicados
   // (mesmo tipo + lote + ordem) e os funde num só — sem isso, a leitura de um dos dois
@@ -3753,7 +3865,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
   }, [localEstoque, produtos.map((p) => p.id).join(",")]);
 
   const conferirAoLer = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) return;
     const avisos = [];
     if (animaisLidos.includes(b)) avisos.push("Este animal já foi lido nesta lista.");
@@ -3763,9 +3875,9 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
   };
 
   const lerAnimal = () => {
-    if (!brinco.trim()) return;
+    if (!brinco.trim().toUpperCase()) return;
     conferirAoLer();
-    if (!animaisLidos.includes(brinco.trim())) setAnimaisLidos((a) => [...a, brinco.trim()]);
+    if (!animaisLidos.includes(brinco.trim().toUpperCase())) setAnimaisLidos((a) => [...a, brinco.trim().toUpperCase()]);
     setBrinco("");
   };
 
@@ -3923,7 +4035,6 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                     <th>Categoria</th>
                     <th>Nº animais</th>
                     <th>Progesterona</th>
-                    <th>Medicamentos</th>
                     <th>Local</th>
                     <th>Data</th>
                     <th>Leitura individual</th>
@@ -3950,7 +4061,6 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
                         </>
                       )}
                       <td>{nomeProduto(m.produtoId)} ({m.quantidade} {m.unidade || "un"})</td>
-                      <td>{resumoMedicamentos(m.medicamentos, insumos)}</td>
                       <td>{m.localEstoque === "externo" ? "Externo" : "Fazenda"}</td>
                       <td>{fmtDate(m.data)}</td>
                       <td>{m.animaisLidos.length > 0 ? `${m.animaisLidos.length} animais` : "—"}</td>
@@ -4076,7 +4186,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
   const [avisoImediato, setAvisoImediato] = useState(null); // { brinco, avisos: [] }
   const conferirAoLer = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) return;
     const avisos = [];
     if (animaisLidos.some((a) => a.brinco === b)) avisos.push("Este animal já foi lido nesta lista.");
@@ -4085,10 +4195,10 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
   };
   const adicionarAnimal = () => {
-    if (!brinco.trim()) { setMsg("Leia o brinco do animal."); return; }
-    if (animaisLidos.some((a) => a.brinco === brinco.trim())) { setMsg("Este animal já foi lido."); return; }
+    if (!brinco.trim().toUpperCase()) { setMsg("Leia o brinco do animal."); return; }
+    if (animaisLidos.some((a) => a.brinco === brinco.trim().toUpperCase())) { setMsg("Este animal já foi lido."); return; }
     conferirAoLer();
-    setAnimaisLidos((a) => [...a, { brinco: brinco.trim(), ecc, peso: peso.trim() || null }]);
+    setAnimaisLidos((a) => [...a, { brinco: brinco.trim().toUpperCase(), ecc, peso: peso.trim() || null }]);
     setBrinco(""); setPeso(""); setMsg("");
   };
   const removerAnimal = (b) => setAnimaisLidos((a) => a.filter((x) => x.brinco !== b));
@@ -4109,7 +4219,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const canSave = (!!editandoManejo || !nomeDuplicado) && novoNome.trim() !== "" && novoRetiroId !== "" && categoria !== "" &&
     String(numeroAnimais).trim() !== "" && numBR(numeroAnimais) > 0 &&
     implanteId !== "" && benzoatoId !== "" && String(doseBenzoato).trim() !== "" && numBR(doseBenzoato) > 0 &&
-    prostaglandinaId !== "" && String(doseProstaglandina).trim() !== "" && numBR(doseProstaglandina) > 0;
+    prostaglandinaId !== "" && String(doseProstaglandina).trim() !== "" && numBR(doseProstaglandina) > 0 &&
+    medicamentos.every((m) => String(m.dose).trim() !== "" && numBR(m.dose) > 0);
 
   const submetendoRef = React.useRef(false);
   const salvar = () => {
@@ -4125,6 +4236,10 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     const benzoatoItem = benzoatos.find((i) => i.id === benzoatoId);
     const pgfItem = prostaglandinas.find((i) => i.id === prostaglandinaId);
     const gnrhItem = gnrhId ? gnrh.find((i) => i.id === gnrhId) : null;
+    // o campo de dose de cada medicamento guarda o texto digitado (pra não perder o que a
+    // pessoa está no meio de digitar, tipo "1," antes de completar "1,5") — converte pra
+    // número só agora, na hora de salvar de verdade.
+    const medicamentosComDose = medicamentos.map((m) => ({ ...m, dose: numBR(m.dose) }));
 
     if (editandoManejo) {
       atualizarLote(editandoManejo.loteId, { nome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null });
@@ -4135,7 +4250,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
         gnrh: gnrhItem?.produtoComercial || "", doseGnrh: dG,
       };
       atualizarManejo(editandoManejo.id, {
-        loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos, localEstoque,
+        loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos: medicamentosComDose, localEstoque,
         implanteId, benzoatoId, doseBenzoato: dB, prostaglandinaId, doseProstaglandina: dP,
         gnrhId: gnrhId || null, doseGnrh: dG, data: dataManejo,
         animaisLidos: comLeitura ? animaisLidos.map((a) => a.brinco) : [],
@@ -4165,7 +4280,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     };
 
     const manejoId = registrarManejo({
-      tipo: "implantacao", loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos, localEstoque,
+      tipo: "implantacao", loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos: medicamentosComDose, localEstoque,
       implanteId, benzoatoId, doseBenzoato: dB, prostaglandinaId, doseProstaglandina: dP,
       gnrhId: gnrhId || null, doseGnrh: dG, data: dataManejo,
       animaisLidos: comLeitura ? animaisLidos.map((a) => a.brinco) : [],
@@ -4176,7 +4291,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     registrarSaidaEstoque(benzoatoId, dB * nAnimais, manejoId, "implantacao");
     registrarSaidaEstoque(prostaglandinaId, dP * nAnimais, manejoId, "implantacao");
     if (gnrhId && dG) registrarSaidaEstoque(gnrhId, dG * nAnimais, manejoId, "implantacao");
-    medicamentos.forEach((m) => registrarSaidaEstoque(m.medicamentoId, m.dose, manejoId, "implantacao"));
+    medicamentosComDose.forEach((m) => registrarSaidaEstoque(m.medicamentoId, m.dose, manejoId, "implantacao"));
 
     if (addProtocoloPadraoSeNovo) {
       addProtocoloPadraoSeNovo("d0", protocoloPadraoNome, {
@@ -4561,6 +4676,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 dose={<input className="campo-dose" style={inputStyle} type="number" step="any" value={doseGnrh} onChange={(e) => { limparMsgSeSucesso(); setDoseGnrh(e.target.value); }} placeholder="0" />}
                 unidade={insumos.find((i) => i.id === gnrhId)?.unidadeEmbalagem || "mL"}
               />
+              <CampoMedicamentoMultiplo insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
             </div>
 
             <LegendaCamposOpcionais />            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 14px", cursor: "pointer" }} onClick={() => setComLeitura((v) => !v)}>
@@ -4613,8 +4729,6 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 )}
               </div>
             )}
-
-            <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
             {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> {editandoManejo ? "Salvar edição" : "Registrar D0"}</BtnPrimary>
@@ -4870,7 +4984,6 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         <th>Implante</th>
                         <th>Benzoato</th>
                         <th>Prostaglandina</th>
-                        <th>Medicamentos</th>
                         <th>Local</th>
                         <th>Data</th>
                         <th>Ações</th>
@@ -4887,7 +5000,6 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                           <td>{nomeInsumo(m.implanteId)}</td>
                           <td>{nomeInsumo(m.benzoatoId)} ({m.doseBenzoato} mL)</td>
                           <td>{nomeInsumo(m.prostaglandinaId)} ({m.doseProstaglandina} mL)</td>
-                          <td>{resumoMedicamentos(m.medicamentos, insumos)}</td>
                           <td>{m.localEstoque === "externo" ? "Externo" : "Fazenda"}</td>
                           <td>{fmtDate(m.data)}</td>
                           <td>
@@ -5023,7 +5135,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
 
   const [avisoImediato, setAvisoImediato] = useState(null); // { brinco, avisos: [] }
   const conferirAoLer = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) return;
     const avisos = [];
     if (animaisLidos.some((a) => a.brinco === b)) avisos.push("Este animal já foi lido nesta lista.");
@@ -5031,10 +5143,10 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
   };
   const adicionarAnimal = () => {
-    if (!brinco.trim()) { setMsg("Leia o brinco do animal."); return; }
-    if (animaisLidos.some((a) => a.brinco === brinco.trim())) { setMsg("Este animal já foi lido."); return; }
+    if (!brinco.trim().toUpperCase()) { setMsg("Leia o brinco do animal."); return; }
+    if (animaisLidos.some((a) => a.brinco === brinco.trim().toUpperCase())) { setMsg("Este animal já foi lido."); return; }
     conferirAoLer();
-    setAnimaisLidos((a) => [...a, { brinco: brinco.trim(), ecc, peso: peso.trim() || null }]);
+    setAnimaisLidos((a) => [...a, { brinco: brinco.trim().toUpperCase(), ecc, peso: peso.trim() || null }]);
     setBrinco(""); setPeso(""); setMsg("");
   };
   const removerAnimal = (b) => setAnimaisLidos((a) => a.filter((x) => x.brinco !== b));
@@ -5369,7 +5481,6 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                     <th>Prostaglandina</th>
                     <th>Cipionato</th>
                     <th>ECG/HCG</th>
-                    <th>Medicamentos</th>
                     <th>Local</th>
                     <th>Data</th>
                     <th>Leitura individual</th>
@@ -5385,7 +5496,6 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                       <td>{nomeInsumo(m.prostaglandinaId)} ({m.doseProstaglandina} mL)</td>
                       <td>{nomeInsumo(m.cipionatoId)} ({m.doseCipionato} mL)</td>
                       <td>{nomeInsumo(m.ecgHcgId)} ({m.doseEcgHcg} mL)</td>
-                      <td>{resumoMedicamentos(m.medicamentos, insumos)}</td>
                       <td>{m.localEstoque === "externo" ? "Externo" : "Fazenda"}</td>
                       <td>{fmtDate(m.data)}</td>
                       <td>{m.animaisLidos.length > 0 ? `${m.animaisLidos.length} animais` : "—"}</td>
@@ -5555,7 +5665,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // conferência que roda assim que o brinco é lido (Enter no campo Identificação), antes de qualquer
   // outro campo ser preenchido: já avisa se o animal tem Diagnóstico de Prenha ou se pertence a outro lote.
   const conferirAoLer = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) return false;
     const avisos = [];
     const diagPrenha = buscarDiagnosticoPrenha(b);
@@ -5574,7 +5684,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const limparCamposLeitura = () => { setBrinco(""); setEcc(""); setPeso(""); setObservacoes(""); setGnrhId(""); setDoseGnrh(""); setRacaMatriz(""); setMsg(""); setAvisoImediato(null); brincoInputRef.current?.focus(); };
 
   const adicionar = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
     if (!semenId) { setMsg("Selecione o touro e a partida utilizados."); return; }
     if (ecc.trim() !== "" && !OPCOES_ECC.includes(ecc.trim())) { setMsg("ECC inválido. Escolha um valor da lista."); return; }
@@ -5868,7 +5978,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 <div style={{ display: "flex", gap: 8 }}>
                   <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
                     onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim().toUpperCase()) { conferirAoLer(); eccInputRef.current?.focus(); } } }} />
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
                 </div>
               </Field>
@@ -6015,7 +6125,6 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     <th>Categoria</th>
                     <th>Ordem</th>
                     <th>Animais inseminados</th>
-                    <th>Medicamentos</th>
                     <th>Protocolo (custo)</th>
                     <th>Local</th>
                     <th>Data</th>
@@ -6029,7 +6138,6 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       <td>{m.categoria || "—"}</td>
                       <td>{m.ordem || "—"}</td>
                       <td>{m.animaisLidos.length}</td>
-                      <td>{resumoMedicamentos(m.medicamentos, insumos)}</td>
                       <td style={{ fontSize: 11.5 }}>{resumoProtocoloHormonal(m, insumos)}</td>
                       <td>{m.localEstoque === "externo" ? "Externo" : "Fazenda"}</td>
                       <td>{fmtDate(m.data)}</td>
@@ -6155,7 +6263,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   // calculado a partir da última Inseminação registrada PARA ESTE animal — não muda pela
   // ordem/lote selecionados, é sempre o histórico individual do próprio animal.
   const tempoGestacaoCalculado = React.useMemo(() => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b || resultado !== "Prenha") return null;
     const ultimaInsem = buscarUltimaInseminacao(b);
     if (!ultimaInsem) return null;
@@ -6224,7 +6332,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   // aviso imediato assim que o brinco é lido — antes mesmo do Resultado ser preenchido
   const [avisoImediato, setAvisoImediato] = useState(null);
   const conferirAoLer = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) return false;
     const { avisos } = calcularAvisos(b);
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
@@ -6232,7 +6340,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   };
 
   const adicionar = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
     if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
     if (!resultado) { setMsg("Digite P (Prenha) ou V (Vazia) no campo Resultado."); resultadoInputRef.current?.focus(); return; }
@@ -6419,7 +6527,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                   <div style={{ display: "flex", gap: 8 }}>
                     <input ref={brincoInputRef} style={inputStyle} placeholder={lotesSelecionados.length > 0 ? "Ler brinco / QR e Enter" : "Selecione um lote antes"} value={brinco} disabled={lotesSelecionados.length === 0}
                       onChange={(e) => { limparMsgSeSucesso(); if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (brinco.trim().toUpperCase()) { conferirAoLer(); resultadoInputRef.current?.focus(); } } }} />
                     <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={lotesSelecionados.length === 0} />
                   </div>
                 </Field>
@@ -6562,7 +6670,6 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                     <th>Prenhas</th>
                     <th>Origem das prenhas</th>
                     <th>Avaliadas</th>
-                    <th>Medicamentos</th>
                     <th>Local</th>
                     <th>Data</th>
                     <th>Ações</th>
@@ -6580,7 +6687,6 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                         <td>{prenhas}</td>
                         <td style={{ fontSize: 12 }}>{prenhas === 0 ? "—" : `Inseminação: ${prenhasInsem} · Repasse: ${prenhasRepasse}`}</td>
                         <td>{m.detalhes.length}</td>
-                        <td>{resumoMedicamentos(m.medicamentos, insumos)}</td>
                         <td>{m.localEstoque === "externo" ? "Externo" : m.localEstoque === "fazenda" ? "Fazenda" : "—"}</td>
                         <td>{fmtDate(m.data)}</td>
                         <td>
@@ -6882,7 +6988,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
 
   // Enter no campo Identificação: busca e preenche automaticamente a caixa com os dados do animal
   const lerAnimal = () => {
-    const b = brinco.trim();
+    const b = brinco.trim().toUpperCase();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
     if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi registrado nesta sessão."); return; }
 
@@ -9974,7 +10080,7 @@ function AbaNovosAnimais({ fazendaAtiva, safraAtiva, manejos, registrarManejo, r
   const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
 
   const adicionarPendente = () => {
-    const brinco = form.brinco.trim();
+    const brinco = form.brinco.trim().toUpperCase();
     if (!brinco) { setMsg("Informe a identificação do animal."); return; }
     if (pendentes.some((p) => p.brinco === brinco)) { setMsg(`"${brinco}" já está na lista abaixo.`); return; }
     if (!form.statusPrenhez) { setMsg("Selecione o status de prenhez (P ou V)."); return; }
@@ -10261,8 +10367,8 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, insumos, manejos, manejosE
   const [msgAtribuicao, setMsgAtribuicao] = useState("");
 
   const registrarAtribuicao = () => {
-    const nova = novaIdentificacao.trim();
-    const anterior = identificacaoAnterior.trim();
+    const nova = novaIdentificacao.trim().toUpperCase();
+    const anterior = identificacaoAnterior.trim().toUpperCase();
     if (!nova) { setMsgAtribuicao("Informe a nova identificação."); return; }
     if (!anterior) { setMsgAtribuicao("Informe a identificação anterior."); return; }
     if (!brincosConhecidos.includes(anterior)) { setMsgAtribuicao(`Não há nenhum registro de "${anterior}" no sistema.`); return; }
