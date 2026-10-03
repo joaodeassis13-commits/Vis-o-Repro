@@ -8674,11 +8674,16 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
     return custoPorUnidadeInsumo(comAPartida || candidatos[0]) || 0;
   };
   // custo da bainha usada NESSE manejo de Inseminação — sempre 1 unidade por animal, então o
-  // valor unitário do produto já É o custo por animal, sem precisar dividir por nada.
+  // valor unitário do produto já É o custo por animal, sem precisar dividir por nada. Um manejo
+  // IMPORTADO nunca tem uma saída de estoque de verdade (a importação de histórico nunca mexe
+  // em estoque) — nesse caso, cai pro preço ATUAL cadastrado no Estoque, no mesmo local
+  // (fazenda/externo) do manejo, em vez de ficar sem nenhum custo de bainha.
   const custoBainhaDoManejo = (manejoId) => {
     const mov = movimentos.find((mv) => mv.tipo === "saida" && mv.manejoId === manejoId && ehBainha(insumos.find((i) => i.id === mv.insumoId)));
-    if (!mov) return 0;
-    return custoPorUnidadeInsumo(insumos.find((i) => i.id === mov.insumoId)) || 0;
+    if (mov) return custoPorUnidadeInsumo(insumos.find((i) => i.id === mov.insumoId)) || 0;
+    const manejo = manejos.find((m) => m.id === manejoId);
+    const bainhaAtual = insumos.find((i) => ehBainha(i) && (!manejo?.localEstoque || i.local === manejo.localEstoque));
+    return bainhaAtual ? (custoPorUnidadeInsumo(bainhaAtual) || 0) : 0;
   };
   // custo de Hormônio de UM manejo (Indução/D0/Retirada), dividido pelo nº de animais daquele
   // manejo — dá o custo hormonal "por cabeça" daquele evento específico, que depois é somado
@@ -8808,9 +8813,14 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
     return custoPorUnidadeInsumo(comAPartida || candidatos[0]) || 0;
   };
   const custoUnidade = (id) => id ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === id)) || 0) : 0;
+  // sem saída de estoque (caso de manejo importado, que nunca desconta estoque), cai pro preço
+  // ATUAL de bainha cadastrado no Estoque, no mesmo local (fazenda/externo) do manejo.
   const custoBainhaDoManejo = (manejoId) => {
     const mov = movimentos.find((mv) => mv.tipo === "saida" && mv.manejoId === manejoId && ehBainha(insumos.find((i) => i.id === mv.insumoId)));
-    return mov ? (custoPorUnidadeInsumo(insumos.find((i) => i.id === mov.insumoId)) || 0) : 0;
+    if (mov) return custoPorUnidadeInsumo(insumos.find((i) => i.id === mov.insumoId)) || 0;
+    const manejo = manejos.find((m) => m.id === manejoId);
+    const bainhaAtual = insumos.find((i) => ehBainha(i) && (!manejo?.localEstoque || i.local === manejo.localEstoque));
+    return bainhaAtual ? (custoPorUnidadeInsumo(bainhaAtual) || 0) : 0;
   };
   const custoHormonioPorAnimalDoManejo = (manejo) => {
     if (!manejo || !manejo.numeroAnimais) return 0;
@@ -9489,7 +9499,7 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
 
 // mesmo visual do BarrasConcepcao, mas pra valores em R$ (não porcentagem) — usado no card de Custo.
 function BarrasCusto({ dados, compacto }) {
-  const fmtMoedaCurta = (v) => v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`;
+  const fmtMoedaCurta = (v) => v == null ? "—" : `R$ ${Math.round(v)}`;
   if (dados.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorValor = Math.max(...dados.map((d) => d.valor || 0), 1);
   const larguraColuna = compacto ? 28 : (dados.length <= 5 ? 50 : 42);
@@ -11243,6 +11253,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const totalDiagnosticadosMes = totalMes.inseminados;
       const fertilidadeMes = totalDiagnosticadosMes > 0 ? (totalMes.prenhas / totalDiagnosticadosMes) * 100 : null;
       const custosMes = custosPorEventosPDF(eventosMes, registrosMes);
+      const idsLotesMes = new Set(lotes.filter((l) => l.mesParicao === mes).map((l) => l.id));
+      const iatfMes = iatfPorMatrizPDF(idsLotesMes);
       let tamGrupoMes = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
         const totalAnimaisMesCat = lotes.filter((l) => l.mesParicao === mes && l.categoria === cat)
@@ -11253,7 +11265,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const totalInseminacoesMesCatOrdem = eventosMes.filter((e) => e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesMesCatOrdem === 0) return;
           linhasMes.push([mes, cat, totalAnimaisMesCat || "—", ordem, totalInseminacoesMesCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-            fmtPctPDF(totalMes.concepcao), fmtPctPDF(fertilidadeMes), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosMes)]);
+            fmtPctPDF(totalMes.concepcao), fmtPctPDF(fertilidadeMes), iatfMes != null ? iatfMes.toFixed(2) : "—", ...linhaCustosPDF(custosMes)]);
           tamGrupoCat++;
         });
         if (tamGrupoCat > 0) { gruposCategoriaMes.push(tamGrupoCat); tamGrupoMes += tamGrupoCat; }
