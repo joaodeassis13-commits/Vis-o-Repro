@@ -119,7 +119,7 @@ create table if not exists insumos (
   fazenda_id text references fazendas (id) on delete cascade,
   usuario_id uuid references usuarios (id),  -- não nulo quando local = 'externo'
   local text not null check (local in ('fazenda', 'externo')),
-  categoria text not null check (categoria in ('Hormônio', 'Sêmen', 'Medicamento', 'Utensílio')),
+  categoria text not null check (categoria in ('Hormônio', 'Sêmen', 'Medicamento', 'Utensílio', 'Serviço')),
   estoque numeric not null default 0,
   quantidade numeric,      -- quantidade da última entrada registrada (histórico/exibição)
   valor_unitario numeric,
@@ -148,6 +148,10 @@ alter table insumos add column if not exists motilidade_final numeric;
 alter table insumos add column if not exists vigor_final smallint;
 alter table insumos add column if not exists quantidade numeric;
 alter table insumos add column if not exists dose_media numeric;
+-- "Serviço" (Serviço de inseminação, Serviço de diagnóstico, Outras despesas) é só informativo:
+-- não tem quantidade/estoque, só guarda um valor unitário (R$/animal) por descrição.
+alter table insumos drop constraint if exists insumos_categoria_check;
+alter table insumos add constraint insumos_categoria_check check (categoria in ('Hormônio', 'Sêmen', 'Medicamento', 'Utensílio', 'Serviço'));
 
 -- ---------- manejo (indução, D0, ressinc, retirada, inseminação, diagnóstico) ----------
 -- precisa vir ANTES de "movimentos", que referencia manejo_id

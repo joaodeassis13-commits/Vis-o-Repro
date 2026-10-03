@@ -1891,6 +1891,27 @@ export default function App() {
     return insumoId;
   };
 
+  // "Serviços e outros" (Serviço de inseminação, Serviço de diagnóstico, Outras despesas) é só
+  // informativo — não tem quantidade, não desconta/soma estoque e não gera movimento. Só grava
+  // (ou atualiza) o valor unitário daquela descrição pra fazenda ativa.
+  const definirValorServico = (descricao, valorUnitario) => {
+    if (safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
+    if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return null; }
+    const existente = insumos.find((i) => i.categoria === "Serviço" && i.fazendaId === fazendaAtivaId && i.produtoComercial === descricao);
+    const insumoId = existente ? existente.id : uid("ins");
+    if (existente) {
+      setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, valorUnitario } : i));
+    } else {
+      setInsumos((a) => [...a, {
+        id: insumoId, categoria: "Serviço", produtoComercial: descricao, valorUnitario,
+        local: "fazenda", fazendaId: fazendaAtivaId, usuarioId: null, estoque: 0, quantidade: 0,
+        criadoEm: new Date().toISOString(),
+      }]);
+    }
+    marcaPendencia();
+    return insumoId;
+  };
+
   const registrarSaidaEstoque = (insumoId, quantidade, manejoId, tipoManejo) => {
     if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação principal já avisou
     if (fazendaAtivaNaoLicenciada) return; // idem
@@ -2796,7 +2817,7 @@ export default function App() {
           </div>
 
           <div style={{ display: section === "estoque" && sub === "entrada" ? "block" : "none" }}>
-            <AbaEstoqueEntrada fazendaAtiva={fazendaAtiva} currentUser={currentUser} insumos={insumosAtivos} movimentos={movimentosAtivos} registrarEntradaEstoque={registrarEntradaEstoque} removerEntradaEstoque={removerEntradaEstoque} />
+            <AbaEstoqueEntrada fazendaAtiva={fazendaAtiva} currentUser={currentUser} insumos={insumosAtivos} movimentos={movimentosAtivos} registrarEntradaEstoque={registrarEntradaEstoque} removerEntradaEstoque={removerEntradaEstoque} definirValorServico={definirValorServico} />
           </div>
           <div style={{ display: section === "estoque" && sub === "saida" ? "block" : "none" }}>
             <AbaEstoqueSaida fazendaAtiva={fazendaAtiva} insumos={insumosAtivos} movimentos={movimentosAtivos} manejos={manejosAtivos} />
@@ -3315,7 +3336,10 @@ const PRODUTOS_HORMONIO_PADRAO = [
 ];
 const UNIDADES_EMBALAGEM = ["unid", "mL"];
 const TIPOS_MEDICAMENTO = ["Suplemento", "Vermífugo", "Vacina", "Outro"];
-const CATEGORIAS_ESTOQUE = ["Hormônios", "Sêmen", "Medicamentos", "Utensílios"];
+const CATEGORIAS_ESTOQUE = ["Hormônios", "Sêmen", "Medicamentos", "Utensílios", "Serviços e outros"];
+// "Serviço de inseminação" e "Serviço de diagnóstico" são obrigatórios ter valor cadastrado pra
+// fazenda ativa antes de registrar qualquer Inseminação/Diagnóstico (ver registrarManejo).
+const DESCRICOES_SERVICO = ["Serviço de inseminação", "Serviço de diagnóstico", "Outras despesas"];
 
 
 /* =========================================================
@@ -5830,6 +5854,9 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             {semens.length === 0 && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Nenhum sêmen cadastrado neste local de estoque.</p>
             )}
+            {!insumos.some((i) => i.categoria === "Serviço" && i.produtoComercial === "Serviço de inseminação" && i.valorUnitario != null) && (
+              <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>"Serviço de inseminação" ainda não tem valor cadastrado (Estoque → Entrada → Serviços e outros).</p>
+            )}
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 12 }}>Leitura dos animais (obrigatória)</div>
             <p style={{ fontSize: 11.5, color: "#9B9686", margin: "-4px 0 12px" }}>
               {eh1aIATF
@@ -6370,6 +6397,9 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               })}
             </div>
             {msgLote && <p style={{ fontSize: 12.5, color: "#A32D2D", margin: "0 0 10px" }}>⚠ {msgLote}</p>}
+            {!insumos.some((i) => i.categoria === "Serviço" && i.produtoComercial === "Serviço de diagnóstico" && i.valorUnitario != null) && (
+              <p style={{ fontSize: 12, color: "#166336", margin: "0 0 10px" }}>"Serviço de diagnóstico" ainda não tem valor cadastrado (Estoque → Entrada → Serviços e outros).</p>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, alignItems: "end" }}>
               <Field label="Ordem (comum aos lotes selecionados)">
                 <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={ordemComum || "—"} readOnly />
@@ -7074,9 +7104,9 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
    ESTOQUE
 ========================================================= */
 
-const CATEGORIA_LABEL_TO_INTERNA = { "Hormônios": "Hormônio", "Sêmen": "Sêmen", "Medicamentos": "Medicamento", "Utensílios": "Utensílio" };
+const CATEGORIA_LABEL_TO_INTERNA = { "Hormônios": "Hormônio", "Sêmen": "Sêmen", "Medicamentos": "Medicamento", "Utensílios": "Utensílio", "Serviços e outros": "Serviço" };
 
-function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, registrarEntradaEstoque, removerEntradaEstoque }) {
+function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, registrarEntradaEstoque, removerEntradaEstoque, definirValorServico }) {
   const [categoriaTab, setCategoriaTab] = useState(CATEGORIAS_ESTOQUE[0]);
   const categoriaInterna = CATEGORIA_LABEL_TO_INTERNA[categoriaTab];
   const [localEstoque, setLocalEstoque] = useState("fazenda");
@@ -7085,6 +7115,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
     produtoComercial: "", hormonio: HORMONIOS[0], tamanhoEmbalagem: "", unidadeEmbalagem: UNIDADES_EMBALAGEM[0],
     touro: "", raca: "", partida: "", unidade: "", quantidade: "", doseMedia: "",
     motilidadeInicial: "", vigorInicial: "", motilidadeFinal: "", vigorFinal: "",
+    descricaoServico: DESCRICOES_SERVICO[0],
   };
   const [form, setForm] = useState(empty);
   const [data, setData] = useState(todayISO());
@@ -7097,6 +7128,8 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
   React.useEffect(() => { setForm(empty); setValorUnitario(""); setMsg(""); }, [categoriaTab, localEstoque]);
 
   const canSave = (() => {
+    // Serviço não tem quantidade/estoque — só precisa da descrição e do valor unitário.
+    if (categoriaInterna === "Serviço") return form.descricaoServico !== "" && valorUnitario.trim() !== "" && numBR(valorUnitario) > 0;
     const qtdOk = String(form.quantidade).trim() !== "" && numBR(form.quantidade) > 0;
     if (!qtdOk) return false;
     if (categoriaInterna === "Hormônio") return form.produtoComercial.trim() !== "" && form.hormonio !== "" && String(form.tamanhoEmbalagem).trim() !== "" && numBR(form.tamanhoEmbalagem) > 0;
@@ -7108,6 +7141,11 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
 
   const salvar = () => {
     if (!canSave) return;
+    if (categoriaInterna === "Serviço") {
+      definirValorServico(form.descricaoServico, numBR(valorUnitario));
+      setForm(empty); setValorUnitario(""); setMsg("Valor registrado.");
+      return;
+    }
     const qtd = numBR(form.quantidade);
     let camposItem = {};
     if (categoriaInterna === "Hormônio") {
@@ -7283,13 +7321,44 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
               </div>
             )}
 
+            {categoriaInterna === "Serviço" && (
+              <div className="grid-form-3">
+                <Field label="Descrição">
+                  <select style={inputStyle} value={form.descricaoServico} onChange={set("descricaoServico")}>
+                    {DESCRICOES_SERVICO.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </Field>
+                <Field label="Valor unitário (R$/animal)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
+              </div>
+            )}
+
             {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
-            <LegendaCamposOpcionais />
+            {categoriaInterna !== "Serviço" && <LegendaCamposOpcionais />}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: 12 }}>
-              <Plus size={15} /> Registrar entrada
+              <Plus size={15} /> {categoriaInterna === "Serviço" ? "Salvar valor" : "Registrar entrada"}
             </BtnPrimary>
           </div>
 
+          {categoriaInterna === "Serviço" ? (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Valores cadastrados</div>
+              <table>
+                <thead><tr><th style={colunaTabela}>Descrição</th><th style={colunaTabela}>Valor unitário (R$/animal)</th></tr></thead>
+                <tbody>
+                  {DESCRICOES_SERVICO.map((d) => {
+                    const item = itensCategoria.find((i) => i.produtoComercial === d);
+                    return (
+                      <tr key={d}>
+                        <td style={colunaTabela}>{d}</td>
+                        <td style={colunaTabela}>{item?.valorUnitario != null ? `R$ ${item.valorUnitario.toFixed(2).replace(".", ",")}` : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+          <>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Últimas entradas — {categoriaTab}</div>
           {entradas.length === 0 ? <EmptyState text="Nenhuma entrada registrada ainda nesta categoria." /> : categoriaTab === "Sêmen" ? (
             <table>
@@ -7355,6 +7424,8 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                 ))}
               </tbody>
             </table>
+          )}
+          </>
           )}
         </>
       )}
@@ -7543,6 +7614,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
     { categoria: "Sêmen", titulo: "Sêmen" },
     { categoria: "Medicamento", titulo: "Medicamentos" },
     { categoria: "Utensílio", titulo: "Utensílios" },
+    { categoria: "Serviço", titulo: "Serviços e outros" },
   ];
 
   const valorTotalGeral = insumosDoLocal.reduce((s, i) => s + (i.valorUnitario != null ? i.estoque * i.valorUnitario : 0), 0);
@@ -7566,7 +7638,7 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
           <div key={categoria} style={{ marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase" }}>{titulo}</div>
-              {itens.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#166336" }}>Total: {fmtMoeda(valorTotalGrupo)}</div>}
+              {itens.length > 0 && categoria !== "Serviço" && <div style={{ fontSize: 12.5, fontWeight: 700, color: "#166336" }}>Total: {fmtMoeda(valorTotalGrupo)}</div>}
             </div>
             {itens.length === 0 ? (
               <EmptyState text={`Nenhum item de ${titulo.toLowerCase()} cadastrado.`} />
@@ -7596,6 +7668,20 @@ function AbaEstoqueSaldo({ fazendaAtiva, insumos }) {
                         </tr>
                       ));
                     })()}
+                  </tbody>
+                </table>
+              </div>
+            ) : categoria === "Serviço" ? (
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
+                <table>
+                  <thead><tr><th>Descrição</th><th>Valor unitário (R$/animal)</th></tr></thead>
+                  <tbody>
+                    {itens.map((i) => (
+                      <tr key={i.id}>
+                        <td style={{ fontWeight: 700 }}>{i.produtoComercial}</td>
+                        <td>{fmtMoeda(i.valorUnitario)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -7674,6 +7760,15 @@ const isSameDay = (a, b) => ymd(a) === ymd(b);
 const CORES_TIPO = {
   "Indução": "#3B7D4F", "D0": "#C98F2B", "Retirada": "#8A5A1F", "PGF 5": "#B25D8C",
   "Inseminação": "#4A6FA5", "Diagnóstico": "#7A5C9E", "Diagnóstico - repasse": "#166336", "Outro": "#6B685E",
+};
+// abreviações usadas SÓ dentro dos quadradinhos do calendário da Agenda (visão mês/semana) —
+// em qualquer outro lugar (lista do dia, formulário de edição, etc.) o nome continua por extenso.
+const ABREV_TIPO_AGENDA = { "Inseminação": "Insem", "Retirada": "Ret", "Diagnóstico": "DG", "Diagnóstico - repasse": "DGRep" };
+// "titulo" vem como "Tipo — Lote"; troca só o prefixo do tipo pela abreviação, sem mexer no resto.
+const tituloAbreviadoCalendario = (a) => {
+  const abrev = ABREV_TIPO_AGENDA[a.tipo];
+  if (!abrev || !a.titulo?.startsWith(a.tipo)) return a.titulo;
+  return abrev + a.titulo.slice(a.tipo.length);
 };
 
 function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento, reordenarAgendamentoNoDia, somenteLeitura }) {
@@ -8128,7 +8223,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                                   fontSize: 8.5, fontWeight: 700, color: "#FFF", background: CORES_TIPO[a.tipo] || "#6B685E",
                                   borderRadius: 3, padding: "2px 3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                                   opacity: a.status === "pendente" ? 0.6 : 1, lineHeight: 1.2,
-                                }}>{a.loteNome || a.titulo}{n != null ? ` · ${n}` : ""}</span>
+                                }}>{a.loteNome || tituloAbreviadoCalendario(a)}{n != null ? ` · ${n}` : ""}</span>
                               );
                             })}
                             {restantes > 0 && <span style={{ fontSize: 8, color: "#9B9686", textAlign: "center" }}>+{restantes}</span>}
@@ -8159,7 +8254,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                                 fontSize: 9, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#6B685E",
                                 borderRadius: 4, padding: "1.5px 4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                                 opacity: a.status === "pendente" ? 0.6 : 1,
-                              }}>{a.titulo}{n != null ? ` · ${n}` : ""}</span>
+                              }}>{tituloAbreviadoCalendario(a)}{n != null ? ` · ${n}` : ""}</span>
                             );
                           })}
                           {itens.length > 6 && (
@@ -8199,7 +8294,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
                             <span key={a.id} style={{
                               fontSize: 10.5, fontWeight: 600, color: "#FFF", background: CORES_TIPO[a.tipo] || "#6B685E",
                               borderRadius: 4, padding: "2px 5px", opacity: a.status === "pendente" ? 0.6 : 1,
-                            }}>{a.titulo}{n != null ? ` · ${n}` : ""}</span>
+                            }}>{tituloAbreviadoCalendario(a)}{n != null ? ` · ${n}` : ""}</span>
                           );
                         })}
                       </div>
@@ -8522,6 +8617,10 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
 // diagnóstico registrado ainda ou não.
 function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
   const idsDesconhecidos = new Set(lotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
+  // "Serviço de inseminação" conta uma vez POR ANIMAL INSEMINADO (se o mesmo animal for
+  // inseminado de novo numa ordem seguinte, conta de novo) — por isso soma aqui, dentro de
+  // cada evento, igual ao sêmen/hormônio/bainha, e não como um valor fixo à parte.
+  const valorServicoInseminacao = insumos.find((i) => i.categoria === "Serviço" && i.produtoComercial === "Serviço de inseminação")?.valorUnitario || 0;
   const inseminacoes = manejos.filter((m) => m.tipo === "inseminacao" && !idsDesconhecidos.has(m.loteId));
   const d0Ressinc = manejos.filter((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && !idsDesconhecidos.has(m.loteId));
   const retiradas = manejos.filter((m) => m.tipo === "retirada" && !idsDesconhecidos.has(m.loteId));
@@ -8614,7 +8713,7 @@ function construirEventosCustoInseminacao(manejos, lotes, insumos, movimentos) {
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
         touro: nomeTouro(detIns.semenId, detIns.touroInformado), racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro),
         ecc: detIns.ecc || null,
-        custoAnimal: custoSemenDoAnimal(detIns.semenId, detIns.touroInformado, detIns.partidaInformada) + custoBainha + custoHormonioOrdem + custoGnrhDoAnimal(detIns),
+        custoAnimal: custoSemenDoAnimal(detIns.semenId, detIns.touroInformado, detIns.partidaInformada) + custoBainha + custoHormonioOrdem + custoGnrhDoAnimal(detIns) + valorServicoInseminacao,
       });
     });
   });
@@ -8828,19 +8927,27 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   const calcularCustos = (manejosSubset, eventosSubset) => {
     // Custo por Animal e por Inseminação agora só consideram animais JÁ INSEMINADOS: quem
     // ainda não tem nenhuma Inseminação registrada não entra nem no gasto nem na contagem.
-    const gastoSubset = eventosSubset.reduce((s, e) => s + e.custoAnimal, 0);
-    const totalAnimaisInseminadosSubset = new Set(eventosSubset.map((e) => e.brinco)).size;
-    const totalInseminacoesSubset = eventosSubset.length;
     const diagSubset = manejosSubset.filter((m) => m.tipo === "diagnostico");
     const diagRepasseSubset = manejosSubset.filter((m) => m.tipo === "diagnostico_repasse");
     const totalPrenhasSubset = contarPrenhas(diagSubset) + contarPrenhas(diagRepasseSubset);
     const totalDiagRegistradosSubset = diagSubset.reduce((s, m) => s + (m.detalhes || []).length, 0)
       + diagRepasseSubset.reduce((s, m) => s + (m.detalhes || []).length, 0);
+    // "Serviço de inseminação" já está somado dentro de cada evento (uma vez por animal
+    // inseminado) — por isso Custo por Animal/Inseminação continuam só com o que é da própria
+    // inseminação. "Serviço de diagnóstico" é atribuído a cada animal diagnosticado só na hora
+    // de calcular o Custo por Prenhez (abaixo) — igual ao sêmen/hormônio são atribuídos na hora
+    // da inseminação, sem precisar ratear entre quem ainda não foi diagnosticado.
+    const valorServicoDiagnostico = insumos.find((i) => i.categoria === "Serviço" && i.produtoComercial === "Serviço de diagnóstico")?.valorUnitario || 0;
+    const gastoSubset = eventosSubset.reduce((s, e) => s + e.custoAnimal, 0);
+    const totalAnimaisInseminadosSubset = new Set(eventosSubset.map((e) => e.brinco)).size;
+    const totalInseminacoesSubset = eventosSubset.length;
     const custoAnimal = totalAnimaisInseminadosSubset > 0 ? gastoSubset / totalAnimaisInseminadosSubset : null;
     const custoInseminacao = totalInseminacoesSubset > 0 ? gastoSubset / totalInseminacoesSubset : null;
-    // Custo por Prenhez = Custo por Animal (na nova forma) × total de diagnósticos ÷ nº de prenhas.
+    // Custo por Prenhez = (Custo por Animal + Serviço de diagnóstico) × total de diagnósticos ÷
+    // nº de prenhas — cada animal diagnosticado carrega o custo da inseminação dele (média) mais
+    // o valor do serviço de diagnóstico atribuído a ele.
     const custoPrenhez = (custoAnimal != null && totalPrenhasSubset > 0)
-      ? (custoAnimal * totalDiagRegistradosSubset) / totalPrenhasSubset
+      ? ((custoAnimal + valorServicoDiagnostico) * totalDiagRegistradosSubset) / totalPrenhasSubset
       : null;
     return {
       animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez,
@@ -10621,17 +10728,21 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     const eventosEscopo = idsLotesEscopo ? eventosCustoPDF.filter((e) => idsLotesEscopo.has(e.loteId)) : eventosCustoPDF;
     // Custo por Animal e por Inseminação só consideram animais JÁ INSEMINADOS (ver
     // construirEventosCustoInseminacao) — quem ainda não foi inseminado não entra na conta.
-    const gasto = eventosEscopo.reduce((s, e) => s + e.custoAnimal, 0);
-    const totalAnimaisInseminadosEscopo = new Set(eventosEscopo.map((e) => e.brinco)).size;
-    const totalInseminacoes = eventosEscopo.length;
     const diagManejos = manejosEscopo.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidosPDF.has(m.loteId));
     const diagRepasseManejos = manejosEscopo.filter((m) => m.tipo === "diagnostico_repasse" && !idsDesconhecidosPDF.has(m.loteId));
     const totalPrenhas = contarPrenhasDetPDF(diagManejos) + contarPrenhasDetPDF(diagRepasseManejos);
     const totalDiagnosticados = diagManejos.reduce((s, m) => s + (m.detalhes || []).length, 0) + diagRepasseManejos.reduce((s, m) => s + (m.detalhes || []).length, 0);
+    // "Serviço de diagnóstico" é atribuído a cada animal diagnosticado só na hora do Custo por
+    // Prenhez (abaixo) — Custo por Animal/Inseminação continuam só com o que é da inseminação.
+    const valorServicoDiagnosticoPDF = insumos.find((i) => i.categoria === "Serviço" && i.produtoComercial === "Serviço de diagnóstico")?.valorUnitario || 0;
+    const gasto = eventosEscopo.reduce((s, e) => s + e.custoAnimal, 0);
+    const totalAnimaisInseminadosEscopo = new Set(eventosEscopo.map((e) => e.brinco)).size;
+    const totalInseminacoes = eventosEscopo.length;
     const custoAnimal = totalAnimaisInseminadosEscopo > 0 ? gasto / totalAnimaisInseminadosEscopo : null;
     const custoInseminacao = totalInseminacoes > 0 ? gasto / totalInseminacoes : null;
-    // Custo por Prenhez = Custo por Animal (na nova forma) × total de diagnósticos ÷ nº de prenhas.
-    const custoPrenhez = (custoAnimal != null && totalPrenhas > 0) ? (custoAnimal * totalDiagnosticados) / totalPrenhas : null;
+    // Custo por Prenhez = (Custo por Animal + Serviço de diagnóstico) × total de diagnósticos ÷
+    // nº de prenhas.
+    const custoPrenhez = (custoAnimal != null && totalPrenhas > 0) ? ((custoAnimal + valorServicoDiagnosticoPDF) * totalDiagnosticados) / totalPrenhas : null;
     return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
   };
   // custo por Inseminador/Mês de parição/Raça de touro/ECC: Custo por Animal e por Inseminação
@@ -10645,7 +10756,10 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     const custoInseminacao = totalInseminacoes > 0 ? gastoTotal / totalInseminacoes : null;
     const prenhas = registrosGrupo.filter((r) => r.prenha).length;
     const totalDiagnosticados = registrosGrupo.length;
-    const custoPrenhez = (custoAnimal != null && prenhas > 0) ? (custoAnimal * totalDiagnosticados) / prenhas : null;
+    // mesmo ajuste das outras tabelas: Serviço de diagnóstico é atribuído a cada animal
+    // diagnosticado desse recorte, só na hora do Custo por Prenhez.
+    const valorServicoDiagnosticoGrupo = insumos.find((i) => i.categoria === "Serviço" && i.produtoComercial === "Serviço de diagnóstico")?.valorUnitario || 0;
+    const custoPrenhez = (custoAnimal != null && prenhas > 0) ? ((custoAnimal + valorServicoDiagnosticoGrupo) * totalDiagnosticados) / prenhas : null;
     return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
   };
 
