@@ -1166,8 +1166,13 @@ export default function App() {
       // junta lotes "Desconhecidos" duplicados (de aparelhos diferentes offline) ANTES de
       // aplicar — e já reatribui os manejos que apontavam pros duplicados pro sobrevivente,
       // pra lotes e manejos nunca ficarem inconsistentes entre si mesmo por um instante.
-      const lotesCombinados = a.lotes ? comPendentesPreservados(lotes, a.lotes) : lotes;
-      const manejosCombinadosPreDedup = a.manejos ? comPendentesPreservados(manejos, a.manejos) : manejos;
+      const lotesCombinadosBrutos = a.lotes ? comPendentesPreservados(lotes, a.lotes) : lotes;
+      const manejosCombinadosBrutos = a.manejos ? comPendentesPreservados(manejos, a.manejos) : manejos;
+      // normaliza pra maiúscula ANTES de procurar duplicados — brincos salvos antes dessa
+      // regra existir (ex.: de uma importação antiga) precisam virar maiúscula primeiro pra
+      // qualquer comparação de "mesmo animal" dar certo.
+      const { lotes: lotesCombinados, manejos: manejosCombinadosPreDedup } =
+        normalizarBrincosParaMaiuscula(lotesCombinadosBrutos, manejosCombinadosBrutos);
       const { lotes: lotesSemDesconhecidosDuplicados, manejos: manejosRealocados, idsRemovidos: idsDesconhecidosRemovidos } =
         mesclarLotesDesconhecidosDuplicados(lotesCombinados, manejosCombinadosPreDedup);
       if (a.lotes) setLotes(lotesSemDesconhecidosDuplicados);
@@ -2107,6 +2112,53 @@ export default function App() {
   // CADA UM o seu. Só deveria existir UM lote "Desconhecidos" por fazenda/safra; isso junta
   // os duplicados que a sincronização trouxer, mantendo o mais antigo como sobrevivente e
   // reatribuindo a ele os manejos que apontavam pros outros.
+  // a leitura de animais (em qualquer manejo) passou a converter o brinco pra MAIÚSCULA assim
+  // que é lido, pra "a123" e "A123" serem sempre o mesmo animal — mas um brinco já salvo de
+  // ANTES dessa mudança (de uma importação de histórico antiga, por exemplo) pode ter ficado
+  // em minúscula, e agora aparece como um animal "diferente" do mesmo brinco lido de novo em
+  // maiúscula. Isso roda em toda sincronização e deixa tudo em maiúscula de uma vez por todas,
+  // juntando (sem duplicar) qualquer "a123"/"A123" que só coexistiam por causa da grafia.
+  const normalizarBrincosParaMaiuscula = (listaLotes, listaManejos) => {
+    let lotesMudou = false;
+    const lotesSaida = listaLotes.map((l) => {
+      if (!l.animais || l.animais.length === 0) return l;
+      const maiusculos = l.animais.map((a) => String(a).toUpperCase());
+      const semDuplicados = [...new Set(maiusculos)];
+      const igual = semDuplicados.length === l.animais.length && semDuplicados.every((a, i) => a === l.animais[i]);
+      if (igual) return l;
+      lotesMudou = true;
+      return { ...l, animais: semDuplicados };
+    });
+
+    let manejosMudou = false;
+    const manejosSaida = listaManejos.map((m) => {
+      let alterado = null;
+      if (m.animaisLidos && m.animaisLidos.length > 0) {
+        const maiusculos = [...new Set(m.animaisLidos.map((b) => String(b).toUpperCase()))];
+        const igual = maiusculos.length === m.animaisLidos.length && maiusculos.every((b, i) => b === m.animaisLidos[i]);
+        if (!igual) alterado = { ...(alterado || m), animaisLidos: maiusculos };
+      }
+      if (m.detalhes && m.detalhes.length > 0) {
+        const vistos = new Set();
+        const detalhesNormalizados = [];
+        let detalhesMudou = false;
+        m.detalhes.forEach((d) => {
+          if (!d.brinco) { detalhesNormalizados.push(d); return; }
+          const maiusculo = String(d.brinco).toUpperCase();
+          if (maiusculo !== d.brinco) detalhesMudou = true;
+          if (vistos.has(maiusculo)) { detalhesMudou = true; return; } // duplicado só por causa da grafia — descarta
+          vistos.add(maiusculo);
+          detalhesNormalizados.push(maiusculo === d.brinco ? d : { ...d, brinco: maiusculo });
+        });
+        if (detalhesMudou) alterado = { ...(alterado || m), detalhes: detalhesNormalizados };
+      }
+      if (alterado) manejosMudou = true;
+      return alterado || m;
+    });
+
+    return { lotes: lotesMudou ? lotesSaida : listaLotes, manejos: manejosMudou ? manejosSaida : listaManejos };
+  };
+
   const mesclarLotesDesconhecidosDuplicados = (listaLotes, listaManejos) => {
     const grupos = new Map();
     listaLotes.forEach((l) => {
