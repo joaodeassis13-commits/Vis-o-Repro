@@ -10873,6 +10873,15 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       headStyles: { fillColor: [22, 99, 54], textColor: 255, fontStyle: "bold", halign: "center" },
       alternateRowStyles: { fillColor: [255, 255, 255] },
     };
+    // gera um columnStyles com a MESMA largura pra todas as N colunas da tabela (a largura
+    // disponível na folha, dividida igualmente) — usado nas tabelas onde todas as colunas devem
+    // ficar do mesmo tamanho, em vez do autoTable ajustar cada uma pelo conteúdo.
+    const colunasIguais = (n) => {
+      const largura = (largPagina - margemEsq * 2) / n;
+      const estilos = {};
+      for (let i = 0; i < n; i++) estilos[i] = { cellWidth: largura };
+      return estilos;
+    };
     // desenha uma linha horizontal separando cada bloco mesclado (categoria, retiro, lote...) do
     // próximo — não desenha depois do último bloco, já que a borda da tabela fecha ali mesmo.
     const separadoresDeGrupo = (gruposTamanhos) => {
@@ -11084,7 +11093,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     novaSecao("Detalhamento por lotes trabalhados:");
     const linhasLote = [];
     const gruposLote = [];
-    lotes.filter((l) => !idsDesconhecidosPDF.has(l.id)).forEach((lote) => {
+    lotes.filter((l) => !idsDesconhecidosPDF.has(l.id)).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")).forEach((lote) => {
       const idsLoteUnico = new Set([lote.id]);
       const registrosLote = registrosPDF.filter((r) => r.loteId === lote.id);
       if (registrosLote.length === 0) return;
@@ -11135,7 +11144,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const totalInseminacoesInsCatOrdem = eventosIns.filter((e) => e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesInsCatOrdem === 0) return;
           linhasInseminador.push([nome, cat, ordem, totalInseminacoesInsCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-            fmtPctPDF(totalIns.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosIns)]);
+            fmtPctPDF(totalIns.concepcao), ...linhaCustosPDF(custosIns)]);
           tamGrupoCat++;
         });
         if (tamGrupoCat > 0) { gruposCategoriaIns.push(tamGrupoCat); tamGrupoIns += tamGrupoCat; }
@@ -11145,11 +11154,12 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposInseminador),
-      head: [["Inseminador", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Inseminador", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDFMultiNivel(linhasInseminador, [
-        { tamanhos: gruposInseminador, indices: [0, 8, 9, 10, 11, 12] },
+        { tamanhos: gruposInseminador, indices: [0, 8, 9, 10, 11] },
         { tamanhos: gruposCategoriaIns, indices: [1] },
       ]),
+      columnStyles: colunasIguais(12),
     });
     y = doc.lastAutoTable.finalY + 20;
 
@@ -11162,8 +11172,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     const gruposRaca = [];
     racas.forEach((raca) => {
       const registrosRaca = registrosPDF.filter((r) => r.racaTouro === raca);
-      const totalRaca = statsGrupoPDF(registrosRaca);
-      const touros = [...new Set(registrosRaca.map((r) => r.touro).filter(Boolean))];
+      const touros = [...new Set(registrosRaca.map((r) => r.touro).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
       let tamGrupo = 0;
       touros.forEach((touro) => {
         const registrosTouro = registrosRaca.filter((r) => r.touro === touro);
@@ -11171,7 +11180,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const st = statsGrupoPDF(registrosTouro);
         if (st.inseminados === 0 && eventosTouro.length === 0) return;
         linhasRaca.push([raca, touro, eventosTouro.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalRaca.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro))]);
+          ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro))]);
         tamGrupo++;
       });
       if (tamGrupo > 0) gruposRaca.push(tamGrupo);
@@ -11179,8 +11188,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRaca),
-      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasRaca, gruposRaca, [0, 7]),
+      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasRaca, gruposRaca, [0]),
+      columnStyles: colunasIguais(10),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
@@ -11194,22 +11204,22 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     CATEGORIAS_RESUMO.forEach((cat) => {
       const registrosCat = registrosPDF.filter((r) => r.categoria === cat && r.ecc != null);
       if (registrosCat.length === 0) return;
-      const totalCat = statsGrupoPDF(registrosCat);
       const eccs = [...new Set(registrosCat.map((r) => r.ecc))].sort();
       eccs.forEach((ecc) => {
         const registrosEcc = registrosCat.filter((r) => r.ecc === ecc);
         const eventosEcc = eventosCustoPDF.filter((e) => e.categoria === cat && e.ecc === ecc);
         const st = statsGrupoPDF(registrosEcc);
         linhasEcc.push([cat, ecc, eventosEcc.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalCat.concepcao), (iatfPorMatrizPDF(null) || 0).toFixed(2), ...linhaCustosPDF(custosPorEventosPDF(eventosEcc, registrosEcc))]);
+          ...linhaCustosPDF(custosPorEventosPDF(eventosEcc, registrosEcc))]);
       });
       gruposEcc.push(eccs.length);
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposEcc),
-      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasEcc, gruposEcc, [0, 7]),
+      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasEcc, gruposEcc, [0]),
+      columnStyles: colunasIguais(10),
     });
 
     doc.save(`visaorepro_relatorio-detalhado_${sufixoArquivo()}.pdf`);
