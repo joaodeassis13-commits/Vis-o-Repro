@@ -1652,6 +1652,10 @@ export default function App() {
         racaTouro: linha.racaTouro?.trim() || null, ecc: normalizarEcc(linha.ecc), partidaInformada: linha.partida || null,
         // GnRH é dado na Inseminação em si (por animal), não no protocolo do D0/Retirada.
         gnrhId: acharInsumoPorNome(linha.gnrh), gnrhNome: linha.gnrh?.trim() || null, doseGnrh: linha.doseGnrh?.trim() ? numBR(linha.doseGnrh) : null,
+        // por ANIMAL, não por grupo — a planilha pode ter um inseminador diferente pra cada
+        // animal dentro do mesmo lote/ordem/data (o campo do grupo acima é só uma reserva,
+        // caso esse campo por animal não esteja presente num lote antigo).
+        inseminador: linha.inseminador?.trim() || null,
       });
     });
     gruposInsem.forEach((grupo) => criarOuAtualizarManejo("inseminacao", grupo, grupo.animais));
@@ -9101,11 +9105,10 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     const totalInseminacoesSubset = eventosSubset.length;
     const custoAnimal = totalAnimaisInseminadosSubset > 0 ? gastoSubset / totalAnimaisInseminadosSubset : null;
     const custoInseminacao = totalInseminacoesSubset > 0 ? gastoSubset / totalInseminacoesSubset : null;
-    // Custo por Prenhez = (Custo por Animal + Serviço de diagnóstico) × total de diagnósticos ÷
-    // nº de prenhas — cada animal diagnosticado carrega o custo da inseminação dele (média) mais
-    // o valor do serviço de diagnóstico atribuído a ele.
-    const custoPrenhez = (custoAnimal != null && totalPrenhasSubset > 0)
-      ? ((custoAnimal + valorServicoDiagnostico) * totalDiagRegistradosSubset) / totalPrenhasSubset
+    // Custo por Prenhez = (Custo por Inseminação + Serviço de diagnóstico) × total de
+    // diagnósticos ÷ nº de prenhas.
+    const custoPrenhez = (custoInseminacao != null && totalPrenhasSubset > 0)
+      ? ((custoInseminacao + valorServicoDiagnostico) * totalDiagRegistradosSubset) / totalPrenhasSubset
       : null;
     return {
       animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez,
@@ -10920,9 +10923,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     const totalInseminacoes = eventosEscopo.length;
     const custoAnimal = totalAnimaisInseminadosEscopo > 0 ? gasto / totalAnimaisInseminadosEscopo : null;
     const custoInseminacao = totalInseminacoes > 0 ? gasto / totalInseminacoes : null;
-    // Custo por Prenhez = (Custo por Animal + Serviço de diagnóstico) × total de diagnósticos ÷
-    // nº de prenhas.
-    const custoPrenhez = (custoAnimal != null && totalPrenhas > 0) ? ((custoAnimal + valorServicoDiagnosticoPDF) * totalDiagnosticados) / totalPrenhas : null;
+    // Custo por Prenhez = (Custo por Inseminação + Serviço de diagnóstico) × total de
+    // diagnósticos ÷ nº de prenhas.
+    const custoPrenhez = (custoInseminacao != null && totalPrenhas > 0) ? ((custoInseminacao + valorServicoDiagnosticoPDF) * totalDiagnosticados) / totalPrenhas : null;
     return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
   };
   // custo por Inseminador/Mês de parição/Raça de touro/ECC: Custo por Animal e por Inseminação
@@ -10939,7 +10942,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     // mesmo ajuste das outras tabelas: Serviço de diagnóstico é atribuído a cada animal
     // diagnosticado desse recorte, só na hora do Custo por Prenhez.
     const valorServicoDiagnosticoGrupo = insumos.find((i) => i.categoria === "Serviço" && i.produtoComercial === "Serviço de diagnóstico")?.valorUnitario || 0;
-    const custoPrenhez = (custoAnimal != null && prenhas > 0) ? ((custoAnimal + valorServicoDiagnosticoGrupo) * totalDiagnosticados) / prenhas : null;
+    const custoPrenhez = (custoInseminacao != null && prenhas > 0) ? ((custoInseminacao + valorServicoDiagnosticoGrupo) * totalDiagnosticados) / prenhas : null;
     return { animal: custoAnimal, inseminacao: custoInseminacao, prenhez: custoPrenhez };
   };
 
@@ -11277,6 +11280,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const idsLoteUnico = new Set([lote.id]);
       const registrosLote = registrosPDF.filter((r) => r.loteId === lote.id);
       if (registrosLote.length === 0) return;
+      const totalAnimaisLote = (lote.animais || []).length;
       const custosLote = calcularCustosPDF(idsLoteUnico);
       const totalLote = statsGrupoPDF(registrosLote);
       // Fertilidade = Prenhas ÷ animais com Diagnóstico (totalLote.inseminados é a contagem de
@@ -11289,7 +11293,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const st = statsGrupoPDF(registrosLote.filter((r) => r.ordem === ordem));
         const totalInseminacoesLoteOrdem = eventosCustoPDF.filter((e) => e.loteId === lote.id && e.ordem === ordem).length;
         if (st.inseminados === 0 && totalInseminacoesLoteOrdem === 0) return;
-        linhasLote.push([lote.nome, lote.categoria || "—", ordem, totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        linhasLote.push([lote.nome, lote.categoria || "—", totalAnimaisLote || "—", ordem, totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalLote.concepcao), fmtPctPDF(fertilidadeLote), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
         tamGrupo++;
       });
@@ -11298,8 +11302,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposLote),
-      head: [["Lote", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 8, 9, 10, 11, 12, 13]),
+      head: [["Lote", "Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 2, 9, 10, 11, 12, 13, 14]),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
