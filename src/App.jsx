@@ -11376,7 +11376,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const st = statsGrupoPDF(registrosTouro);
         if (st.inseminados === 0 && eventosTouro.length === 0) return;
         linhasRaca.push([raca, touro, eventosTouro.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro))]);
+          ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro)).slice(1)]);
         tamGrupo++;
       });
       if (tamGrupo > 0) gruposRaca.push(tamGrupo);
@@ -11384,9 +11384,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRaca),
-      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasRaca, gruposRaca, [0]),
-      columnStyles: colunasIguais(10),
+      columnStyles: colunasIguais(9),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
@@ -11406,16 +11406,16 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const eventosEcc = eventosCustoPDF.filter((e) => e.categoria === cat && e.ecc === ecc);
         const st = statsGrupoPDF(registrosEcc);
         linhasEcc.push([cat, ecc, eventosEcc.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          ...linhaCustosPDF(custosPorEventosPDF(eventosEcc, registrosEcc))]);
+          ...linhaCustosPDF(custosPorEventosPDF(eventosEcc, registrosEcc)).slice(1)]);
       });
       gruposEcc.push(eccs.length);
     });
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposEcc),
-      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasEcc, gruposEcc, [0]),
-      columnStyles: colunasIguais(10),
+      columnStyles: colunasIguais(9),
     });
 
     doc.save(`visaorepro_relatorio-detalhado_${sufixoArquivo()}.pdf`);

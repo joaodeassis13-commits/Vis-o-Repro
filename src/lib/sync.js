@@ -260,12 +260,22 @@ async function enviarAutorizacoes(usuarios) {
     // deve resultar em remover tudo.
     if (u.fazendasAutorizadas === undefined) continue;
     const fazendas = u.fazendasAutorizadas || [];
-    const { error: erroDelete } = await supabase.from("usuario_fazendas").delete().eq("usuario_id", u.id);
-    if (erroDelete) { erros.push(`${u.nome || u.id}: ${erroDelete.message}`); continue; }
     if (fazendas.length > 0) {
+      // insere/atualiza PRIMEIRO: se a rede cair aqui no meio, nada foi apagado ainda — o
+      // usuário continua com as autorizações de antes (pior caso: a troca mais recente não
+      // chegou a salvar), em vez de ficar momentaneamente sem autorização nenhuma.
       const linhas = fazendas.map((fid) => ({ usuario_id: u.id, fazenda_id: fid }));
       const { error: erroInsert } = await supabase.from("usuario_fazendas").upsert(linhas, { onConflict: "usuario_id,fazenda_id" });
-      if (erroInsert) erros.push(`${u.nome || u.id}: ${erroInsert.message}`);
+      if (erroInsert) { erros.push(`${u.nome || u.id}: ${erroInsert.message}`); continue; }
+      // só agora remove as que não estão mais na lista local (fazenda removida de verdade) —
+      // nunca passa por um estado intermediário "zero fazendas autorizadas".
+      const { error: erroDelete } = await supabase.from("usuario_fazendas").delete()
+        .eq("usuario_id", u.id).not("fazenda_id", "in", `(${fazendas.join(",")})`);
+      if (erroDelete) erros.push(`${u.nome || u.id}: ${erroDelete.message}`);
+    } else {
+      // lista vazia DE PROPÓSITO (usuário genuinamente sem fazenda nenhuma) — aí sim remove tudo.
+      const { error: erroDelete } = await supabase.from("usuario_fazendas").delete().eq("usuario_id", u.id);
+      if (erroDelete) erros.push(`${u.nome || u.id}: ${erroDelete.message}`);
     }
   }
   return { ok: erros.length === 0, erros };
