@@ -16,6 +16,7 @@ import {
   buscarBenchmarkTaxaPrenhezSistema, buscarBenchmarkTaxaFertilidadeSistema,
   buscarBenchmarkConcepcaoPorOrdemSistema, buscarBenchmarkConcepcaoPorCategoriaSistema, buscarBenchmarkFertilidadePorCategoriaSistema,
   buscarBenchmarkConcepcaoPorManejoSistema, buscarBenchmarkConcepcaoPorProtocoloSistema,
+  buscarBenchmarkResumoSistema,
 } from "./lib/benchmarking.js";
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
 import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario, pedirRedefinicaoSenha, definirNovaSenha } from "./lib/auth.js";
@@ -9854,22 +9855,25 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
   }, [escopo, visaoResumo]);
   const [sistemaConcepcao, setSistemaConcepcao] = useState(null);
   const [sistemaFertilidade, setSistemaFertilidade] = useState(null);
+  const [sistemaResumo, setSistemaResumo] = useState(null);
   const [carregandoSistema, setCarregandoSistema] = useState(false);
   const [erroSistema, setErroSistema] = useState("");
 
   // recarrega "Geral do Sistema" sempre que trocar de escopo ou de safra ativa — o filtro de
   // safra precisa refletir no servidor também, não só no cálculo local. Como agora concepção e
   // fertilidade são cards separados (sempre visíveis juntos, sem alternância), busca as duas
-  // métricas de uma vez.
+  // métricas de uma vez — e também o Resumo somado de todas as fazendas do sistema.
   React.useEffect(() => {
     if (escopo !== "sistema" || !supabaseConfigurado) return;
     setErroSistema(""); setCarregandoSistema(true);
     Promise.all([
       buscarBenchmarkTaxaPrenhezSistema(safraAtual?.nome || null),
       buscarBenchmarkTaxaFertilidadeSistema(safraAtual?.nome || null),
-    ]).then(([rConcepcao, rFertilidade]) => {
+      buscarBenchmarkResumoSistema(safraAtual?.nome || null),
+    ]).then(([rConcepcao, rFertilidade, rResumo]) => {
       if (rConcepcao.ok) setSistemaConcepcao(rConcepcao); else setErroSistema(rConcepcao.motivo);
       if (rFertilidade.ok) setSistemaFertilidade(rFertilidade); else setErroSistema((atual) => atual || rFertilidade.motivo);
+      if (rResumo.ok) setSistemaResumo(rResumo.resumo); else setErroSistema((atual) => atual || rResumo.motivo);
       setCarregandoSistema(false);
     });
   }, [escopo, safraAtual?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -9911,38 +9915,60 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
     ? `Não foi possível carregar a comparação geral: ${erroSistema}`
     : null;
 
-  // ---------- Resumo (mesmo modelo do Relatório) — totais só da fazenda ativa ----------
+  // ---------- Resumo (mesmo modelo do Relatório) — totais de TODAS as fazendas que compõem
+  // o benchmarking (fazendasVisiveis: o mesmo grupo usado no "lado a lado"), não só a fazenda
+  // ativa. Nunca expande pra fora do grupo (mesmo no escopo "Geral do Sistema"), porque esse
+  // card mostra números brutos, e dado bruto de fazenda de outro grupo não pode vazar — só as
+  // médias calculadas no servidor (usadas no resto da tela) são seguras pra esse escopo.
   const idsDesconhecidosBench = new Set(lotesDaSafra.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
-  const lotesFazenda = lotesDaSafra.filter((l) => l.fazendaId === fazendaIdAtual && !idsDesconhecidosBench.has(l.id));
-  const manejosFazenda = manejosDaSafra.filter((m) => m.fazendaId === fazendaIdAtual && !idsDesconhecidosBench.has(m.loteId));
+  const lotesFazenda = lotesDaSafra.filter((l) => fazendasVisiveis.some((fz) => fz.id === l.fazendaId) && !idsDesconhecidosBench.has(l.id));
+  const manejosFazenda = manejosDaSafra.filter((m) => fazendasVisiveis.some((fz) => fz.id === m.fazendaId) && !idsDesconhecidosBench.has(m.loteId));
   const categoriaDoLoteBench = (loteId) => lotesDaSafra.find((l) => l.id === loteId)?.categoria;
 
-  const totalMatrizes = lotesFazenda.reduce((s, l) => s + (l.animais || []).length, 0);
+  // no escopo "Geral do Sistema", troca os totais (calculados localmente, só do grupo) pelos
+  // totais somados de TODAS as fazendas do sistema, vindos do servidor — é só um descritivo
+  // agregado, a mesma base usada pelos outros cards desse escopo, sem expor fazenda nenhuma
+  // isoladamente.
+  const usaResumoSistema = escopo === "sistema" && sistemaResumo;
+  const totalMatrizes = usaResumoSistema ? (sistemaResumo.totalMatrizes || 0)
+    : lotesFazenda.reduce((s, l) => s + (l.animais || []).length, 0);
   const matrizesPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
-    label: `${cat}s`, valor: lotesFazenda.filter((l) => l.categoria === cat).reduce((s, l) => s + (l.animais || []).length, 0),
+    label: `${cat}s`,
+    valor: usaResumoSistema ? (sistemaResumo.matrizesPorCategoria?.[cat] || 0)
+      : lotesFazenda.filter((l) => l.categoria === cat).reduce((s, l) => s + (l.animais || []).length, 0),
   }));
 
   const inseminacoesFazenda = manejosFazenda.filter((m) => m.tipo === "inseminacao");
-  const totalInseminacoes = inseminacoesFazenda.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
+  const totalInseminacoes = usaResumoSistema ? (sistemaResumo.totalInseminacoes || 0)
+    : inseminacoesFazenda.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
   const inseminacoesPorCategoriaBench = CATEGORIAS_RESUMO.map((cat) => ({
-    label: `${cat}s`, valor: inseminacoesFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
+    label: `${cat}s`,
+    valor: usaResumoSistema ? (sistemaResumo.inseminacoesPorCategoria?.[cat] || 0)
+      : inseminacoesFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
   }));
   const inseminacoesPorOrdemBench = ORDENS_IATF.map((ordem) => ({
-    label: ordem, valor: inseminacoesFazenda.filter((m) => m.ordem === ordem).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
+    label: ordem,
+    valor: usaResumoSistema ? (sistemaResumo.inseminacoesPorOrdem?.[ordem] || 0)
+      : inseminacoesFazenda.filter((m) => m.ordem === ordem).reduce((s, m) => s + (m.animaisLidos || []).length, 0),
   }));
 
   const contarPrenhasBench = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length, 0);
   const diagnosticosFazenda = manejosFazenda.filter((m) => m.tipo === "diagnostico");
   const diagnosticosRepasseFazenda = manejosFazenda.filter((m) => m.tipo === "diagnostico_repasse");
-  const totalPrenhas = contarPrenhasBench(diagnosticosFazenda) + contarPrenhasBench(diagnosticosRepasseFazenda);
+  const totalPrenhas = usaResumoSistema ? (sistemaResumo.totalPrenhas || 0)
+    : contarPrenhasBench(diagnosticosFazenda) + contarPrenhasBench(diagnosticosRepasseFazenda);
   const prenhasPorCategoriaBench = CATEGORIAS_RESUMO.map((cat) => ({
     label: `${cat}s`,
-    valor: contarPrenhasBench(diagnosticosFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat))
-      + contarPrenhasBench(diagnosticosRepasseFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat)),
+    valor: usaResumoSistema ? (sistemaResumo.prenhasPorCategoria?.[cat] || 0)
+      : contarPrenhasBench(diagnosticosFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat))
+        + contarPrenhasBench(diagnosticosRepasseFazenda.filter((m) => categoriaDoLoteBench(m.loteId) === cat)),
   }));
   const prenhasPorOrdemBench = [
-    ...ORDENS_IATF.map((ordem) => ({ label: ordem, valor: contarPrenhasBench(diagnosticosFazenda.filter((m) => m.ordem === ordem)) })),
-    { label: "Repasse", valor: contarPrenhasBench(diagnosticosRepasseFazenda) },
+    ...ORDENS_IATF.map((ordem) => ({
+      label: ordem,
+      valor: usaResumoSistema ? (sistemaResumo.prenhasPorOrdem?.[ordem] || 0) : contarPrenhasBench(diagnosticosFazenda.filter((m) => m.ordem === ordem)),
+    })),
+    { label: "Repasse", valor: usaResumoSistema ? (sistemaResumo.prenhasPorOrdem?.Repasse || 0) : contarPrenhasBench(diagnosticosRepasseFazenda) },
   ];
 
   // "Lado a lado": total (sem quebrar por categoria/ordem) de cada fazenda que o Administrador

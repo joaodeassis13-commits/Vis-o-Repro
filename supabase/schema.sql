@@ -1160,6 +1160,81 @@ $$ language sql stable security definer set search_path = public;
 
 grant execute on function benchmarking_concepcao_por_protocolo_sistema(text, text) to authenticated;
 
+-- Resumo (Matrizes/Inseminações/Prenhas) somado de TODAS as fazendas do sistema — usado no
+-- card "Resumo" do Benchmarking quando o escopo é "Geral do Sistema". Só retorna totais
+-- agregados (nunca por fazenda), então não vaza nenhum dado individual de outro grupo — é o
+-- mesmo princípio das outras funções "_sistema" acima, que só devolvem médias.
+drop function if exists benchmarking_resumo_sistema(text);
+create or replace function benchmarking_resumo_sistema(p_safra_nome text default null)
+returns jsonb as $$
+  with lotes_validos as (
+    select l.id, l.categoria, l.animais
+    from lotes l
+    where l.nome <> 'Desconhecidos' and l.categoria is not null
+      and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = l.safra_id and sf.nome = p_safra_nome))
+  ),
+  manejos_insem as (
+    select m.categoria, m.ordem, m.animais_lidos
+    from manejos m
+    join lotes_validos lv on lv.id = m.lote_id
+    where m.tipo = 'inseminacao' and m.categoria is not null and m.ordem is not null
+  ),
+  manejos_diag as (
+    select lv.categoria, m.ordem, d as detalhe
+    from manejos m
+    join lotes_validos lv on lv.id = m.lote_id
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico' and m.ordem is not null
+  ),
+  manejos_diag_repasse as (
+    select lv.categoria, d as detalhe
+    from manejos m
+    join lotes_validos lv on lv.id = m.lote_id
+    cross join lateral jsonb_array_elements(m.detalhes) as d
+    where m.tipo = 'diagnostico_repasse'
+  ),
+  matrizes_cat as (
+    select categoria, sum(coalesce(array_length(animais, 1), 0)) as total from lotes_validos group by categoria
+  ),
+  insem_cat as (
+    select categoria, sum(coalesce(array_length(animais_lidos, 1), 0)) as total from manejos_insem group by categoria
+  ),
+  insem_ordem as (
+    select ordem, sum(coalesce(array_length(animais_lidos, 1), 0)) as total from manejos_insem group by ordem
+  ),
+  prenhas_cat as (
+    select categoria, sum(total) as total from (
+      select categoria, count(*) filter (where detalhe ->> 'resultado' = 'Prenha') as total from manejos_diag group by categoria
+      union all
+      select categoria, count(*) filter (where detalhe ->> 'resultado' = 'Prenha') as total from manejos_diag_repasse group by categoria
+    ) x group by categoria
+  ),
+  prenhas_ordem as (
+    select ordem, count(*) filter (where detalhe ->> 'resultado' = 'Prenha') as total from manejos_diag group by ordem
+  ),
+  prenhas_repasse as (
+    select count(*) filter (where detalhe ->> 'resultado' = 'Prenha') as total from manejos_diag_repasse
+  )
+  select jsonb_build_object(
+    'totalMatrizes', (select coalesce(sum(total), 0) from matrizes_cat),
+    'matrizesPorCategoria', (select coalesce(jsonb_object_agg(categoria, total), '{}'::jsonb) from matrizes_cat),
+    'totalInseminacoes', (select coalesce(sum(total), 0) from insem_cat),
+    'inseminacoesPorCategoria', (select coalesce(jsonb_object_agg(categoria, total), '{}'::jsonb) from insem_cat),
+    'inseminacoesPorOrdem', (select coalesce(jsonb_object_agg(ordem, total), '{}'::jsonb) from insem_ordem),
+    'totalPrenhas', (select coalesce(sum(total), 0) from prenhas_cat),
+    'prenhasPorCategoria', (select coalesce(jsonb_object_agg(categoria, total), '{}'::jsonb) from prenhas_cat),
+    'prenhasPorOrdem', (
+      select coalesce(jsonb_object_agg(ordem, total), '{}'::jsonb) from (
+        select ordem, total from prenhas_ordem
+        union all
+        select 'Repasse' as ordem, total from prenhas_repasse
+      ) z
+    )
+  );
+$$ language sql stable security definer set search_path = public;
+
+grant execute on function benchmarking_resumo_sistema(text) to authenticated;
+
 -- avisa a API (PostgREST) que o schema mudou — importante sempre que uma coluna nova é
 -- adicionada (como "criado_em" em retiros/safras acima), pra ela não continuar usando uma
 -- versão em cache das tabelas.

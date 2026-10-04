@@ -96,3 +96,13 @@ export async function buscarBenchmarkConcepcaoPorProtocoloSistema(protocolo, saf
   const { data, error } = await supabase.rpc("benchmarking_concepcao_por_protocolo_sistema", { p_protocolo: protocolo, p_safra_nome: safraNome });
   return formatarResposta(data, error);
 }
+
+// Resumo (Matrizes/Inseminações/Prenhas) somado de TODAS as fazendas do sistema — usado no
+// card "Resumo" do Benchmarking no escopo "Geral do Sistema". Diferente das demais funções
+// deste arquivo (que devolvem uma linha de tabela), essa devolve um objeto jsonb direto.
+export async function buscarBenchmarkResumoSistema(safraNome = null) {
+  if (!supabaseConfigurado) return { ok: false, motivo: "Supabase não configurado." };
+  const { data, error } = await supabase.rpc("benchmarking_resumo_sistema", { p_safra_nome: safraNome });
+  if (error) return { ok: false, motivo: error.message };
+  return { ok: true, resumo: data || {} };
+}
