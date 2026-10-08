@@ -254,6 +254,16 @@ function CabecaBovinaIcon({ size = 24, ...props }) {
 
 /* ---------- badge estilo brinco de gado (elemento assinatura) ---------- */
 
+function MensagemForm({ msg, ok, style }) {
+  if (!msg) return null;
+  if (ok) return <p style={{ fontSize: 12.5, color: "#166336", margin: 0, ...style }}>{msg}</p>;
+  return (
+    <div style={{ background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12, margin: "10px 0", ...style }}>
+      <p style={{ fontSize: 12.5, color: "#8A3E15", margin: 0 }}>⚠ {msg}</p>
+    </div>
+  );
+}
+
 function EarTag({ children, size = "md" }) {
   const pad = size === "sm" ? "3px 9px" : "5px 12px";
   const fs = size === "sm" ? 11 : 13;
@@ -670,7 +680,7 @@ function DefinirNovaSenha({ onDefinir, onConcluido }) {
             <p style={{ fontSize: 13, color: "#6B685E", textAlign: "center", marginBottom: 20 }}>Escolha a nova senha da sua conta.</p>
             <Field label="Nova senha"><input style={inputStyle} type="password" value={senha} onChange={(e) => { setErro(""); setSenha(e.target.value); }} placeholder="Mínimo de 6 caracteres" /></Field>
             <Field label="Confirmar nova senha"><input style={inputStyle} type="password" value={confirmar} onChange={(e) => { setErro(""); setConfirmar(e.target.value); }} onKeyDown={(e) => e.key === "Enter" && salvar()} /></Field>
-            {erro && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 4 }}>{erro}</p>}
+            <MensagemForm msg={erro} ok={false} style={{ marginTop: 4 }} />
             <BtnPrimary onClick={salvar} disabled={enviando} style={{ width: "100%", justifyContent: "center", marginTop: 14 }}>
               {enviando ? "Salvando…" : "Salvar nova senha"}
             </BtnPrimary>
@@ -713,7 +723,7 @@ function RecuperarComPin({ onEntrar }) {
             onChange={(e) => { setErro(""); setPin(e.target.value); }}
             onKeyDown={(e) => e.key === "Enter" && tentar()} placeholder="••••" autoFocus />
         </Field>
-        {erro && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 4 }}>{erro}</p>}
+        <MensagemForm msg={erro} ok={false} style={{ marginTop: 4 }} />
         <BtnPrimary onClick={tentar} disabled={entrando} style={{ width: "100%", justifyContent: "center", marginTop: 14 }}>
           {entrando ? "Verificando…" : "Continuar"}
         </BtnPrimary>
@@ -792,7 +802,7 @@ function Login({ users, onLoginLocal, onEntrarReal, avisoCarregamento }) {
                 onChange={(e) => { setSenha(e.target.value); setErro(""); }}
                 onKeyDown={(e) => e.key === "Enter" && doLoginReal()} autoComplete="current-password" />
             </Field>
-            {erro && <p style={{ color: "#A32D2D", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
+            <MensagemForm msg={erro} ok={false} style={{ margin: "0 0 12px" }} />
             <BtnPrimary onClick={doLoginReal} disabled={carregando} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>
               {carregando ? "Entrando…" : "Entrar"}
             </BtnPrimary>
@@ -833,7 +843,7 @@ function Login({ users, onLoginLocal, onEntrarReal, avisoCarregamento }) {
                 onChange={(e) => { setSenha(e.target.value); setErro(""); }}
                 onKeyDown={(e) => e.key === "Enter" && doLoginLocal()} />
             </Field>
-            {erro && <p style={{ color: "#A32D2D", fontSize: 12.5, margin: "0 0 12px" }}>{erro}</p>}
+            <MensagemForm msg={erro} ok={false} style={{ margin: "0 0 12px" }} />
             <BtnPrimary onClick={doLoginLocal} style={{ width: "100%", justifyContent: "center", padding: "11px 0" }}>Entrar (modo de teste)</BtnPrimary>
           </>
         )}
@@ -958,6 +968,7 @@ export default function App() {
   };
 
   const [recuperacaoPinDisponivel, setRecuperacaoPinDisponivel] = useState(null); // userId, se der pra oferecer recuperação por PIN
+  const saidaManualRef = React.useRef(false);
   const [avisoSessaoPerdida, setAvisoSessaoPerdida] = useState(false); // sessão caiu sozinha (não foi "Sair"), mas há leitura não salva — espera a pessoa salvar antes de trocar de tela
   const [modoRedefinirSenha, setModoRedefinirSenha] = useState(false); // veio de um clique no link de "Esqueci minha senha"
 
@@ -983,6 +994,22 @@ export default function App() {
       // sem entrar direto no app com essa sessão provisória.
       if (evento === "PASSWORD_RECOVERY") { setModoRedefinirSenha(true); return; }
       if (!sessao?.user) {
+        // só "SIGNED_OUT" significa logout de verdade; outros eventos sem sessão (ex.: INITIAL_SESSION
+        // vazio) são tratados na carga inicial acima.
+        if (evento !== "SIGNED_OUT") return;
+        if (!saidaManualRef.current) {
+          // no celular, o SIGNED_OUT pode vir de uma falha passageira ao renovar o token (app voltando
+          // do segundo plano, rede oscilando). Antes de derrubar a pessoa, confere de novo daqui a pouco
+          // (fora do callback, pra não travar o cliente de auth): se a sessão estiver de pé, ignora.
+          setTimeout(async () => {
+            const sessaoAtual = await obterSessao();
+            if (sessaoAtual?.user) return;
+            if (!navigator.onLine) return; // sem internet: segue usando os dados locais, não desloga
+            if (haPendenciaDeLeituraAtiva()) { setAvisoSessaoPerdida(true); return; }
+            setCurrentUser(null);
+          }, 2500);
+          return;
+        }
         // a sessão caiu sozinha (expirou, foi invalidada, etc.) — SEM passar pelo botão "Sair",
         // que é onde normalmente avisamos sobre leitura não salva. Se houver alguma agora, não
         // troca de tela ainda: deixa a pessoa salvar primeiro, e só desloga depois disso.
@@ -1075,8 +1102,10 @@ export default function App() {
       );
       if (!confirmou) return;
     }
+    saidaManualRef.current = true;
     await sair();
     setCurrentUser(null);
+    saidaManualRef.current = false;
   };
 
   // ---------- grava cada coleção no IndexedDB sempre que ela muda ----------
@@ -2501,7 +2530,7 @@ export default function App() {
   // fazenda "Não licenciada": Supervisor/Inseminador (cujo dia a dia gira em torno de UMA
   // fazenda ativa) ficam só com Relatórios/Exportações (e Auditoria, que é consulta, não
   // lançamento) — os dados continuam no banco, só as abas de LANÇAR coisa nova somem.
-  const ABAS_BLOQUEADAS_SEM_LICENCA = ["manejo", "agenda", "estoque", "benchmarking"];
+  const ABAS_BLOQUEADAS_SEM_LICENCA = ["manejo", "agenda", "estoque", "benchmarking", "auditoria"];
   const NAV_BASE = currentUser?.perfil === "Supervisor"
     ? [
         { key: "agenda", label: "Agenda", icon: Calendar },
@@ -2577,7 +2606,7 @@ export default function App() {
   React.useEffect(() => {
     if (!currentUser) return;
     if (fazendaAtivaNaoLicenciada && ["Supervisor", "Inseminador"].includes(currentUser.perfil)
-      && ["manejo", "agenda", "estoque", "benchmarking"].includes(section)) {
+      && ABAS_BLOQUEADAS_SEM_LICENCA.includes(section)) {
       setSection("relatorios");
     }
   }, [fazendaAtivaNaoLicenciada, currentUser, section]);
@@ -3803,7 +3832,7 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 10 }}>Selecionar planilha</div>
             <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f) processarArquivo(f); }} style={inputStyle} />
-            {erro && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 12 }}>⚠ {erro}</p>}
+            <MensagemForm msg={erro} ok={false} style={{ marginTop: 12 }} />
 
             {linhasValidas.length > 0 && (
               <div style={{ marginTop: 16, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 14 }}>
@@ -4076,7 +4105,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginBottom: 10 }} />
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> Registrar {TITULOS_MANEJO[tipo].toLowerCase()}</BtnPrimary>
           </div>
 
@@ -4769,7 +4798,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 {animaisLidos.length === 0 ? (
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
                 ) : (
-                  <table>
+                  <div className="rola-horizontal" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ minWidth: 520 }}>
                     <thead><tr><th>Animal</th><th>ECC</th><th>Peso</th><th>Lote (já atribuído)</th><th></th></tr></thead>
                     <tbody>
                       {animaisLidos.map((a) => (
@@ -4782,12 +4811,12 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                 )}
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginBottom: 10 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginBottom: 10 }} />
             <BtnPrimary disabled={!canSave} onClick={salvar}><Plus size={15} /> {editandoManejo ? "Salvar edição" : "Registrar D0"}</BtnPrimary>
           </div>
 
@@ -5489,7 +5518,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                 {animaisLidos.length === 0 ? (
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
                 ) : (
-                  <table>
+                  <div className="rola-horizontal" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ minWidth: 520 }}>
                     <thead><tr><th>Animal</th><th>ECC</th><th>Peso</th><th>Lote (já atribuído)</th><th></th></tr></thead>
                     <tbody>
                       {animaisLidos.map((a) => (
@@ -5502,7 +5531,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                 )}
               </div>
             )}
@@ -5514,7 +5543,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
                 ⚠ O nº de animais informado ({numBR(numeroAnimais)}) é maior que o registrado no D0 mais recente deste lote na {loteAtual.ordem} ({d0MaisRecente.numeroAnimais}).
               </p>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginTop: 12 }} />
             <div style={{ display: "flex", gap: 8, marginTop: msg || excedeQuantidade ? 0 : 12 }}>
               <BtnPrimary disabled={!canSaveBase} onClick={() => salvar(false)}><Plus size={15} /> {editandoManejo ? "Salvar edição" : "Registrar retirada"}</BtnPrimary>
               {excedeQuantidade && canSaveBase && (
@@ -5725,6 +5754,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     const b = brinco.trim().toUpperCase();
     if (!b) return false;
     const avisos = [];
+    if (registros.some((r) => r.brinco === b)) avisos.push("Este animal já foi lido nesta leitura.");
     const diagPrenha = buscarDiagnosticoPrenha(b);
     if (diagPrenha) avisos.push(`Este animal já tem um Diagnóstico registrado como Prenha em ${fmtDate(diagPrenha.data)}.`);
     const loteDoBicho = loteDoAnimal(b);
@@ -5744,7 +5774,9 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     const b = brinco.trim().toUpperCase();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
     if (!semenId) { setMsg("Selecione o touro e a partida utilizados."); return; }
-    if (ecc.trim() !== "" && !OPCOES_ECC.includes(ecc.trim())) { setMsg("ECC inválido. Escolha um valor da lista."); return; }
+    const eccNorm = normalizarEcc(ecc);
+    if (eccNorm && !OPCOES_ECC.includes(eccNorm)) { setMsg("ECC inválido. Escolha um valor da lista."); return; }
+    if (eccNorm !== (ecc.trim() || null)) setEcc(eccNorm || "");
     if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
     if (lotesSelecionados.length === 0) { setMsg("Selecione ao menos um lote."); return; }
 
@@ -5775,7 +5807,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     }
 
     const dados = {
-      brinco: b, semenId, ecc: ecc.trim() || null, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
+      brinco: b, semenId, ecc: eccNorm, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
       gnrhId: gnrhId || null, doseGnrh: doseGnrh.trim() !== "" ? numBR(doseGnrh) : null,
       racaMatriz: racaMatriz.trim() || null,
       inseminador: inseminador.trim() || currentUser?.nome || null,
@@ -6062,8 +6094,9 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 </datalist>
               </Field>
               <Field label="ECC">
-                <input ref={eccInputRef} style={inputStyle} value={ecc} onChange={(e) => setEcc(e.target.value)} placeholder="Digite um valor da lista" list="ecc-opcoes"
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); pesoInputRef.current?.focus(); } }} />
+                <input ref={eccInputRef} style={inputStyle} value={ecc} onChange={(e) => setEcc(e.target.value)} placeholder="Ex: 3 → 3,00 · 2,7 → 2,75" list="ecc-opcoes"
+                  onBlur={() => setEcc((v) => normalizarEcc(v) || "")}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEcc((v) => normalizarEcc(v) || ""); pesoInputRef.current?.focus(); } }} />
                 <datalist id="ecc-opcoes">
                   {OPCOES_ECC.map((o) => <option key={o} value={o} />)}
                 </datalist>
@@ -6132,7 +6165,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             <CampoMedicamentos insumos={insumos} local={localEstoque} selecionados={medicamentos} setSelecionados={setMedicamentos} />
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginTop: 12 }} />
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary disabled={!editandoManejo && jaRegistradoNestaOrdem} onClick={finalizar}>
@@ -6144,7 +6177,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             {registros.length > 0 && (
               <div style={{ marginTop: 20 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão ({registros.length})</div>
-                <table>
+                <div className="rola-horizontal" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ minWidth: 640 }}>
                   <thead><tr><th>Animal</th><th>Lote</th><th>Horário</th><th>Sêmen / touro</th><th>ECC</th><th>Peso</th><th>Inseminador</th><th>Observações</th><th>GnRH</th><th>Nota</th><th></th></tr></thead>
                   <tbody>
                     {registros.map((r) => (
@@ -6163,7 +6196,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             )}
           </div>
@@ -6391,7 +6424,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   const conferirAoLer = () => {
     const b = brinco.trim().toUpperCase();
     if (!b) return false;
-    const { avisos } = calcularAvisos(b);
+    const { avisos: avisosCalc } = calcularAvisos(b);
+    const avisos = registros.some((r) => r.brinco === b) ? ["Este animal já foi lido nesta leitura.", ...avisosCalc] : avisosCalc;
     setAvisoImediato(avisos.length > 0 ? { brinco: b, avisos } : null);
     return avisos.length > 0;
   };
@@ -6676,7 +6710,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
             {registros.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão</div>
-                <table>
+                <div className="rola-horizontal" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ minWidth: 640 }}>
                   <thead><tr><th>Animal</th><th>Resultado</th><th>Tempo gestação</th><th>Origem</th><th>Lote</th><th>Observação</th><th></th></tr></thead>
                   <tbody>
                     {registros.map((r) => (
@@ -6693,7 +6727,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             )}
 
@@ -6702,7 +6736,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                 Já existe um Diagnóstico registrado para este lote na {loteAtual.ordem}. Não é possível registrar de novo para a mesma ordem.
               </p>
             )}
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginTop: 12 }} />
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               <BtnPrimary disabled={!editandoManejo && jaRegistradoNestaOrdem} onClick={finalizar}>
@@ -6922,7 +6956,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
             </div>
             <LegendaCamposOpcionais />
             <p style={{ fontSize: 11.5, color: "#9B9686", margin: "6px 0 0" }}>Ao registrar, um pré-agendamento de "Diagnóstico - repasse" é criado automaticamente na Agenda, 30 dias após o Fim do período.</p>
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginTop: 12 }} />
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: msg ? 0 : 12 }}><Plus size={15} /> Registrar Repasse</BtnPrimary>
           </div>
           )}
@@ -7195,7 +7229,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("salvo") ? "#166336" : "#A32D2D", marginTop: 10 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("salvo")} style={{ marginTop: 10 }} />
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               {registros.length > 0 && <BtnGhost danger onClick={limparTudo}>Limpar consulta</BtnGhost>}
@@ -7495,7 +7529,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
               </div>
             )}
 
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrad") || msg.includes("atualizad") ? "#166336" : "#A32D2D", marginTop: 12 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginTop: 12 }} />
             {categoriaInterna !== "Serviço" && <LegendaCamposOpcionais />}
             <BtnPrimary disabled={!canSave} onClick={salvar} style={{ marginTop: 12 }}>
               <Plus size={15} /> {categoriaInterna === "Serviço" ? "Salvar valor" : "Registrar entrada"}
@@ -8560,7 +8594,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, re
             </select>
           </Field>
         </div>
-        {msg && <p style={{ fontSize: 12.5, color: msg.includes("sucesso") || msg.includes("criado") ? "#166336" : "#A32D2D", margin: "10px 0 0" }}>{msg}</p>}
+        <MensagemForm msg={msg} ok={msg.includes("sucesso") || msg.includes("criado")} style={{ margin: "10px 0 0" }} />
         <BtnPrimary disabled={!canSave || salvando} onClick={salvar} style={{ marginTop: 12 }}><Plus size={15} /> {salvando ? "Salvando…" : "Salvar usuário"}</BtnPrimary>
       </div>
 
@@ -9011,9 +9045,9 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     registros.filter((r) => r.touro === touroPartidaSelecionado),
     (r) => r.partida
   ).sort((a, b) => (a.label < b.label ? -1 : 1)).map((d) => ({ ...d, label: fmtDate(d.label) }));
-  // reordena especificamente pela safra agrícola (julho a junho) — os outros agrupamentos
+  // reordena especificamente pela sequência de parição (maio a abril) — os outros agrupamentos
   // (ordem, categoria, retiro, etc.) usam a ordem natural em que aparecem nos dados mesmo.
-  const ORDEM_MESES_SAFRA = ["Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"];
+  const ORDEM_MESES_SAFRA = ["Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro", "Março", "Abril"];
   const porMesParicao = agruparConcepcao(registros, (r) => r.mesParicao)
     .sort((a, b) => ORDEM_MESES_SAFRA.indexOf(a.label) - ORDEM_MESES_SAFRA.indexOf(b.label));
   const porProtocoloPadrao = agruparConcepcao(registros, (r) => r.protocoloPadrao);
@@ -9411,18 +9445,31 @@ function CardResumo({ titulo, total, colunas, icon: Icon }) {
 function BarrasContagem({ itens }) {
   if (itens.length === 0) return <p style={{ fontSize: 12, color: "#9B9686" }}>Sem dados suficientes ainda.</p>;
   const maiorValor = Math.max(...itens.map((i) => i.valor || 0), 1);
-  const alturaMaximaPx = 140;
+  // tudo em tamanho fixo (em vez de "altura = o que sobrar"), pra o número em cima da maior
+  // barra e os nomes embaixo sempre caberem no card, sem depender do espaço que sobrar.
+  const alturaMaximaPx = 96;
+  const alturaAreaPx = alturaMaximaPx + 28; // + espaço do número em cima da barra
+  const larguraColunaPx = 88;
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: itens.length > 8 ? "flex-start" : "center", gap: 16, height: "100%", width: "100%", overflowX: "auto" }}>
-      {itens.map((item, i) => (
-        <div key={`${item.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: 64, flexShrink: 0 }}>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
+    // overflow "auto" nos dois eixos: se algum dia não couber, dá pra rolar até ver tudo — nada
+    // fica cortado sem ter como alcançar.
+    <div className="rola-horizontal" style={{ width: "100%", height: "100%", overflow: "auto" }}>
+      {/* margin "0 auto" (e não justify-content: center): centraliza quando cabe, e quando não
+          cabe começa da esquerda e rola — com justify-content: center, a primeira coluna
+          ficava cortada pra fora da esquerda, sem como rolar até ela. */}
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${itens.length}, ${larguraColunaPx}px)`, columnGap: 8, width: "max-content", margin: "0 auto" }}>
+        {itens.map((item, i) => (
+          <div key={`barra-${i}`} style={{ gridColumn: i + 1, gridRow: 1, height: alturaAreaPx, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{item.valor}</div>
             <div style={{ width: 44, height: `${Math.max((item.valor / maiorValor) * alturaMaximaPx, 4)}px`, background: "#166336", borderRadius: "4px 4px 0 0" }} />
           </div>
-          <div style={{ fontSize: 11.5, color: "#6B685E", marginTop: 6, textAlign: "center", maxWidth: 84, height: 27, flexShrink: 0, overflow: "hidden", wordBreak: "break-word", lineHeight: 1.15 }}>{item.label}</div>
-        </div>
-      ))}
+        ))}
+        {itens.map((item, i) => (
+          // os nomes ficam todos na mesma linha da grade (a altura dela é a do nome mais comprido),
+          // então as barras ficam alinhadas e nenhum nome é cortado, por maior que seja
+          <div key={`nome-${i}`} style={{ gridColumn: i + 1, gridRow: 2, paddingTop: 6, textAlign: "center", fontSize: 11.5, color: "#6B685E", lineHeight: 1.2, wordBreak: "break-word" }}>{item.label}</div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -10291,7 +10338,7 @@ function AbaNovosAnimais({ fazendaAtiva, safraAtiva, manejos, registrarManejo, r
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => setDataManejo(e.target.value)} /></Field>
             </div>
             <div style={{ marginTop: 14 }}><BtnPrimary onClick={adicionarPendente}><Plus size={15} /> Adicionar à lista</BtnPrimary></div>
-            {msg && <p style={{ fontSize: 12.5, color: msg.includes("registrado") || msg.includes("adicionado") ? "#166336" : "#A32D2D", marginTop: 10 }}>{msg}</p>}
+            <MensagemForm msg={msg} ok={msg.includes("registrado") || msg.includes("adicionado")} style={{ marginTop: 10 }} />
           </div>
 
           <div style={{ ...cardStyle, marginBottom: 20 }}>
@@ -11151,8 +11198,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     };
     const novaSecao = (titulo) => { doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text(titulo, margemEsq, y); y += 6; };
 
-    // 1) Resumo zootécnico geral (Categoria × Ordem, com Repasse)
-    novaSecao("Resumo zootécnico geral:");
+    // 1) Resumo geral (Categoria × Ordem, com Repasse)
+    novaSecao("Resumo geral:");
     const linhasResumo = [];
     const gruposResumo = [];
     CATEGORIAS_RESUMO.forEach((cat) => {
@@ -11466,7 +11513,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           <div style={cardStyle}>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 6 }}>Relatório Detalhado</div>
             <p style={{ fontSize: 12.5, color: "#6B685E", margin: "0 0 14px" }}>
-              Um PDF com tabelas prontas para apresentar: resumo zootécnico geral e detalhamento por retiro, lote, inseminador, mês de parição, raça de touro e ECC — com Concepção, Fertilidade, Nº de IATF por matriz e Custos por animal/inseminação/prenhez.
+              Um PDF com tabelas prontas para apresentar: resumo geral e detalhamento por retiro, lote, inseminador, mês de parição, raça de touro e ECC — com Concepção, Fertilidade, Nº de IATF por matriz e Custos por animal/inseminação/prenhez.
             </p>
             <BtnPrimary onClick={gerarRelatorioDetalhadoPDF} disabled={lotes.length === 0}><FileDown size={15} /> Exportar Relatório Detalhado (.pdf)</BtnPrimary>
             {erroPDF && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 8 }}>Não foi possível gerar o PDF: {erroPDF}</p>}
