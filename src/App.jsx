@@ -2052,6 +2052,28 @@ export default function App() {
     return insumoId;
   };
 
+  // partida de sêmen digitada na hora da Inseminação, ainda sem entrada no estoque: cria (ou
+  // reaproveita) o item com saldo 0 e sem preço. Quando a entrada dessa partida for lançada no
+  // Estoque (mesmo touro + mesma data de partida), ela cai neste mesmo item, que então ganha o
+  // saldo e o valor unitário.
+  const garantirPartidaSemen = (touro, raca, partida, local) => {
+    if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return null; }
+    const dono = local === "externo"
+      ? { local: "externo", usuarioId: currentUser?.id, fazendaId: null }
+      : { local: "fazenda", fazendaId: fazendaAtivaId, usuarioId: null };
+    const campos = { touro, partida };
+    const existente = insumos.find((i) =>
+      i.categoria === "Sêmen" && i.local === dono.local &&
+      (dono.local === "externo" ? i.usuarioId === dono.usuarioId : i.fazendaId === dono.fazendaId) &&
+      itemEquivalente(i, campos, "Sêmen")
+    );
+    if (existente) return existente.id;
+    const id = uid("ins");
+    setInsumos((a) => [...a, { id, categoria: "Sêmen", touro, raca: raca || "", partida, ...dono, quantidade: 0, estoque: 0, valorUnitario: null, criadoEm: new Date().toISOString() }]);
+    marcaPendencia();
+    return id;
+  };
+
   // "Serviços e outros" (Serviço de inseminação, Serviço de diagnóstico, Outras despesas) é só
   // informativo — não tem quantidade, não desconta/soma estoque e não gera movimento. Só grava
   // (ou atualiza) o valor unitário daquela descrição pra fazenda ativa.
@@ -3055,7 +3077,7 @@ export default function App() {
               registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos} addAnimalAoLote={addAnimalAoLote} atribuirManejosRetroativos={atribuirManejosRetroativos}
               atribuirManejosRetroativosPorOrdem={atribuirManejosRetroativosPorOrdem} garantirLoteDesconhecidos={garantirLoteDesconhecidos} criarSugestaoRepasse={criarSugestaoRepasse}
               atualizarManejo={atualizarManejo} removerManejo={removerManejo}
-              rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} currentUser={currentUser} />
+              rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} currentUser={currentUser}  garantirPartidaSemen={garantirPartidaSemen} />
           </div>
           <div style={{ display: section === "manejo" && sub === "diagnostico" ? "block" : "none" }}>
             <AbaDiagnostico fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} insumos={insumosAtivos} registrarManejo={registrarManejo}
@@ -5675,7 +5697,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
    INSEMINAÇÃO — leitura obrigatória, touro por animal
 ========================================================= */
 
-function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addAnimalAoLote, atribuirManejosRetroativos, atribuirManejosRetroativosPorOrdem, garantirLoteDesconhecidos, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho, currentUser }) {
+function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addAnimalAoLote, atribuirManejosRetroativos, atribuirManejosRetroativosPorOrdem, garantirLoteDesconhecidos, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho, currentUser, garantirPartidaSemen }) {
   const [localEstoque, setLocalEstoque] = useState("fazenda");
   const semensTodos = insumos.filter((i) => i.categoria === "Sêmen");
   const semens = semensTodos.filter((i) => i.local === localEstoque);
@@ -5700,6 +5722,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const [repasseIntegrado, setRepasseIntegrado] = useState("Não");
   const [touro, setTouro] = useState(touros[0] || "");
   const [semenId, setSemenId] = useState("");
+  const [partidaManual, setPartidaManual] = useState(""); // data da partida digitada na hora (quando semenId === "__manual__")
   const [inseminador, setInseminador] = useState(currentUser?.nome || "");
   // sugestões de "Inseminador" já usados antes — tirado do próprio histórico de manejos de
   // Inseminação (nada de cadastro à parte: cada nome novo digitado já vira sugestão a partir
@@ -5794,7 +5817,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
   const partidasDoTouro = semens.filter((s) => s.touro === touro);
   React.useEffect(() => {
-    if (!partidasDoTouro.some((s) => s.id === semenId)) setSemenId(partidasDoTouro[0]?.id || "");
+    if (semenId !== "__manual__" && !partidasDoTouro.some((s) => s.id === semenId)) setSemenId(partidasDoTouro[0]?.id || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [touro, semens.map((s) => s.id).join(",")]);
   React.useEffect(() => {
@@ -5835,6 +5858,15 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     const b = brinco.trim().toUpperCase();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
     if (!semenId) { setMsg("Selecione o touro e a partida utilizados."); return; }
+    let semenIdFinal = semenId;
+    if (semenId === "__manual__") {
+      if (!touro) { setMsg("Selecione o touro utilizado."); return; }
+      if (!partidaManual) { setMsg("Informe a data da partida."); return; }
+      const racaDoTouro = partidasDoTouro.find((p) => p.raca)?.raca || "";
+      semenIdFinal = garantirPartidaSemen(touro, racaDoTouro, partidaManual, localEstoque);
+      if (!semenIdFinal) return;
+      setSemenId(semenIdFinal); setPartidaManual("");
+    }
     const eccNorm = normalizarEcc(ecc);
     if (eccNorm && !OPCOES_ECC.includes(eccNorm)) { setMsg("ECC inválido. Escolha um valor da lista."); return; }
     if (eccNorm !== (ecc.trim() || null)) setEcc(eccNorm || "");
@@ -5868,7 +5900,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     }
 
     const dados = {
-      brinco: b, semenId, ecc: eccNorm, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
+      brinco: b, semenId: semenIdFinal, ecc: eccNorm, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
       gnrhId: gnrhId || null, doseGnrh: doseGnrh.trim() !== "" ? numBR(doseGnrh) : null,
       racaMatriz: racaMatriz.trim() || null,
       inseminador: inseminador.trim() || currentUser?.nome || null,
@@ -6146,7 +6178,11 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               <Field label="Partida">
                 <select style={inputStyle} value={semenId} onChange={(e) => setSemenId(e.target.value)}>
                   {partidasDoTouro.map((s) => <option key={s.id} value={s.id}>{fmtDate(s.partida)} (estoque: {s.estoque} doses)</option>)}
+                  <option value="__manual__">+ Digitar outra partida…</option>
                 </select>
+                {semenId === "__manual__" && (
+                  <input style={{ ...inputStyle, marginTop: 6 }} type="date" value={partidaManual} onChange={(e) => setPartidaManual(e.target.value)} title="Data da partida (o saldo e o preço entram depois, na entrada de estoque)" />
+                )}
               </Field>
               <Field label="Inseminador">
                 <input style={inputStyle} list="inseminadores-conhecidos" value={inseminador} onChange={(e) => setInseminador(e.target.value)} placeholder="Nome de quem está inseminando" />
