@@ -264,6 +264,31 @@ function MensagemForm({ msg, ok, style }) {
   );
 }
 
+// salvamento automático de leitura em andamento: a cada 3 minutos grava o rascunho (o mesmo do
+// botão "Salvar") se houver animais lidos e algo mudou desde o último salvamento. Devolve o
+// horário do último salvamento automático, pra mostrar na tela.
+const INTERVALO_AUTOSSALVAR_MS = 3 * 60 * 1000;
+function useAutoSalvarRascunho({ ativo, chave, dados, salvarRascunho }) {
+  const [salvoEm, setSalvoEm] = useState(null);
+  const ref = React.useRef({});
+  ref.current = { ativo, chave, dados, salvarRascunho };
+  const ultimoRef = React.useRef("");
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      const { ativo: a, chave: c, dados: d, salvarRascunho: salvar } = ref.current;
+      if (!a || !c) return;
+      const json = JSON.stringify(d);
+      if (json === ultimoRef.current) return;
+      salvar(c, d, true);
+      ultimoRef.current = json;
+      setSalvoEm(new Date());
+    }, INTERVALO_AUTOSSALVAR_MS);
+    return () => clearInterval(t);
+  }, []);
+  const rotulo = salvoEm ? `Salvo automaticamente às ${salvoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : null;
+  return rotulo;
+}
+
 function EarTag({ children, size = "md" }) {
   const pad = size === "sm" ? "3px 9px" : "5px 12px";
   const fs = size === "sm" ? 11 : 13;
@@ -1977,9 +2002,9 @@ export default function App() {
 
   const [rascunhos, setRascunhos] = useState({});
   React.useEffect(() => { if (podeGravar) gravarRascunhos(rascunhos); }, [podeGravar, rascunhos]);
-  const salvarRascunho = (chave, dados) => {
+  const salvarRascunho = (chave, dados, silencioso = false) => {
     setRascunhos((a) => ({ ...a, [chave]: { ...dados, salvoEm: new Date().toISOString() } }));
-    marcaPendencia();
+    if (!silencioso) marcaPendencia();
   };
   const limparRascunho = (chave) => {
     setRascunhos((a) => { const cp = { ...a }; delete cp[chave]; return cp; });
@@ -5728,6 +5753,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     salvarRascunho(chaveRascunho, { registros, medicamentos });
     setMsg("Progresso salvo. Você pode continuar depois.");
   };
+  const rotuloAutoSalvo = useAutoSalvarRascunho({ ativo: registros.length > 0 && !editandoManejo, chave: chaveRascunho, dados: { registros, medicamentos }, salvarRascunho });
 
   const lotesSelecionadosObjs = lotesComRetirada.filter((l) => lotesSelecionados.includes(l.id));
   const ordemComum = lotesSelecionadosObjs[0]?.ordem || null;
@@ -6203,6 +6229,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginTop: 12 }} />
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
+              {rotuloAutoSalvo && <span style={{ fontSize: 11, color: "#9B9686", alignSelf: "center" }}>{rotuloAutoSalvo}</span>}
               <BtnPrimary disabled={!editandoManejo && jaRegistradoNestaOrdem} onClick={finalizar}>
                 {editandoManejo ? `Salvar edição (${registros.length})` : `Finalizar inseminação (${registros.length})`}
               </BtnPrimary>
@@ -6348,6 +6375,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     salvarRascunho(chaveRascunho, { registros });
     setMsg("Progresso salvo. Você pode continuar depois.");
   };
+  const rotuloAutoSalvo = useAutoSalvarRascunho({ ativo: registros.length > 0 && !editandoManejo, chave: chaveRascunho, dados: { registros }, salvarRascunho });
 
   const lotesSelecionadosObjs = lotesComInseminacao.filter((l) => lotesSelecionados.includes(l.id));
   const ordemComum = lotesSelecionadosObjs[0]?.ordem || null;
@@ -6774,6 +6802,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
             <MensagemForm msg={msg} ok={msg.includes("registrad") || msg.includes("atualizad")} style={{ marginTop: 12 }} />
             <div style={{ display: "flex", gap: 8, marginTop: msg ? 0 : 12 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
+              {rotuloAutoSalvo && <span style={{ fontSize: 11, color: "#9B9686", alignSelf: "center" }}>{rotuloAutoSalvo}</span>}
               <BtnPrimary disabled={!editandoManejo && jaRegistradoNestaOrdem} onClick={finalizar}>
                 {editandoManejo ? `Salvar edição (${registros.length})` : `Finalizar diagnóstico (${registros.length})`}
               </BtnPrimary>
@@ -7077,6 +7106,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
     salvarRascunho(chaveRascunho, { registros });
     setMsg("Progresso salvo. Você pode continuar depois.");
   };
+  const rotuloAutoSalvo = useAutoSalvarRascunho({ ativo: registros.length > 0, chave: chaveRascunho, dados: { registros }, salvarRascunho });
   const limparTudo = () => { setRegistros([]); limparRascunho(chaveRascunho); setMsg(""); };
 
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || "—";
@@ -7267,6 +7297,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
             <MensagemForm msg={msg} ok={msg.includes("salvo")} style={{ marginTop: 10 }} />
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
+              {rotuloAutoSalvo && <span style={{ fontSize: 11, color: "#9B9686", alignSelf: "center" }}>{rotuloAutoSalvo}</span>}
               {registros.length > 0 && <BtnGhost danger onClick={limparTudo}>Limpar consulta</BtnGhost>}
             </div>
           </div>
