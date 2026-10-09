@@ -60,16 +60,36 @@ export async function definirNovaSenha(novaSenha) {
   }
 }
 
+// sessão guardada pelo próprio Supabase no aparelho (localStorage), lida SEM falar com a rede.
+// Serve pra abrir o app offline: o token pode estar vencido (dura 1h), mas a pessoa continua
+// sendo a mesma que entrou aqui, e os dados locais continuam dela.
+function lerSessaoLocal() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && /^sb-.+-auth-token$/.test(k)) {
+        const v = JSON.parse(localStorage.getItem(k));
+        if (v?.user?.id) return v;
+      }
+    }
+  } catch (e) { /* ignora */ }
+  return null;
+}
+
 export async function obterSessao() {
   if (!supabaseConfigurado) return null;
   try {
-    const { data } = await supabase.auth.getSession();
-    return data.session || null;
+    // offline (ou sinal ruim), renovar um token vencido pode ficar pendurado — sem limite de
+    // tempo isso deixava a tela em branco. Passados 4s, segue com a sessão guardada no aparelho.
+    const r = await Promise.race([
+      supabase.auth.getSession().then(({ data }) => data.session || null),
+      new Promise((resolve) => setTimeout(() => resolve("timeout"), 4000)),
+    ]);
+    if (r && r !== "timeout") return r;
+    return lerSessaoLocal();
   } catch (e) {
-    // sem internet, a tentativa de renovar um token perto de expirar pode falhar — mas isso
-    // não pode travar o carregamento do app pra quem já estava logado antes de ficar offline.
     console.error("Falha ao obter sessão (provavelmente sem conexão):", e);
-    return null;
+    return lerSessaoLocal();
   }
 }
 

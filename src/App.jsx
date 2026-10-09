@@ -698,7 +698,7 @@ function DefinirNovaSenha({ onDefinir, onConcluido }) {
    (quando um login de verdade, com e-mail e senha, passa a ser exigido de novo).
 ========================================================= */
 
-function RecuperarComPin({ onEntrar }) {
+function RecuperarComPin({ onEntrar, onUsarSenha }) {
   const [pin, setPin] = useState("");
   const [erro, setErro] = useState("");
   const [entrando, setEntrando] = useState(false);
@@ -730,6 +730,11 @@ function RecuperarComPin({ onEntrar }) {
         <p style={{ fontSize: 11, color: "#9B9686", textAlign: "center", marginTop: 16 }}>
           Esqueceu o PIN? Só é possível recuperar o acesso normalmente quando a internet voltar.
         </p>
+        {onUsarSenha && (
+          <button onClick={onUsarSenha} style={{ display: "block", margin: "6px auto 0", background: "none", border: "none", color: "#166336", cursor: "pointer", fontSize: 12, textDecoration: "underline" }}>
+            Tenho internet — entrar com e-mail e senha
+          </button>
+        )}
       </div>
     </div>
   );
@@ -969,6 +974,11 @@ export default function App() {
 
   const [recuperacaoPinDisponivel, setRecuperacaoPinDisponivel] = useState(null); // userId, se der pra oferecer recuperação por PIN
   const saidaManualRef = React.useRef(false);
+  const [sessaoExpirada, setSessaoExpirada] = useState(false); // login caiu, mas o app segue aberto (dados locais intactos) esperando novo login
+  const [reloginEmail, setReloginEmail] = useState("");
+  const [reloginSenha, setReloginSenha] = useState("");
+  const [reloginMsg, setReloginMsg] = useState("");
+  const [reloginCarregando, setReloginCarregando] = useState(false);
   const [avisoSessaoPerdida, setAvisoSessaoPerdida] = useState(false); // sessão caiu sozinha (não foi "Sair"), mas há leitura não salva — espera a pessoa salvar antes de trocar de tela
   const [modoRedefinirSenha, setModoRedefinirSenha] = useState(false); // veio de um clique no link de "Esqueci minha senha"
 
@@ -979,8 +989,8 @@ export default function App() {
         const podeSeguir = await garantirDonoDosDadosLocais(sessao.user.id);
         if (!podeSeguir) return; // a página vai recarregar sozinha
         setCurrentUser((atual) => atual || { id: sessao.user.id, _aguardandoPerfil: true });
-      } else if (!online) {
-        // sem sessão E sem internet: se esse aparelho já teve um PIN de recuperação
+      } else {
+        // sem sessão (offline ou com sinal ruim — navigator.onLine nem sempre é confiável): se esse aparelho já teve um PIN de recuperação
         // configurado pra alguém, oferece essa saída em vez de travar no login normal
         // (que exigiria internet pra conferir a senha no servidor).
         const donoId = await lerMeta("donoDosDadosLocais");
@@ -1005,18 +1015,17 @@ export default function App() {
             const sessaoAtual = await obterSessao();
             if (sessaoAtual?.user) return;
             if (!navigator.onLine) return; // sem internet: segue usando os dados locais, não desloga
-            if (haPendenciaDeLeituraAtiva()) { setAvisoSessaoPerdida(true); return; }
-            setCurrentUser(null);
+            setSessaoExpirada(true); // NÃO derruba o app: mantém telas e dados, só pede novo login
           }, 2500);
           return;
         }
         // a sessão caiu sozinha (expirou, foi invalidada, etc.) — SEM passar pelo botão "Sair",
         // que é onde normalmente avisamos sobre leitura não salva. Se houver alguma agora, não
         // troca de tela ainda: deixa a pessoa salvar primeiro, e só desloga depois disso.
-        if (haPendenciaDeLeituraAtiva()) { setAvisoSessaoPerdida(true); return; }
-        setCurrentUser(null);
+        setSessaoExpirada(true);
         return;
       }
+      setSessaoExpirada(false);
       const podeSeguir = await garantirDonoDosDadosLocais(sessao.user.id);
       if (!podeSeguir) return;
       setCurrentUser((atual) => (atual && atual.id === sessao.user.id && !atual._aguardandoPerfil) ? atual : { id: sessao.user.id, _aguardandoPerfil: true });
@@ -1080,6 +1089,18 @@ export default function App() {
     if (!r.ok) return r;
     setCurrentUser({ id: r.authUser.id, _aguardandoPerfil: true });
     return r;
+  };
+
+  const reentrarNaSessao = async () => {
+    const emailUso = (currentUser?.email || reloginEmail || "").trim();
+    if (!emailUso || !reloginSenha) { setReloginMsg("Informe e-mail e senha."); return; }
+    setReloginCarregando(true); setReloginMsg("");
+    const r = await entrar(emailUso, reloginSenha);
+    setReloginCarregando(false);
+    if (!r.ok) { setReloginMsg(r.erro); return; }
+    if (currentUser?.id && r.authUser?.id !== currentUser.id) { setReloginMsg("Esse login é de outro usuário. Use a conta que estava em uso neste aparelho."); await sair(); return; }
+    setReloginSenha(""); setSessaoExpirada(false);
+    setTimeout(() => sincronizarSeNaoEstiverEmAndamento(), 300);
   };
 
   const sairDaConta = async () => {
@@ -1229,6 +1250,7 @@ export default function App() {
       // mostra o motivo real em vez de falhar silenciosamente
       setErroSincronizacao(resultado.motivo || (resultado.erros || []).join(" · ") || "Falha desconhecida na sincronização.");
     }
+    if (resultado.semSessao) setSessaoExpirada(true);
     return resultado;
     } finally {
       travaSincronizacaoRef.current = false;
@@ -1242,7 +1264,7 @@ export default function App() {
   // depois de ficar offline, e (3) periodicamente em segundo plano enquanto o app fica aberto
   // (pra também trazer alterações feitas por outras pessoas, não só enviar as suas). O botão
   // manual continua existindo, útil pra forçar uma sincronização na hora sem esperar.
-  const podeSincronizarAutomaticamente = supabaseConfigurado && online && podeGravar && currentUser && !currentUser._aguardandoPerfil && !currentUser._recuperadoOffline;
+  const podeSincronizarAutomaticamente = supabaseConfigurado && online && podeGravar && currentUser && !currentUser._aguardandoPerfil && !currentUser._recuperadoOffline && !sessaoExpirada;
   const sincronizandoRef = React.useRef(false);
   React.useEffect(() => { sincronizandoRef.current = sincronizando; }, [sincronizando]);
   // guarda sempre a versão mais recente da função em uma ref, pra (3) não precisar reiniciar
@@ -2648,7 +2670,7 @@ export default function App() {
   // na tela de login em vez de travar o app inteiro.
   if (modoRedefinirSenha) return <DefinirNovaSenha onDefinir={definirNovaSenha} onConcluido={() => setModoRedefinirSenha(false)} />;
   if (!sessaoAuthCarregada) return null; // evita piscar a tela de login antes de checar sessão salva
-  if (!currentUser && recuperacaoPinDisponivel) return <RecuperarComPin onEntrar={entrarComPinLocal} />;
+  if (!currentUser && recuperacaoPinDisponivel) return <RecuperarComPin onEntrar={entrarComPinLocal} onUsarSenha={() => setRecuperacaoPinDisponivel(null)} />;
   if (!currentUser) return <Login users={users} onLoginLocal={setCurrentUser} onEntrarReal={entrarComEmailSenha} avisoCarregamento={erroCarregamentoBanco ? { onTentar: tentarCarregarBanco } : null} />;
   if (currentUser._aguardandoPerfil) {
     return (
@@ -2675,6 +2697,19 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "'Work Sans', sans-serif", minHeight: "100vh", background: "#F7F7F7", display: "flex" }}>
+      {sessaoExpirada && !avisoSessaoPerdida && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
+          background: "#8A3E15", color: "#FFFFFF", padding: "10px 16px", fontSize: 13,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", textAlign: "center",
+        }}>
+          <span>⚠ Sua sessão expirou. Seus dados e leituras estão salvos neste aparelho — entre de novo para voltar a sincronizar.</span>
+          {!currentUser?.email && <input type="email" placeholder="e-mail" value={reloginEmail} onChange={(e) => setReloginEmail(e.target.value)} style={{ padding: "4px 8px", borderRadius: 6, border: "none", fontSize: 13, width: 170 }} />}
+          <input type="password" placeholder="senha" value={reloginSenha} onChange={(e) => setReloginSenha(e.target.value)} onKeyDown={(e) => e.key === "Enter" && reentrarNaSessao()} style={{ padding: "4px 8px", borderRadius: 6, border: "none", fontSize: 13, width: 130 }} />
+          <button onClick={reentrarNaSessao} disabled={reloginCarregando} style={{ background: "none", border: "1px solid #FFFFFF", color: "#FFFFFF", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" }}>{reloginCarregando ? "Entrando…" : "Entrar"}</button>
+          {reloginMsg && <span style={{ width: "100%", fontSize: 12 }}>{reloginMsg}</span>}
+        </div>
+      )}
       {avisoSessaoPerdida && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,

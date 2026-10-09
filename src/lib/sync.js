@@ -319,6 +319,23 @@ export async function sincronizar(estado, perfilUsuario) {
     return { ok: false, motivo: "Sem conexão com a internet." };
   }
 
+  // sem login válido o banco recusa todo envio (RLS) e devolve listas vazias na leitura — então nem
+  // tenta: confere a sessão (renovando o token se preciso, com uma segunda chance pra rede instável).
+  const sessaoValida = async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user) return true;
+      const { data: d2 } = await supabase.auth.refreshSession();
+      return Boolean(d2?.session?.user);
+    } catch (e) { return false; }
+  };
+  if (!(await sessaoValida())) {
+    await new Promise((r) => setTimeout(r, 2500));
+    if (!(await sessaoValida())) {
+      return { ok: false, semSessao: true, motivo: "Sessão expirada — entre novamente para sincronizar. Seus dados continuam salvos neste aparelho." };
+    }
+  }
+
   const erros = [];
 
   // busca as lápides ANTES de mais nada — precisa saber o que já foi apagado em outros
