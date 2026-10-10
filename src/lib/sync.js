@@ -371,6 +371,13 @@ export async function sincronizar(estado, perfilUsuario) {
   if (!resultadoExclusoesBusca.ok) erros.push(`exclusoes: ${resultadoExclusoesBusca.erro}`);
   const idsApagados = new Set(exclusoesConhecidas.map((e) => e.id));
 
+  // fazenda apagada (lápide): nada que dependa dela pode ser enviado — o banco recusaria por chave
+  // estrangeira ("retiros_fazenda_id_fkey" etc.) e travaria o envio da coleção inteira. Cobre os
+  // itens que ficaram guardados neste aparelho depois que a fazenda foi apagada (aqui ou no banco).
+  const safraDeFazendaApagada = new Set((estado.safras || []).filter((sf) => sf.fazendaId && idsApagados.has(sf.fazendaId)).map((sf) => sf.id));
+  const dependeDeApagado = (item) => (item.fazendaId && idsApagados.has(item.fazendaId))
+    || (item.safraId && (idsApagados.has(item.safraId) || safraDeFazendaApagada.has(item.safraId)))
+    || (item.loteId && idsApagados.has(item.loteId));
   const conflitosPorColecao = [];
   // Suporte Adm nunca tem permissão de escrever em agendamentos/insumos/movimentos, em NENHUMA
   // fazenda — é regra do próprio banco (fazenda_autorizada() não faz exceção pro perfil dele
@@ -384,6 +391,7 @@ export async function sincronizar(estado, perfilUsuario) {
     if (perfilUsuario === "Suporte Adm" && COLECOES_PROIBIDAS_PARA_SUPORTE_ADM.has(colecao)) continue;
     // nunca reenvia algo que já sabemos ter sido apagado (por este aparelho ou por outro)
     let itensSemApagados = (estado[colecao] || []).filter((item) => !item.id || !idsApagados.has(item.id));
+    if (colecao !== "fazendas" && colecao !== "usuarios") itensSemApagados = itensSemApagados.filter((item) => !dependeDeApagado(item));
     // um movimento cujo manejo já não existe mais localmente (foi excluído ou fundido com um
     // duplicado em algum momento, por qualquer motivo) nunca vai conseguir ser inserido — a
     // chave estrangeira pra "manejos" nunca vai bater. Sem filtrar isso aqui, um único
