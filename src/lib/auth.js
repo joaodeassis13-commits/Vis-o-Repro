@@ -76,6 +76,18 @@ function lerSessaoLocal() {
   return null;
 }
 
+// tenta renovar o login com o token de renovação guardado no aparelho (sem pedir senha).
+// true se voltou a ter sessão válida.
+export async function renovarSessao() {
+  if (!supabaseConfigurado) return false;
+  try {
+    const { data: atual } = await supabase.auth.getSession();
+    if (atual?.session?.user) return true;
+    const { data, error } = await supabase.auth.refreshSession();
+    return Boolean(!error && data?.session?.user);
+  } catch (e) { return false; }
+}
+
 export async function obterSessao() {
   if (!supabaseConfigurado) return null;
   try {

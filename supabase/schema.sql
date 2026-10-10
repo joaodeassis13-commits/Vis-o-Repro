@@ -500,7 +500,7 @@ create policy "fazendas: atualizacao do proprio grupo" on fazendas
   );
 drop policy if exists "fazendas: exclusao do proprio grupo" on fazendas;
 create policy "fazendas: exclusao do proprio grupo" on fazendas
-  for delete using (fazenda_autorizada(id));
+  for delete using (fazenda_autorizada(id) or eh_suporte_adm());
 drop policy if exists "fazendas: administrador pode criar" on fazendas;
 create policy "fazendas: administrador pode criar" on fazendas
   for insert with check (

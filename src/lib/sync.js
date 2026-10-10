@@ -236,9 +236,30 @@ async function buscarColecao(colecao) {
   if (!supabaseConfigurado) return { ok: true, itens: [] };
   const tabela = TABELAS[colecao];
   if (!tabela) return { ok: true, itens: [] };
-  const { data, error } = await supabase.from(tabela).select("*");
+  const { data, error } = await buscarTudoPaginado(tabela, "*", ["id"]);
   if (error) return { ok: false, erro: error.message, itens: [] };
   return { ok: true, itens: (data || []).map(linhaDoSupabase) };
+}
+
+// lê a tabela INTEIRA em páginas. O Supabase corta cada resposta no limite "Max rows" do projeto
+// (Settings → API) — se ele estiver baixo (ex.: 10), um select simples devolve só essa quantidade
+// e o resto "some" da tela. Aqui pede página por página (usando o total exato) até juntar tudo,
+// seja qual for o tamanho que o servidor devolve por vez.
+async function buscarTudoPaginado(tabela, colunas, ordenarPor) {
+  const TAMANHO = 1000;
+  let tudo = [];
+  let total = null;
+  for (let guarda = 0; guarda < 2000; guarda++) {
+    let q = supabase.from(tabela).select(colunas, { count: "exact" });
+    ordenarPor.forEach((c) => { q = q.order(c); });
+    const { data, error, count } = await q.range(tudo.length, tudo.length + TAMANHO - 1);
+    if (error) return { data: null, error };
+    if (total == null && count != null) total = count;
+    if (!data || data.length === 0) break;
+    tudo = tudo.concat(data);
+    if (total != null && tudo.length >= total) break;
+  }
+  return { data: tudo, error: null };
 }
 
 // ---------- autorizações (usuario_fazendas) ----------
@@ -285,7 +306,7 @@ async function enviarAutorizacoes(usuarios) {
 // filtra: cada um vê a própria linha; Administrador também vê as do seu grupo).
 async function buscarAutorizacoes() {
   if (!supabaseConfigurado) return { ok: true, mapa: {} };
-  const { data, error } = await supabase.from("usuario_fazendas").select("usuario_id, fazenda_id");
+  const { data, error } = await buscarTudoPaginado("usuario_fazendas", "usuario_id, fazenda_id", ["usuario_id", "fazenda_id"]);
   if (error) return { ok: false, erro: error.message, mapa: {} };
   const mapa = {};
   (data || []).forEach((row) => {
@@ -441,6 +462,10 @@ export async function excluirRegistro(colecao, id) {
   if (!tabela) return { ok: true };
   const { error } = await supabase.from(tabela).delete().eq("id", id);
   if (error) return { ok: false, erro: error.message };
+  // uma exclusão barrada pela segurança (RLS) NÃO dá erro — só apaga 0 linhas. Confere se o
+  // registro realmente saiu; senão ele ficaria "fantasma" no banco (escondido aqui pela lápide).
+  const { data: aindaExiste } = await supabase.from(tabela).select("id").eq("id", id).maybeSingle();
+  if (aindaExiste) return { ok: false, erro: "sem permissão para apagar este registro no servidor" };
   // a lápide é best-effort — se essa segunda escrita falhar (ex.: caiu a conexão bem nesse
   // instante), a exclusão principal acima já valeu; a lápide em si também será reenviada
   // normalmente na próxima sincronização (ela mora no estado local igual qualquer coleção).

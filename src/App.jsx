@@ -19,7 +19,7 @@ import {
   buscarBenchmarkResumoSistema,
 } from "./lib/benchmarking.js";
 import { supabaseConfigurado } from "./lib/supabaseClient.js";
-import { entrar, sair, obterSessao, escutarMudancaAuth, criarUsuario, pedirRedefinicaoSenha, definirNovaSenha } from "./lib/auth.js";
+import { entrar, sair, obterSessao, renovarSessao, escutarMudancaAuth, criarUsuario, pedirRedefinicaoSenha, definirNovaSenha } from "./lib/auth.js";
 import logoImg from "./assets/logo.png";
 import logoBannerImg from "./assets/logo-banner.png";
 import logoBannerLoginImg from "./assets/logo-banner-login.png";
@@ -111,6 +111,7 @@ const ehNomeDesconhecidos = (nome) => String(nome || "").trim().toLowerCase() ==
 const numBR = (v) => Number(String(v ?? "").trim().replace(",", "."));
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (iso) => {
+  if (!iso) return "—";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
@@ -1115,6 +1116,25 @@ export default function App() {
     setCurrentUser({ id: r.authUser.id, _aguardandoPerfil: true });
     return r;
   };
+
+  // sessão caiu: tenta recuperar sozinha assim que houver internet (renova com o token guardado) e
+  // sincroniza em seguida; repete a cada 15s enquanto estiver online e ainda não tiver conseguido.
+  const [falhasRecuperarSessao, setFalhasRecuperarSessao] = useState(0);
+  React.useEffect(() => {
+    if (!sessaoExpirada) { setFalhasRecuperarSessao(0); return; }
+    if (!online) return;
+    let cancelado = false;
+    const tentar = async () => {
+      const ok = await renovarSessao();
+      if (cancelado) return;
+      if (ok) { setSessaoExpirada(false); setTimeout(() => sincronizarSeNaoEstiverEmAndamento(), 300); }
+      else setFalhasRecuperarSessao((n) => n + 1);
+    };
+    tentar();
+    const t = setInterval(tentar, 15000);
+    return () => { cancelado = true; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessaoExpirada, online]);
 
   const reentrarNaSessao = async () => {
     const emailUso = (currentUser?.email || reloginEmail || "").trim();
@@ -2744,19 +2764,6 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "'Work Sans', sans-serif", minHeight: "100vh", background: "#F7F7F7", display: "flex" }}>
-      {sessaoExpirada && !avisoSessaoPerdida && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
-          background: "#8A3E15", color: "#FFFFFF", padding: "10px 16px", fontSize: 13,
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", textAlign: "center",
-        }}>
-          <span>⚠ Sua sessão expirou. Seus dados e leituras estão salvos neste aparelho — entre de novo para voltar a sincronizar.</span>
-          {!currentUser?.email && <input type="email" placeholder="e-mail" value={reloginEmail} onChange={(e) => setReloginEmail(e.target.value)} style={{ padding: "4px 8px", borderRadius: 6, border: "none", fontSize: 13, width: 170 }} />}
-          <input type="password" placeholder="senha" value={reloginSenha} onChange={(e) => setReloginSenha(e.target.value)} onKeyDown={(e) => e.key === "Enter" && reentrarNaSessao()} style={{ padding: "4px 8px", borderRadius: 6, border: "none", fontSize: 13, width: 130 }} />
-          <button onClick={reentrarNaSessao} disabled={reloginCarregando} style={{ background: "none", border: "1px solid #FFFFFF", color: "#FFFFFF", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" }}>{reloginCarregando ? "Entrando…" : "Entrar"}</button>
-          {reloginMsg && <span style={{ width: "100%", fontSize: 12 }}>{reloginMsg}</span>}
-        </div>
-      )}
       {avisoSessaoPerdida && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
@@ -2970,6 +2977,15 @@ export default function App() {
                 </button>
               )
             )}
+            {sessaoExpirada && online && falhasRecuperarSessao >= 2 && (
+              <div style={{ marginTop: 8, fontSize: 10.5, color: "#E3A45C", lineHeight: 1.4 }}>
+                Não foi possível renovar o login automaticamente. Digite a senha para voltar a sincronizar (seus dados estão salvos).
+                {!currentUser?.email && <input type="email" placeholder="e-mail" value={reloginEmail} onChange={(e) => setReloginEmail(e.target.value)} style={{ ...inputStyle, marginTop: 6, padding: "5px 8px", fontSize: 11 }} />}
+                <input type="password" placeholder="senha" value={reloginSenha} onChange={(e) => setReloginSenha(e.target.value)} onKeyDown={(e) => e.key === "Enter" && reentrarNaSessao()} style={{ ...inputStyle, marginTop: 6, padding: "5px 8px", fontSize: 11 }} />
+                {reloginMsg && <p style={{ margin: "4px 0 0" }}>{reloginMsg}</p>}
+                <button onClick={reentrarNaSessao} disabled={reloginCarregando} style={{ marginTop: 6, background: "none", border: "1px solid #E3A45C", color: "#E3A45C", borderRadius: 6, padding: "3px 8px", fontSize: 10.5, cursor: "pointer" }}>{reloginCarregando ? "Entrando…" : "Entrar"}</button>
+              </div>
+            )}
             <div style={{ fontSize: 10, color: "#6B7A6F", marginTop: 8 }}>versão {typeof __VERSAO_APP__ !== "undefined" ? __VERSAO_APP__ : "—"}</div>
           </div>
           {currentUser._recuperadoOffline && (
@@ -3107,7 +3123,7 @@ export default function App() {
           </div>
 
           <div style={{ display: section === "agenda" ? "block" : "none" }}>
-            <AbaAgenda fazendaAtiva={fazendaAtiva} fazendas={fazendasVisiveis} lotes={lotesAtivos} retiros={retirosAtivos} agendamentos={agendamentosVisiveis}
+            <AbaAgenda ocultarPendentes={currentUser?.perfil === "Supervisor"} fazendaAtiva={fazendaAtiva} fazendas={fazendasVisiveis} lotes={lotesAtivos} retiros={retirosAtivos} agendamentos={agendamentosVisiveis}
               addAgendamento={addAgendamento} confirmarAgendamento={confirmarAgendamento}
               descartarAgendamento={descartarAgendamento} removerAgendamento={removerAgendamento} atualizarAgendamento={atualizarAgendamento}
               reordenarAgendamentoNoDia={reordenarAgendamentoNoDia} somenteLeitura={currentUser?.perfil === "Supervisor"} />
@@ -6177,7 +6193,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               </Field>
               <Field label="Partida">
                 <select style={inputStyle} value={semenId} onChange={(e) => setSemenId(e.target.value)}>
-                  {partidasDoTouro.map((s) => <option key={s.id} value={s.id}>{fmtDate(s.partida)} (estoque: {s.estoque} doses)</option>)}
+                  {partidasDoTouro.map((s) => <option key={s.id} value={s.id}>{s.partida ? fmtDate(s.partida) : "Sem partida informada"} (estoque: {s.estoque} doses)</option>)}
                   <option value="__manual__">+ Digitar outra partida…</option>
                 </select>
                 {semenId === "__manual__" && (
@@ -7432,7 +7448,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
     const qtdOk = String(form.quantidade).trim() !== "" && numBR(form.quantidade) > 0;
     if (!qtdOk) return false;
     if (categoriaInterna === "Hormônio") return form.produtoComercial.trim() !== "" && form.hormonio !== "" && String(form.tamanhoEmbalagem).trim() !== "" && numBR(form.tamanhoEmbalagem) > 0;
-    if (categoriaInterna === "Sêmen") return form.touro.trim() !== "" && form.raca.trim() !== "" && form.partida.trim() !== "";
+    if (categoriaInterna === "Sêmen") return form.touro.trim() !== "" && form.raca.trim() !== "";
     if (categoriaInterna === "Medicamento") return form.produtoComercial.trim() !== "" && form.tipoMedicamento !== "" && String(form.tamanhoEmbalagem).trim() !== "" && numBR(form.tamanhoEmbalagem) > 0;
     if (categoriaInterna === "Utensílio") return form.produtoComercial.trim() !== "" && form.unidade.trim() !== "";
     return false;
@@ -7451,7 +7467,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
       camposItem = { produtoComercial: form.produtoComercial, hormonio: form.hormonio, tamanhoEmbalagem: numBR(form.tamanhoEmbalagem), unidadeEmbalagem: form.unidadeEmbalagem, doseMedia: form.doseMedia.trim() !== "" ? numBR(form.doseMedia) : null };
     } else if (categoriaInterna === "Sêmen") {
       camposItem = {
-        touro: form.touro, raca: form.raca, partida: form.partida,
+        touro: form.touro, raca: form.raca, partida: form.partida || null,
         motilidadeInicial: form.motilidadeInicial.trim() !== "" ? numBR(form.motilidadeInicial) : null,
         vigorInicial: form.vigorInicial !== "" ? Number(form.vigorInicial) : null,
         motilidadeFinal: form.motilidadeFinal.trim() !== "" ? numBR(form.motilidadeFinal) : null,
@@ -7563,7 +7579,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                     {RACAS_PADRAO.map((r) => <option key={r} value={r} />)}
                   </datalist>
                 </Field>
-                <Field label="Partida"><input style={inputStyle} type="date" value={form.partida} onChange={set("partida")} /></Field>
+                <Field label="Partida (opcional)"><input style={inputStyle} type="date" value={form.partida} onChange={set("partida")} /></Field>
                 <Field label="Quantidade de doses"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
@@ -8070,7 +8086,7 @@ const tituloAbreviadoCalendario = (a) => {
   return abrev + a.titulo.slice(a.tipo.length);
 };
 
-function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento, reordenarAgendamentoNoDia, somenteLeitura }) {
+function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAgendamento, confirmarAgendamento, descartarAgendamento, removerAgendamento, atualizarAgendamento, reordenarAgendamentoNoDia, somenteLeitura, ocultarPendentes }) {
   // versão compacta do calendário só no celular — no computador, nada muda
   const [isMobileCalendario, setIsMobileCalendario] = useState(typeof window !== "undefined" ? window.innerWidth < 860 : false);
   React.useEffect(() => {
@@ -8369,6 +8385,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
             </div>
           )}
 
+          {!ocultarPendentes && (
           <div style={{ marginBottom: 26 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>
               <Bell size={13} /> Pré-agendamentos aguardando confirmação
@@ -8381,6 +8398,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
               </div>
             )}
           </div>
+          )}
 
           {!somenteLeitura && (
             <div style={{ ...cardStyle, marginBottom: 26 }}>
