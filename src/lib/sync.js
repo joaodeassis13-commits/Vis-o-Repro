@@ -380,10 +380,15 @@ export async function sincronizar(estado, perfilUsuario) {
   // chave estrangeira. Então não envia nem ela nem o que depende dela.
   const fazendasBloqueadas = new Set();
   if (perfilUsuario !== "Suporte Adm") {
-    const rf = await buscarColecao("fazendas");
-    if (rf.ok) {
-      const idsNoServidor = new Set(rf.itens.map((f) => f.id));
-      (estado.fazendas || []).forEach((f) => { if (f.id && !idsNoServidor.has(f.id)) fazendasBloqueadas.add(f.id); });
+    // o banco deixa o Administrador VER fazendas sem dono ainda (pra poder assumir), mas só deixa
+    // ESCREVER nas autorizadas pra ele. Enviar uma fazenda que só dá pra ler → "violates row-level
+    // security policy". Por isso só envia as fazendas em que ele está autorizado de verdade.
+    const { data: dadosAuth } = await supabase.auth.getUser();
+    const meuId = dadosAuth?.user?.id || null;
+    const ra = await buscarAutorizacoes();
+    if (meuId && ra.ok) {
+      const minhas = new Set(ra.mapa[meuId] || []);
+      (estado.fazendas || []).forEach((f) => { if (f.id && !minhas.has(f.id)) fazendasBloqueadas.add(f.id); });
     }
   }
   const safraDeFazendaApagada = new Set((estado.safras || []).filter((sf) => sf.fazendaId && (idsApagados.has(sf.fazendaId) || fazendasBloqueadas.has(sf.fazendaId))).map((sf) => sf.id));
