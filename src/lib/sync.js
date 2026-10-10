@@ -374,8 +374,20 @@ export async function sincronizar(estado, perfilUsuario) {
   // fazenda apagada (lápide): nada que dependa dela pode ser enviado — o banco recusaria por chave
   // estrangeira ("retiros_fazenda_id_fkey" etc.) e travaria o envio da coleção inteira. Cobre os
   // itens que ficaram guardados neste aparelho depois que a fazenda foi apagada (aqui ou no banco).
-  const safraDeFazendaApagada = new Set((estado.safras || []).filter((sf) => sf.fazendaId && idsApagados.has(sf.fazendaId)).map((sf) => sf.id));
-  const dependeDeApagado = (item) => (item.fazendaId && idsApagados.has(item.fazendaId))
+  // Só o Suporte Adm cria fazenda de verdade. Para qualquer outro perfil, uma fazenda que existe só
+  // aqui no aparelho (e não no servidor) é uma fazenda que foi apagada lá: tentar enviá-la dá
+  // "violates row-level security policy for table fazendas", e tudo que depende dela dá erro de
+  // chave estrangeira. Então não envia nem ela nem o que depende dela.
+  const fazendasBloqueadas = new Set();
+  if (perfilUsuario !== "Suporte Adm") {
+    const rf = await buscarColecao("fazendas");
+    if (rf.ok) {
+      const idsNoServidor = new Set(rf.itens.map((f) => f.id));
+      (estado.fazendas || []).forEach((f) => { if (f.id && !idsNoServidor.has(f.id)) fazendasBloqueadas.add(f.id); });
+    }
+  }
+  const safraDeFazendaApagada = new Set((estado.safras || []).filter((sf) => sf.fazendaId && (idsApagados.has(sf.fazendaId) || fazendasBloqueadas.has(sf.fazendaId))).map((sf) => sf.id));
+  const dependeDeApagado = (item) => (item.fazendaId && (idsApagados.has(item.fazendaId) || fazendasBloqueadas.has(item.fazendaId)))
     || (item.safraId && (idsApagados.has(item.safraId) || safraDeFazendaApagada.has(item.safraId)))
     || (item.loteId && idsApagados.has(item.loteId));
   const conflitosPorColecao = [];
@@ -392,6 +404,7 @@ export async function sincronizar(estado, perfilUsuario) {
     // nunca reenvia algo que já sabemos ter sido apagado (por este aparelho ou por outro)
     let itensSemApagados = (estado[colecao] || []).filter((item) => !item.id || !idsApagados.has(item.id));
     if (colecao !== "fazendas" && colecao !== "usuarios") itensSemApagados = itensSemApagados.filter((item) => !dependeDeApagado(item));
+    if (colecao === "fazendas") itensSemApagados = itensSemApagados.filter((f) => !fazendasBloqueadas.has(f.id));
     // um movimento cujo manejo já não existe mais localmente (foi excluído ou fundido com um
     // duplicado em algum momento, por qualquer motivo) nunca vai conseguir ser inserido — a
     // chave estrangeira pra "manejos" nunca vai bater. Sem filtrar isso aqui, um único

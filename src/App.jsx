@@ -1256,7 +1256,9 @@ export default function App() {
       // "fazendasAutorizadas" agora vem sincronizado de verdade (via usuario_fazendas,
       // resolvido dentro de sincronizar()) — o servidor já é a fonte confiável aqui.
       if (a.usuarios) setUsers(comPendentesPreservados(users, a.usuarios));
-      if (a.fazendas) setFazendas(comPendentesPreservados(fazendas, a.fazendas));
+      // só o Suporte Adm cria fazenda; para os outros perfis, o servidor é a fonte da verdade (uma
+      // fazenda que só existe aqui foi apagada lá) — não preserva "pendentes" desta coleção.
+      if (a.fazendas) setFazendas(currentUser?.perfil === "Suporte Adm" ? comPendentesPreservados(fazendas, a.fazendas) : a.fazendas);
       if (a.retiros) setRetiros(comPendentesPreservados(retiros, a.retiros));
       if (a.safras) setSafras(comPendentesPreservados(safras, a.safras));
       // junta lotes "Desconhecidos" duplicados (de aparelhos diferentes offline) ANTES de
