@@ -112,6 +112,7 @@ const numBR = (v) => Number(String(v ?? "").trim().replace(",", "."));
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (iso) => {
   if (!iso) return "—";
+  if (!/^\d{4}-\d{2}-\d{2}/.test(String(iso))) return String(iso); // texto livre (ex.: código de partida)
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
@@ -2037,11 +2038,81 @@ export default function App() {
   const itemEquivalente = (existente, campos, categoria) => {
     const norm = (s) => (s || "").trim().toLowerCase();
     if (categoria === "Hormônio") return norm(existente.produtoComercial) === norm(campos.produtoComercial) && existente.hormonio === campos.hormonio;
-    if (categoria === "Sêmen") return norm(existente.touro) === norm(campos.touro) && norm(existente.partida) === norm(campos.partida);
+    if (categoria === "Sêmen") return norm(existente.touro) === norm(campos.touro); // estoque de sêmen é por touro (a partida é informada na Inseminação)
     if (categoria === "Medicamento") return norm(existente.produtoComercial) === norm(campos.produtoComercial) && existente.tipoMedicamento === campos.tipoMedicamento;
     if (categoria === "Utensílio") return norm(existente.produtoComercial) === norm(campos.produtoComercial);
     return false;
   };
+
+  // ---------- unifica o sêmen antigo (um item por touro+partida) em UM item por touro ----------
+  // Soma doses, faz a média ponderada do preço, aponta manejos/movimentos/rascunhos pro item que
+  // sobra e guarda a partida antiga em cada animal já inseminado (partidaInformada) pra não perder
+  // a informação. O sobrevivente é sempre o mais antigo (determinístico: todo aparelho chega no mesmo).
+  const consolidacaoSemenRodouRef = React.useRef(false);
+  const [insumosParaApagarNoServidor, setInsumosParaApagarNoServidor] = useState([]);
+  React.useEffect(() => {
+    if (consolidacaoSemenRodouRef.current) return;
+    if (!podeGravar || !currentUser || currentUser._aguardandoPerfil || currentUser._recuperadoOffline || currentUser.perfil === "Suporte Adm") return;
+    if (supabaseConfigurado && !ultimaSincronizacao) return; // espera a 1ª sincronização, pra ver o estoque completo
+    consolidacaoSemenRodouRef.current = true;
+    const norm = (t) => (t || "").trim().toLowerCase();
+    const grupos = {};
+    insumos.filter((i) => i.categoria === "Sêmen").forEach((i) => {
+      if (i.local === "externo") { if (i.usuarioId !== currentUser.id) return; }
+      else if (fazendas.find((f) => f.id === i.fazendaId)?.licenciada === false) return;
+      const chave = `${i.local === "externo" ? `ext:${i.usuarioId}` : `faz:${i.fazendaId}`}|${norm(i.touro)}`;
+      (grupos[chave] = grupos[chave] || []).push(i);
+    });
+    const duplicados = Object.values(grupos).filter((g) => g.length > 1);
+    if (duplicados.length === 0) return;
+    const remap = {}; const partidaAntiga = {}; const mesclados = {}; const apagar = [];
+    duplicados.forEach((g) => {
+      const ord = [...g].sort((a, b) => String(a.criadoEm || "").localeCompare(String(b.criadoEm || "")) || String(a.id).localeCompare(String(b.id)));
+      const sobra = ord[0];
+      const comPreco = g.filter((i) => i.estoque > 0 && i.valorUnitario != null);
+      const totalEst = comPreco.reduce((t, i) => t + i.estoque, 0);
+      const preco = totalEst > 0 ? comPreco.reduce((t, i) => t + i.estoque * i.valorUnitario, 0) / totalEst
+        : (sobra.valorUnitario != null ? sobra.valorUnitario : (g.find((i) => i.valorUnitario != null)?.valorUnitario ?? null));
+      mesclados[sobra.id] = {
+        ...sobra, raca: sobra.raca || g.find((i) => i.raca)?.raca || "", partida: null,
+        estoque: g.reduce((t, i) => t + (i.estoque || 0), 0), quantidade: g.reduce((t, i) => t + (i.quantidade || 0), 0), valorUnitario: preco,
+      };
+      ord.slice(1).forEach((i) => { remap[i.id] = sobra.id; if (i.partida) partidaAntiga[i.id] = i.partida; apagar.push(i.id); });
+      if (sobra.partida) partidaAntiga[sobra.id] = sobra.partida;
+    });
+    const novoId = (id) => remap[id] || id;
+    const agora = new Date().toISOString();
+    setInsumos((a) => a.filter((i) => !remap[i.id]).map((i) => mesclados[i.id] || i));
+    setMovimentos((a) => a.map((m) => remap[m.insumoId] ? { ...m, insumoId: remap[m.insumoId] } : m));
+    setManejos((a) => a.map((m) => {
+      if (!(m.detalhes || []).some((d) => d.semenId && (remap[d.semenId] || partidaAntiga[d.semenId]))) return m;
+      return { ...m, atualizadoEm: agora, detalhes: m.detalhes.map((d) => d.semenId && (remap[d.semenId] || partidaAntiga[d.semenId])
+        ? { ...d, semenId: novoId(d.semenId), partidaInformada: d.partidaInformada || partidaAntiga[d.semenId] || null } : d) };
+    }));
+    setRascunhos((a) => {
+      const cp = { ...a };
+      Object.keys(cp).forEach((k) => { if (cp[k]?.registros) cp[k] = { ...cp[k], registros: cp[k].registros.map((r) => r.semenId && remap[r.semenId] ? { ...r, semenId: remap[r.semenId], partidaInformada: r.partidaInformada || partidaAntiga[r.semenId] || null } : r) }; });
+      return cp;
+    });
+    setExclusoes((a) => [...a, ...apagar.filter((id) => !a.some((e) => e.id === id)).map((id) => ({ id, tabela: "insumos", apagadoEm: agora }))]);
+    setInsumosParaApagarNoServidor(apagar);
+    marcaPendencia();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [podeGravar, currentUser, ultimaSincronizacao, insumos]);
+  // depois de enviar os manejos/movimentos já apontando pro item único, apaga os itens antigos no
+  // servidor (o banco apaga em cascata os movimentos de quem ainda apontasse pra eles).
+  React.useEffect(() => {
+    if (insumosParaApagarNoServidor.length === 0 || !online || !podeGravar) return;
+    let cancelado = false;
+    (async () => {
+      const r = await sincronizarAgoraRef.current();
+      if (cancelado || !r?.ok) return;
+      for (const id of insumosParaApagarNoServidor) await excluirRegistro("insumos", id);
+      if (!cancelado) setInsumosParaApagarNoServidor([]);
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insumosParaApagarNoServidor, online, podeGravar, sincronizando]);
 
   const registrarEntradaEstoque = (categoria, camposItem, quantidade, data, obs, valorUnitario, local) => {
     if (local !== "externo" && safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
@@ -2062,7 +2133,7 @@ export default function App() {
       // antigo direto. Sêmen não entra aqui: cada partida já é um insumo próprio (o preço dela
       // é o dela mesma, não faz sentido misturar com o de outra partida).
       let valorUnitarioFinal = valorUnitario;
-      if (["Hormônio", "Medicamento", "Utensílio"].includes(categoria) && existente.estoque > 0 && existente.valorUnitario != null && valorUnitario != null) {
+      if (["Hormônio", "Medicamento", "Utensílio", "Sêmen"].includes(categoria) && existente.estoque > 0 && existente.valorUnitario != null && valorUnitario != null) {
         valorUnitarioFinal = (existente.estoque * existente.valorUnitario + quantidade * valorUnitario) / (existente.estoque + quantidade);
       }
       setInsumos((a) => a.map((i) => i.id === insumoId ? { ...i, ...camposItem, estoque: i.estoque + quantidade, quantidade, valorUnitario: valorUnitarioFinal } : i));
@@ -2072,28 +2143,6 @@ export default function App() {
     setMovimentos((a) => [{ id: uid("mov"), tipo: "entrada", insumoId, quantidade, data, obs, valorUnitario, local: dono.local, fazendaId: fazendaAtivaId, criadoEm: new Date().toISOString() }, ...a]);
     marcaPendencia();
     return insumoId;
-  };
-
-  // partida de sêmen digitada na hora da Inseminação, ainda sem entrada no estoque: cria (ou
-  // reaproveita) o item com saldo 0 e sem preço. Quando a entrada dessa partida for lançada no
-  // Estoque (mesmo touro + mesma data de partida), ela cai neste mesmo item, que então ganha o
-  // saldo e o valor unitário.
-  const garantirPartidaSemen = (touro, raca, partida, local) => {
-    if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return null; }
-    const dono = local === "externo"
-      ? { local: "externo", usuarioId: currentUser?.id, fazendaId: null }
-      : { local: "fazenda", fazendaId: fazendaAtivaId, usuarioId: null };
-    const campos = { touro, partida };
-    const existente = insumos.find((i) =>
-      i.categoria === "Sêmen" && i.local === dono.local &&
-      (dono.local === "externo" ? i.usuarioId === dono.usuarioId : i.fazendaId === dono.fazendaId) &&
-      itemEquivalente(i, campos, "Sêmen")
-    );
-    if (existente) return existente.id;
-    const id = uid("ins");
-    setInsumos((a) => [...a, { id, categoria: "Sêmen", touro, raca: raca || "", partida, ...dono, quantidade: 0, estoque: 0, valorUnitario: null, criadoEm: new Date().toISOString() }]);
-    marcaPendencia();
-    return id;
   };
 
   // "Serviços e outros" (Serviço de inseminação, Serviço de diagnóstico, Outras despesas) é só
@@ -2627,7 +2676,6 @@ export default function App() {
         { key: "agenda", label: "Agenda", icon: Calendar },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
         { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
-        { key: "exportacoes", label: "Exportações", icon: FileDown },
       ]
     : currentUser?.perfil === "Suporte Adm"
     ? [
@@ -3095,7 +3143,7 @@ export default function App() {
               registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos} addAnimalAoLote={addAnimalAoLote} atribuirManejosRetroativos={atribuirManejosRetroativos}
               atribuirManejosRetroativosPorOrdem={atribuirManejosRetroativosPorOrdem} garantirLoteDesconhecidos={garantirLoteDesconhecidos} criarSugestaoRepasse={criarSugestaoRepasse}
               atualizarManejo={atualizarManejo} removerManejo={removerManejo}
-              rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} currentUser={currentUser}  garantirPartidaSemen={garantirPartidaSemen} />
+              rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} currentUser={currentUser}  movimentos={movimentos} />
           </div>
           <div style={{ display: section === "manejo" && sub === "diagnostico" ? "block" : "none" }}>
             <AbaDiagnostico fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} insumos={insumosAtivos} registrarManejo={registrarManejo}
@@ -3145,7 +3193,7 @@ export default function App() {
             <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejosSemExcluidos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
               perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveisLicenciadas} />
           </div>
-          <div style={{ display: section === "exportacoes" ? "block" : "none" }}>
+          <div style={{ display: section === "exportacoes" && currentUser?.perfil !== "Supervisor" ? "block" : "none" }}>
             <AbaExportacoes fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil}
               fazendasVisiveis={fazendasVisiveis} safras={safras} lotesTodos={lotes} retirosTodos={retiros} insumosTodos={insumos} manejosTodos={manejosSemExcluidos} movimentosTodos={movimentos} />
           </div>
@@ -5715,7 +5763,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
    INSEMINAÇÃO — leitura obrigatória, touro por animal
 ========================================================= */
 
-function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addAnimalAoLote, atribuirManejosRetroativos, atribuirManejosRetroativosPorOrdem, garantirLoteDesconhecidos, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho, currentUser, garantirPartidaSemen }) {
+function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addAnimalAoLote, atribuirManejosRetroativos, atribuirManejosRetroativosPorOrdem, garantirLoteDesconhecidos, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho, currentUser, movimentos }) {
   const [localEstoque, setLocalEstoque] = useState("fazenda");
   const semensTodos = insumos.filter((i) => i.categoria === "Sêmen");
   const semens = semensTodos.filter((i) => i.local === localEstoque);
@@ -5739,8 +5787,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const [dataManejo, setDataManejo] = useState(todayISO());
   const [repasseIntegrado, setRepasseIntegrado] = useState("Não");
   const [touro, setTouro] = useState(touros[0] || "");
-  const [semenId, setSemenId] = useState("");
-  const [partidaManual, setPartidaManual] = useState(""); // data da partida digitada na hora (quando semenId === "__manual__")
+  const [partida, setPartida] = useState(""); // partida utilizada (obrigatória); cada partida usada vira pré-cadastro do touro na safra
   const [inseminador, setInseminador] = useState(currentUser?.nome || "");
   // sugestões de "Inseminador" já usados antes — tirado do próprio histórico de manejos de
   // Inseminação (nada de cadastro à parte: cada nome novo digitado já vira sugestão a partir
@@ -5833,11 +5880,32 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localEstoque, gnrh.map((p) => p.id).join(",")]);
 
-  const partidasDoTouro = semens.filter((s) => s.touro === touro);
-  React.useEffect(() => {
-    if (semenId !== "__manual__" && !partidasDoTouro.some((s) => s.id === semenId)) setSemenId(partidasDoTouro[0]?.id || "");
+  // estoque de sêmen é por touro: usa o item do touro (se houver mais de um, de cadastros antigos por
+  // partida, prefere o que ainda tem saldo).
+  const itensDoTouro = semens.filter((s) => s.touro === touro);
+  const semenId = (itensDoTouro.find((s) => s.estoque > 0) || itensDoTouro[0])?.id || "";
+  // pré-cadastro de partidas: toda partida já informada pra este touro nesta safra (em inseminações
+  // registradas ou na leitura em andamento) continua aparecendo como sugestão nas próximas vezes.
+  const partidasDoTouro = React.useMemo(() => {
+    const idsDoTouro = new Set(semensTodos.filter((s) => s.touro === touro).map((s) => s.id));
+    const set = new Set();
+    (manejos || []).filter((m) => m.tipo === "inseminacao" && (!safraAtiva?.id || m.safraId === safraAtiva.id)).forEach((m) => {
+      (m.detalhes || []).forEach((d) => {
+        const doTouro = (d.semenId && idsDoTouro.has(d.semenId)) || (d.touroInformado || "").trim().toLowerCase() === (touro || "").trim().toLowerCase();
+        const p = d.partidaInformada || (d.semenId && semensTodos.find((x) => x.id === d.semenId)?.partida);
+        if (doTouro && p) set.add(String(p));
+      });
+    });
+    registros.forEach((r) => { if (idsDoTouro.has(r.semenId) && r.partidaInformada) set.add(r.partidaInformada); });
+    // partidas informadas na ENTRADA de estoque deste touro ("Partidas: dd/mm/aaaa, dd/mm/aaaa")
+    (movimentos || []).filter((mv) => mv.tipo === "entrada" && idsDoTouro.has(mv.insumoId)).forEach((mv) => {
+      const t = /Partidas?: (.+)$/.exec(mv.obs || "");
+      if (t) t[1].split(/[,;]+/).map((x) => x.trim()).filter(Boolean).forEach((x) => set.add(x));
+    });
+    // datas antigas (aaaa-mm-dd) viram dd/mm/aaaa pra não duplicar a mesma partida
+    return [...new Set([...set].map((p) => fmtDate(p)))].sort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [touro, semens.map((s) => s.id).join(",")]);
+  }, [manejos, movimentos, touro, safraAtiva?.id, semensTodos.length, registros]);
   React.useEffect(() => {
     if (!touros.includes(touro)) setTouro(touros[0] || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5875,16 +5943,8 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const adicionar = () => {
     const b = brinco.trim().toUpperCase();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
-    if (!semenId) { setMsg("Selecione o touro e a partida utilizados."); return; }
-    let semenIdFinal = semenId;
-    if (semenId === "__manual__") {
-      if (!touro) { setMsg("Selecione o touro utilizado."); return; }
-      if (!partidaManual) { setMsg("Informe a data da partida."); return; }
-      const racaDoTouro = partidasDoTouro.find((p) => p.raca)?.raca || "";
-      semenIdFinal = garantirPartidaSemen(touro, racaDoTouro, partidaManual, localEstoque);
-      if (!semenIdFinal) return;
-      setSemenId(semenIdFinal); setPartidaManual("");
-    }
+    if (!semenId) { setMsg("Selecione o touro utilizado."); return; }
+    if (!partida.trim()) { setMsg("Informe a partida utilizada."); return; }
     const eccNorm = normalizarEcc(ecc);
     if (eccNorm && !OPCOES_ECC.includes(eccNorm)) { setMsg("ECC inválido. Escolha um valor da lista."); return; }
     if (eccNorm !== (ecc.trim() || null)) setEcc(eccNorm || "");
@@ -5918,7 +5978,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     }
 
     const dados = {
-      brinco: b, semenId: semenIdFinal, ecc: eccNorm, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
+      brinco: b, semenId, partidaInformada: partida.trim(), ecc: eccNorm, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
       gnrhId: gnrhId || null, doseGnrh: doseGnrh.trim() !== "" ? numBR(doseGnrh) : null,
       racaMatriz: racaMatriz.trim() || null,
       inseminador: inseminador.trim() || currentUser?.nome || null,
@@ -6067,9 +6127,10 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const historico = manejos.filter((m) => m.tipo === "inseminacao").sort(ordenarManejosRecentesPrimeiro);
   const nomeLote = (id) => lotes.find((l) => l.id === id)?.nome || "—";
   const nomeInsumo = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "—";
-  const nomeSemen = (id) => {
+  const nomeSemen = (id, partidaInformada) => {
     const s = insumos.find((i) => i.id === id);
-    return s ? `${s.touro} — ${s.raca}${s.partida ? ` (partida ${fmtDate(s.partida)})` : ""}` : "—";
+    const p = partidaInformada || s?.partida;
+    return s ? `${s.touro} — ${s.raca}${p ? ` (partida ${fmtDate(p)})` : ""}` : "—";
   };
 
   const [confirmandoExclusaoId, setConfirmandoExclusaoId] = useState(null);
@@ -6193,14 +6254,11 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   {touros.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>
-              <Field label="Partida">
-                <select style={inputStyle} value={semenId} onChange={(e) => setSemenId(e.target.value)}>
-                  {partidasDoTouro.map((s) => <option key={s.id} value={s.id}>{s.partida ? fmtDate(s.partida) : "Sem partida informada"} (estoque: {s.estoque} doses)</option>)}
-                  <option value="__manual__">+ Digitar outra partida…</option>
-                </select>
-                {semenId === "__manual__" && (
-                  <input style={{ ...inputStyle, marginTop: 6 }} type="date" value={partidaManual} onChange={(e) => setPartidaManual(e.target.value)} title="Data da partida (o saldo e o preço entram depois, na entrada de estoque)" />
-                )}
+              <Field label="Partida *">
+                <input style={inputStyle} list="partidas-do-touro" value={partida} onChange={(e) => setPartida(e.target.value)} placeholder="Digite ou selecione a partida" />
+                <datalist id="partidas-do-touro">
+                  {partidasDoTouro.map((p) => <option key={p} value={p} />)}
+                </datalist>
               </Field>
               <Field label="Inseminador">
                 <input style={inputStyle} list="inseminadores-conhecidos" value={inseminador} onChange={(e) => setInseminador(e.target.value)} placeholder="Nome de quem está inseminando" />
@@ -6301,7 +6359,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         <td><EarTag size="sm">{r.brinco}</EarTag></td>
                         <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
                         <td>{r.horario || "—"}</td>
-                        <td>{nomeSemen(r.semenId)}</td>
+                        <td>{nomeSemen(r.semenId, r.partidaInformada)}</td>
                         <td>{r.ecc || "—"}</td>
                         <td>{r.peso ? `${r.peso} kg` : "—"}</td>
                         <td>{r.inseminador || "—"}</td>
@@ -7431,7 +7489,6 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
   const empty = {
     produtoComercial: "", hormonio: HORMONIOS[0], tamanhoEmbalagem: "", unidadeEmbalagem: UNIDADES_EMBALAGEM[0],
     touro: "", raca: "", partida: "", unidade: "", quantidade: "", doseMedia: "",
-    motilidadeInicial: "", vigorInicial: "", motilidadeFinal: "", vigorFinal: "",
     descricaoServico: DESCRICOES_SERVICO[0],
   };
   const [form, setForm] = useState(empty);
@@ -7469,11 +7526,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
       camposItem = { produtoComercial: form.produtoComercial, hormonio: form.hormonio, tamanhoEmbalagem: numBR(form.tamanhoEmbalagem), unidadeEmbalagem: form.unidadeEmbalagem, doseMedia: form.doseMedia.trim() !== "" ? numBR(form.doseMedia) : null };
     } else if (categoriaInterna === "Sêmen") {
       camposItem = {
-        touro: form.touro, raca: form.raca, partida: form.partida || null,
-        motilidadeInicial: form.motilidadeInicial.trim() !== "" ? numBR(form.motilidadeInicial) : null,
-        vigorInicial: form.vigorInicial !== "" ? Number(form.vigorInicial) : null,
-        motilidadeFinal: form.motilidadeFinal.trim() !== "" ? numBR(form.motilidadeFinal) : null,
-        vigorFinal: form.vigorFinal !== "" ? Number(form.vigorFinal) : null,
+        touro: form.touro, raca: form.raca,
       };
     } else if (categoriaInterna === "Medicamento") {
       camposItem = { produtoComercial: form.produtoComercial, tipoMedicamento: form.tipoMedicamento || TIPOS_MEDICAMENTO[0], tamanhoEmbalagem: numBR(form.tamanhoEmbalagem), unidadeEmbalagem: form.unidadeEmbalagem, doseMedia: form.doseMedia.trim() !== "" ? numBR(form.doseMedia) : null };
@@ -7481,7 +7534,9 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
       camposItem = { produtoComercial: form.produtoComercial, unidade: form.unidade };
     }
     const valor = valorUnitario.trim() !== "" ? numBR(valorUnitario) : null;
-    registrarEntradaEstoque(categoriaInterna, camposItem, qtd, data, obs, valor, localEstoque);
+    const listaPartidas = form.partida.split(/[,;]+/).map((p) => p.trim()).filter(Boolean).join(", ");
+    const obsFinal = categoriaInterna === "Sêmen" && listaPartidas ? `${obs.trim()}${obs.trim() ? " | " : ""}Partidas: ${listaPartidas}` : obs;
+    registrarEntradaEstoque(categoriaInterna, camposItem, qtd, data, obsFinal, valor, localEstoque);
     setForm(empty); setValorUnitario(""); setObs(""); setMsg("Entrada registrada.");
   };
 
@@ -7502,7 +7557,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
   };
   const touroInsumo = (id) => insumos.find((x) => x.id === id)?.touro || "—";
   const racaInsumo = (id) => insumos.find((x) => x.id === id)?.raca || "—";
-  const partidaInsumo = (id) => { const p = insumos.find((x) => x.id === id)?.partida; return p ? fmtDate(p) : "—"; };
+  const partidaEntrada = (m) => { const t = /Partidas?: (.+)$/.exec(m.obs || ""); if (t) return t[1]; const p = insumos.find((x) => x.id === m.insumoId)?.partida; return p ? fmtDate(p) : "—"; };
   const colunaTabela = { width: 130, textAlign: "center" };
 
   return (
@@ -7581,24 +7636,10 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                     {RACAS_PADRAO.map((r) => <option key={r} value={r} />)}
                   </datalist>
                 </Field>
-                <Field label="Partida (opcional)"><input style={inputStyle} type="date" value={form.partida} onChange={set("partida")} /></Field>
                 <Field label="Quantidade de doses"><input style={inputStyle} type="number" min="1" value={form.quantidade} onChange={set("quantidade")} placeholder="0" /></Field>
                 <Field label="Valor unitário (R$)"><input style={inputStyle} type="number" min="0" step="any" value={valorUnitario} onChange={(e) => setValorUnitario(e.target.value)} placeholder="0,00" /></Field>
                 <Field label="Data"><input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
-                <Field label="Motilidade inicial (%) *"><input style={inputStyle} type="number" min="0" max="100" value={form.motilidadeInicial} onChange={set("motilidadeInicial")} placeholder="0 a 100" /></Field>
-                <Field label="Vigor inicial *">
-                  <select style={inputStyle} value={form.vigorInicial} onChange={set("vigorInicial")}>
-                    <option value="">— não informado —</option>
-                    {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </Field>
-                <Field label="Motilidade final (%) *"><input style={inputStyle} type="number" min="0" max="100" value={form.motilidadeFinal} onChange={set("motilidadeFinal")} placeholder="0 a 100" /></Field>
-                <Field label="Vigor final *">
-                  <select style={inputStyle} value={form.vigorFinal} onChange={set("vigorFinal")}>
-                    <option value="">— não informado —</option>
-                    {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </Field>
+                <Field label="Partidas (opcional)"><input style={inputStyle} value={form.partida} onChange={set("partida")} placeholder="dd/mm/aaaa, dd/mm/aaaa, ..." /></Field>
                 <Field label="Observação *"><input style={inputStyle} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Nota fiscal, central de IA..." /></Field>
               </div>
             )}
@@ -7696,7 +7737,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                   <tr key={m.id}>
                     <td style={colunaTabela}>{touroInsumo(m.insumoId)}</td>
                     <td style={colunaTabela}>{racaInsumo(m.insumoId)}</td>
-                    <td style={colunaTabela}>{partidaInsumo(m.insumoId)}</td>
+                    <td style={colunaTabela}>{partidaEntrada(m)}</td>
                     <td style={colunaTabela}>{m.quantidade}</td>
                     <td style={colunaTabela}>{m.valorUnitario != null ? `R$ ${m.valorUnitario.toFixed(2)}` : "—"}</td>
                     <td style={colunaTabela}>{m.valorUnitario != null ? `R$ ${(m.valorUnitario * m.quantidade).toFixed(2)}` : "—"}</td>
@@ -8815,8 +8856,9 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
     return null;
   };
   const partidaDoSemen = (semenId, partidaInformada) => {
+    if (partidaInformada) return partidaInformada;
     if (semenId) { const insumo = insumos.find((i) => i.id === semenId); if (insumo?.partida) return insumo.partida; }
-    return partidaInformada || null;
+    return null;
   };
   // custo do sêmen usado NESSE animal específico: o valor unitário do sêmen já É o preço por
   // dose (não tem "embalagem" pra dividir) — 1 palheta usada = 1 dose gasta com esse animal.
@@ -10997,7 +11039,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     const d0 = d0Separado || insem;
     const retirada = retiradaSeparada || insem;
     const touro = semenInsumo?.touro || detalheInsem?.touroInformado || null;
-    const partida = semenInsumo?.partida || detalheInsem?.partidaInformada || null;
+    const partida = detalheInsem?.partidaInformada || semenInsumo?.partida || null;
 
     const implante = d0 ? nomeIdOuReserva(d0.implanteId, d0.implanteNome) : null;
     const benzoato = d0 ? nomeIdOuReserva(d0.benzoatoId, d0.benzoatoNome) : null;
