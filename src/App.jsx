@@ -1834,6 +1834,12 @@ export default function App() {
     const r = await excluirRegistro("usuarios", userId);
     if (!r.ok) console.error("Falha ao excluir usuário no Supabase:", r.erro);
   };
+  // Administrador que também atua como Inseminador (mesmo e-mail, sem criar outra conta)
+  const toggleTambemInseminador = (userId) => {
+    setUsers((a) => a.map((u) => (u.id === userId ? { ...u, tambemInseminador: !u.tambemInseminador } : u)));
+    if (userId === currentUser?.id) setCurrentUser((c) => (c ? { ...c, tambemInseminador: !c.tambemInseminador } : c));
+    marcaPendencia();
+  };
   const toggleAutorizacaoFazenda = (userId, fazendaId) => {
     setUsers((a) => {
       // se o próprio usuário ainda não estiver na lista local (pode acontecer logo depois de
@@ -2095,24 +2101,24 @@ export default function App() {
       return cp;
     });
     setExclusoes((a) => [...a, ...apagar.filter((id) => !a.some((e) => e.id === id)).map((id) => ({ id, tabela: "insumos", apagadoEm: agora }))]);
+    consolidadoEmRef.current = agora;
     setInsumosParaApagarNoServidor(apagar);
     marcaPendencia();
+    setTimeout(() => sincronizarSeNaoEstiverEmAndamento(), 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [podeGravar, currentUser, ultimaSincronizacao, insumos]);
-  // depois de enviar os manejos/movimentos já apontando pro item único, apaga os itens antigos no
-  // servidor (o banco apaga em cascata os movimentos de quem ainda apontasse pra eles).
+  // depois de uma sincronização BEM-SUCEDIDA posterior à unificação (manejos/movimentos já apontando
+  // pro item único), apaga os itens antigos no servidor — o banco apaga em cascata os movimentos
+  // de quem ainda apontasse pra eles. Não dispara sincronização própria (isso gerava laço).
+  const consolidadoEmRef = React.useRef(null);
   React.useEffect(() => {
     if (insumosParaApagarNoServidor.length === 0 || !online || !podeGravar) return;
-    let cancelado = false;
-    (async () => {
-      const r = await sincronizarAgoraRef.current();
-      if (cancelado || !r?.ok) return;
-      for (const id of insumosParaApagarNoServidor) await excluirRegistro("insumos", id);
-      if (!cancelado) setInsumosParaApagarNoServidor([]);
-    })();
-    return () => { cancelado = true; };
+    if (!ultimaSincronizacao || !consolidadoEmRef.current || ultimaSincronizacao <= consolidadoEmRef.current) return;
+    const ids = insumosParaApagarNoServidor;
+    setInsumosParaApagarNoServidor([]);
+    (async () => { for (const id of ids) await excluirRegistro("insumos", id); })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [insumosParaApagarNoServidor, online, podeGravar, sincronizando]);
+  }, [insumosParaApagarNoServidor, online, podeGravar, ultimaSincronizacao]);
 
   const registrarEntradaEstoque = (categoria, camposItem, quantidade, data, obs, valorUnitario, local) => {
     if (local !== "externo" && safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
@@ -3180,7 +3186,7 @@ export default function App() {
           </div>
 
           <div style={{ display: section === "usuarios" ? "block" : "none" }}>
-            <AbaUsuarios users={users} fazendas={fazendasVisiveis} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} removerUsuario={removerUsuario} currentUser={currentUser} />
+            <AbaUsuarios users={users} fazendas={fazendasVisiveis} addUsuario={addUsuario} toggleAutorizacaoFazenda={toggleAutorizacaoFazenda} toggleTambemInseminador={toggleTambemInseminador} removerUsuario={removerUsuario} currentUser={currentUser} />
           </div>
           <div style={{ display: section === "relatorios" ? "block" : "none" }}>
             <AbaRelatorios fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} movimentos={movimentosAtivos} perfil={currentUser.perfil}
@@ -3220,7 +3226,7 @@ function AbaPainelClientes({ fazendas, users, safras, lotes, manejos }) {
     return nomes.length > 0 ? nomes.join(", ") : "—";
   };
   const contarPerfil = (fazendaId, perfil) =>
-    users.filter((u) => u.perfil === perfil && (u.fazendasAutorizadas || []).includes(fazendaId)).length;
+    users.filter((u) => (u.perfil === perfil || (perfil === "Inseminador" && u.perfil === "Administrador" && u.tambemInseminador)) && (u.fazendasAutorizadas || []).includes(fazendaId)).length;
   const safrasDe = (fazendaId) => safras.filter((s) => s.fazendaId === fazendaId);
   const animaisPorSafra = (fazendaId, safraId) => {
     const set = new Set();
@@ -5792,7 +5798,10 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // sugestões de "Inseminador" já usados antes — tirado do próprio histórico de manejos de
   // Inseminação (nada de cadastro à parte: cada nome novo digitado já vira sugestão a partir
   // da próxima leitura, porque fica gravado no manejo).
-  const inseminadoresConhecidos = [...new Set(manejos.filter((m) => m.tipo === "inseminacao" && m.inseminador).map((m) => m.inseminador))];
+  const inseminadoresConhecidos = [...new Set([
+    ...manejos.filter((m) => m.tipo === "inseminacao" && m.inseminador).map((m) => m.inseminador),
+    ...(currentUser?.perfil === "Administrador" && currentUser?.tambemInseminador ? [currentUser.nome] : []),
+  ])];
   // "Raça da matriz": por animal (a fêmea), não por sessão como Touro/Partida. Se o animal já
   // teve uma raça atribuída antes — em qualquer Inseminação anterior, ou no cadastro feito em
   // "Novos animais" — ela é reaproveitada automaticamente ao ler o brinco; senão, fica livre
@@ -8696,7 +8705,7 @@ const PERFIS_USUARIO = ["Suporte Adm", "Administrador", "Supervisor", "Inseminad
 // quando um usuário tem um id inválido (não vai sincronizar) e precisa ser excluído e recriado.
 const REGEX_UUID_USUARIO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, removerUsuario, currentUser }) {
+function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, toggleTambemInseminador, removerUsuario, currentUser }) {
   // Administrador só pode cadastrar Supervisor/Inseminador — cadastro de Administrador é
   // exclusivo do Suporte Adm. O próprio Suporte Adm não é criável por aqui (provisionado à parte).
   const perfisSelecionaveis = currentUser?.perfil === "Suporte Adm"
@@ -8776,7 +8785,7 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, re
                 <React.Fragment key={u.id}>
                   <tr onClick={() => temAutorizacao && setUsuarioAberto(aberto ? null : u.id)} style={{ cursor: temAutorizacao ? "pointer" : "default" }}>
                     <td>{u.nome}{idInvalido && <span style={{ marginLeft: 6, fontSize: 10.5, color: "#A32D2D", fontWeight: 700 }}>⚠ não sincroniza</span>}</td>
-                    <td><span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: cor.bg, color: cor.color }}>{u.perfil}</span></td>
+                    <td><span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: cor.bg, color: cor.color }}>{u.perfil}</span>{u.perfil === "Administrador" && u.tambemInseminador && <span style={{ marginLeft: 6, fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: "#E6EFE5", color: "#2A4531" }}>+ Inseminador</span>}</td>
                     <td>{temAutorizacao ? `${autorizadas.length} fazenda(s)` : "—"}</td>
                     <td style={{ textAlign: "right" }}>
                       {temAutorizacao && <ChevronRight size={15} color="#9B9686" style={{ transform: aberto ? "rotate(90deg)" : "none" }} />}
@@ -8798,6 +8807,12 @@ function AbaUsuarios({ users, fazendas, addUsuario, toggleAutorizacaoFazenda, re
                   {aberto && temAutorizacao && (
                     <tr>
                       <td colSpan={5} style={{ background: "#FFFFFF", padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                        {u.perfil === "Administrador" && (u.id === currentUser?.id || currentUser?.perfil === "Suporte Adm") && (
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 14, cursor: "pointer" }}>
+                            <input type="checkbox" checked={!!u.tambemInseminador} onChange={() => toggleTambemInseminador(u.id)} />
+                            <span><b>Também atua como Inseminador</b> — usa o mesmo e-mail para os dois perfis (aparece como inseminador nas fazendas e nas sugestões da Inseminação)</span>
+                          </label>
+                        )}
                         <div style={{ fontSize: 11, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Fazendas que {u.nome} pode acessar</div>
                         {fazendas.length === 0 ? <EmptyState text="Nenhuma fazenda cadastrada ainda." /> : (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

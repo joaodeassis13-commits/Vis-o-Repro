@@ -58,6 +58,8 @@ alter table usuarios add constraint usuarios_perfil_check check (perfil in ('Sup
 -- sem precisar apagar a tabela e recriar.
 alter table usuarios add column if not exists email text;
 alter table usuarios add column if not exists criado_por uuid references usuarios (id);
+-- Administrador que também atua como Inseminador (mesmo e-mail, sem segunda conta).
+alter table usuarios add column if not exists tambem_inseminador boolean not null default false;
 
 create table if not exists usuario_fazendas (
   usuario_id uuid references usuarios (id) on delete cascade,
