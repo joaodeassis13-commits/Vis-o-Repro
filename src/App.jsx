@@ -1379,6 +1379,9 @@ export default function App() {
   // de "currentUser" diretamente — evita ficar escondendo fazendas por causa de um instante em
   // que essas duas cópias do usuário logado ainda não tinham se atualizado juntas.
   const meuUsuario = users.find((u) => u.id === currentUser?.id);
+  // Administrador que também atua como Inseminador: mantém o menu de Administrador e ganha
+  // Registrar manejo, Agenda e Estoque, com a Fazenda/Safra ativa na barra lateral.
+  const adminInseminador = currentUser?.perfil === "Administrador" && !!(meuUsuario?.tambemInseminador ?? currentUser?.tambemInseminador);
   const fazendasVisiveis = currentUser?.perfil === "Suporte Adm"
     ? fazendas
     : fazendas.filter((f) => (meuUsuario?.fazendasAutorizadas || currentUser?.fazendasAutorizadas || []).includes(f.id));
@@ -2691,6 +2694,11 @@ export default function App() {
       ]
     : currentUser?.perfil === "Administrador"
     ? [
+        ...(adminInseminador ? [
+          { key: "manejo", label: "Registrar manejo", icon: Syringe },
+          { key: "agenda", label: "Agenda", icon: Calendar },
+          { key: "estoque", label: "Estoque", icon: Warehouse },
+        ] : []),
         { key: "fazendas", label: "Fazendas", icon: Home },
         { key: "usuarios", label: "Usuários", icon: Users },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
@@ -2934,7 +2942,7 @@ export default function App() {
         </nav>
 
         <div style={{ padding: 12, borderTop: "1px solid #3F5B49" }}>
-          {!["Administrador", "Suporte Adm"].includes(currentUser?.perfil) && (
+          {(adminInseminador || !["Administrador", "Suporte Adm"].includes(currentUser?.perfil)) && (
             <>
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: "#9FA890", textTransform: "uppercase", letterSpacing: "0.4px", padding: "0 10px 5px" }}>Fazenda ativa</div>
@@ -5800,7 +5808,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   // da próxima leitura, porque fica gravado no manejo).
   const inseminadoresConhecidos = [...new Set([
     ...manejos.filter((m) => m.tipo === "inseminacao" && m.inseminador).map((m) => m.inseminador),
-    ...(currentUser?.perfil === "Administrador" && currentUser?.tambemInseminador ? [currentUser.nome] : []),
+    ...((currentUser?.perfil === "Administrador" && currentUser?.tambemInseminador) ? [currentUser.nome] : []),
   ])];
   // "Raça da matriz": por animal (a fêmea), não por sessão como Touro/Partida. Se o animal já
   // teve uma raça atribuída antes — em qualquer Inseminação anterior, ou no cadastro feito em
