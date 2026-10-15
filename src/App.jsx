@@ -6399,32 +6399,28 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <EmptyState text="Nenhum registro ainda." />
           ) : (
             <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
-              <table>
+              <table style={{ tableLayout: "fixed", width: "100%", minWidth: 640 }}>
                 <thead>
                   <tr>
-                    <th>Lote</th>
-                    <th>Categoria</th>
-                    <th>Ordem</th>
-                    <th>Animais inseminados</th>
-                    <th>Protocolo (custo)</th>
-                    <th>Local</th>
-                    <th>Data</th>
-                    <th>Ações</th>
+                    <th style={{ textAlign: "center" }}>Lote</th>
+                    <th style={{ textAlign: "center" }}>Categoria</th>
+                    <th style={{ textAlign: "center" }}>Ordem</th>
+                    <th style={{ textAlign: "center" }}>Animais inseminados</th>
+                    <th style={{ textAlign: "center" }}>Data</th>
+                    <th style={{ textAlign: "center" }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {historico.map((m) => (
                     <tr key={m.id} style={editandoManejo?.id === m.id ? { background: "#FBF3E4" } : undefined}>
-                      <td style={{ fontWeight: 700 }}>{nomeLote(m.loteId)}</td>
-                      <td>{m.categoria || "—"}</td>
-                      <td>{m.ordem || "—"}</td>
-                      <td>{m.animaisLidos.length}</td>
-                      <td style={{ fontSize: 11.5 }}>{resumoProtocoloHormonal(m, insumos)}</td>
-                      <td>{m.localEstoque === "externo" ? "Externo" : "Fazenda"}</td>
-                      <td>{fmtDate(m.data)}</td>
-                      <td>
+                      <td style={{ fontWeight: 700, textAlign: "center" }}>{nomeLote(m.loteId)}</td>
+                      <td style={{ textAlign: "center" }}>{m.categoria || "—"}</td>
+                      <td style={{ textAlign: "center" }}>{m.ordem || "—"}</td>
+                      <td style={{ textAlign: "center" }}>{m.animaisLidos.length}</td>
+                      <td style={{ textAlign: "center" }}>{fmtDate(m.data)}</td>
+                      <td style={{ textAlign: "center" }}>
                         {confirmandoExclusaoId === m.id ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                             <span style={{ fontSize: 11, color: "#A32D2D" }}>Excluir?</span>
                             <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Check size={14} /></button>
                             <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
@@ -6432,7 +6428,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         ) : editandoManejo?.id === m.id ? (
                           <span style={{ fontSize: 11, color: "#8A3E15", fontWeight: 600 }}>Editando acima ↑</span>
                         ) : (
-                          <div style={{ display: "flex", gap: 6 }}>
+                          <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
                             <button onClick={() => iniciarEdicaoHistorico(m)} title="Editar (reabre a leitura completa, permite adicionar mais animais)" style={{ background: "none", border: "none", cursor: "pointer", color: "#4A473E" }}><Pencil size={14} /></button>
                             <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button>
                           </div>
@@ -6946,17 +6942,16 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
             <EmptyState text="Nenhum registro ainda." />
           ) : (
             <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto", marginBottom: 24 }}>
-              <table>
+              <table style={{ tableLayout: "fixed", width: "100%", minWidth: 640 }}>
                 <thead>
                   <tr>
-                    <th>Lote</th>
-                    <th>Ordem</th>
-                    <th>Prenhas</th>
-                    <th>Origem das prenhas</th>
-                    <th>Avaliadas</th>
-                    <th>Local</th>
-                    <th>Data</th>
-                    <th>Ações</th>
+                    <th style={{ textAlign: "center" }}>Lote</th>
+                    <th style={{ textAlign: "center" }}>Ordem</th>
+                    <th style={{ textAlign: "center" }}>Prenhas</th>
+                    <th style={{ textAlign: "center" }}>Origem das prenhas</th>
+                    <th style={{ textAlign: "center" }}>Avaliadas</th>
+                    <th style={{ textAlign: "center" }}>Data</th>
+                    <th style={{ textAlign: "center" }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -6966,16 +6961,15 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                     const prenhasRepasse = m.detalhes.filter((d) => d.resultado === "Prenha" && d.origemPrenhez === "Repasse").length;
                     return (
                       <tr key={m.id} style={editandoManejo?.id === m.id ? { background: "#FBF3E4" } : undefined}>
-                        <td style={{ fontWeight: 700 }}>{nomeLote(m.loteId)}</td>
-                        <td>{m.ordem || "—"}</td>
-                        <td>{prenhas}</td>
-                        <td style={{ fontSize: 12 }}>{prenhas === 0 ? "—" : `Inseminação: ${prenhasInsem} · Repasse: ${prenhasRepasse}`}</td>
-                        <td>{m.detalhes.length}</td>
-                        <td>{m.localEstoque === "externo" ? "Externo" : m.localEstoque === "fazenda" ? "Fazenda" : "—"}</td>
-                        <td>{fmtDate(m.data)}</td>
-                        <td>
+                        <td style={{ fontWeight: 700, textAlign: "center" }}>{nomeLote(m.loteId)}</td>
+                        <td style={{ textAlign: "center" }}>{m.ordem || "—"}</td>
+                        <td style={{ textAlign: "center" }}>{prenhas}</td>
+                        <td style={{ fontSize: 12, textAlign: "center" }}>{prenhas === 0 ? "—" : `Inseminação: ${prenhasInsem} · Repasse: ${prenhasRepasse}`}</td>
+                        <td style={{ textAlign: "center" }}>{m.detalhes.length}</td>
+                        <td style={{ textAlign: "center" }}>{fmtDate(m.data)}</td>
+                        <td style={{ textAlign: "center" }}>
                           {confirmandoExclusaoId === m.id ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                               <span style={{ fontSize: 11, color: "#A32D2D" }}>Excluir?</span>
                               <button onClick={() => { removerManejo(m.id); setConfirmandoExclusaoId(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Check size={14} /></button>
                               <button onClick={() => setConfirmandoExclusaoId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B685E" }}><X size={14} /></button>
@@ -6983,7 +6977,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                           ) : editandoManejo?.id === m.id ? (
                             <span style={{ fontSize: 11, color: "#8A3E15", fontWeight: 600 }}>Editando acima ↑</span>
                           ) : (
-                            <div style={{ display: "flex", gap: 6 }}>
+                            <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
                               <button onClick={() => iniciarEdicaoHistorico(m)} title="Editar (reabre a leitura completa, permite adicionar ou remover animais)" style={{ background: "none", border: "none", cursor: "pointer", color: "#4A473E" }}><Pencil size={14} /></button>
                               <button onClick={() => setConfirmandoExclusaoId(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button>
                             </div>
@@ -7290,7 +7284,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
         data: detalheInsem && insem ? fmtDate(insem.data) : "—",
         dataISO: detalheInsem && insem ? insem.data : null,
         dg: detalheDiag?.resultado || "—",
-        touro: semenInsumo?.touro || null,
+        touro: semenInsumo?.touro || detalheInsem?.touroInformado || null,
         origemPrenhez: detalheDiag?.origemPrenhez || null,
       };
     });
@@ -7343,7 +7337,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
         data: detalheInsem && insem ? fmtDate(insem.data) : "—",
         dataISO: detalheInsem && insem ? insem.data : null,
         dg: detalheDiag?.resultado || "—",
-        touro: semenInsumo?.touro || null,
+        touro: semenInsumo?.touro || detalheInsem?.touroInformado || null,
         origemPrenhez: detalheDiag?.origemPrenhez || null,
       };
     });
