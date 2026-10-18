@@ -11627,9 +11627,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       // registros diagnosticados — ver statsGrupoPDF).
       const totalDiagnosticadosMes = totalMes.inseminados;
       const prenhezIatfMes = prenhezPorIatfPDF(registrosMes);
+      const idsLotesMes = new Set(lotes.filter((l) => l.mesParicao === mes).map((l) => l.id));
       const fertilidadeMes = prenhezGeralPDF(idsLotesMes);
       const custosMes = custosPorEventosPDF(eventosMes, registrosMes);
-      const idsLotesMes = new Set(lotes.filter((l) => l.mesParicao === mes).map((l) => l.id));
       const iatfMes = iatfPorMatrizPDF(idsLotesMes);
       let tamGrupoMes = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
