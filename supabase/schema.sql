@@ -84,6 +84,8 @@ create table if not exists safras (
 );
 
 alter table safras add column if not exists lancamentos_desabilitados boolean not null default false;
+-- estoque que a fazenda costuma usar nesta safra ('fazenda' ou 'externo'), definido pelo usuário no aviso de estoque
+alter table safras add column if not exists estoque_padrao text check (estoque_padrao in ('fazenda', 'externo'));
 
 -- garante a coluna mesmo em bancos criados antes dela existir nessas duas tabelas
 -- (todas as outras tabelas do sistema já tinham "criado_em" desde o início; essas duas
@@ -193,6 +195,10 @@ create table if not exists manejos (
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()  -- muda a cada edição — usado pra decidir quem "ganha" quando dois aparelhos editam o MESMO manejo offline, sem depender de quem sincroniza primeiro
 );
+
+-- Situação do lote no D0: 'Solteiras' ou 'Paridas'
+alter table lotes add column if not exists situacao text check (situacao in ('Solteiras', 'Paridas'));
+alter table manejos add column if not exists situacao text;
 
 alter table manejos add column if not exists atualizado_em timestamptz not null default now();
 

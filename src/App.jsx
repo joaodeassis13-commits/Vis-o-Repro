@@ -467,9 +467,18 @@ function useAvisarSaidaComPendencia(haPendencia) {
   }, [haPendencia]);
 }
 
-function SeletorLocalEstoque({ local, setLocal, style }) {
+// Estoque que a fazenda costuma usar na safra ativa ("fazenda" ou "externo"): é o do PRIMEIRO manejo
+// registrado nessa fazenda/safra. Fica disponível pros seletores de estoque dos formulários de manejo,
+// que só AVISAM (nunca bloqueiam) quando o usuário escolhe o outro.
+const PadraoEstoqueContext = React.createContext(null);
+function SeletorLocalEstoque({ local, setLocal, style, avisarPadrao }) {
+  const ctxPadrao = React.useContext(PadraoEstoqueContext);
+  const padrao = ctxPadrao?.padrao || null;
+  const divergente = avisarPadrao && padrao && local !== padrao;
+  const nome = (k) => (k === "externo" ? "estoque externo" : "estoque da fazenda");
   return (
-    <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 14, width: "fit-content", ...style }}>
+    <>
+    <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: divergente ? 8 : 14, width: "fit-content", ...style }}>
       {[["fazenda", "Estoque da fazenda"], ["externo", "Estoque externo"]].map(([key, label]) => (
         <button key={key} onClick={() => setLocal(key)}
           style={{
@@ -480,6 +489,18 @@ function SeletorLocalEstoque({ local, setLocal, style }) {
           }}>{label}</button>
       ))}
     </div>
+    {divergente && (
+      <div style={{ marginBottom: 14, background: "#FBF3E4", border: "1.5px solid #E3B8A0", borderRadius: 8, padding: 12 }}>
+        <p style={{ fontSize: 12.5, color: "#8A3E15", margin: 0, fontWeight: 600 }}>⚠ Atenção: nesta fazenda e safra o {nome(padrao)} é o que normalmente é usado, e você selecionou o {nome(local)}. Se estiver correto, é só continuar e registrar normalmente.</p>
+        {ctxPadrao?.definir && (
+          <button type="button" onClick={() => ctxPadrao.definir(local)}
+            style={{ marginTop: 8, background: "#166336", color: "#FFFFFF", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            Definir {nome(local)} como padrão desta fazenda e safra
+          </button>
+        )}
+      </div>
+    )}
+    </>
   );
 }
 
@@ -1379,6 +1400,21 @@ export default function App() {
   // de "currentUser" diretamente — evita ficar escondendo fazendas por causa de um instante em
   // que essas duas cópias do usuário logado ainda não tinham se atualizado juntas.
   const meuUsuario = users.find((u) => u.id === currentUser?.id);
+  // estoque (fazenda/externo) que esta fazenda costuma usar nesta safra = o do primeiro manejo registrado
+  const padraoEstoqueFazendaSafra = useMemo(() => {
+    const definido = safras.find((x) => x.id === safraAtivaId)?.estoquePadrao;
+    if (definido === "fazenda" || definido === "externo") return { padrao: definido, definir: definirEstoquePadrao };
+    const doEscopo = manejos.filter((m) => m.fazendaId === fazendaAtivaId && (m.safraId || null) === (safraAtivaId || null) && (m.localEstoque === "fazenda" || m.localEstoque === "externo"));
+    if (doEscopo.length === 0) return { padrao: null, definir: definirEstoquePadrao };
+    const primeiro = doEscopo.reduce((a, b) => ((a.criadoEm || a.data || "") <= (b.criadoEm || b.data || "") ? a : b));
+    return { padrao: primeiro.localEstoque, definir: definirEstoquePadrao };
+  }, [manejos, safras, fazendaAtivaId, safraAtivaId]);
+  // o usuário indica qual estoque é o padrão desta safra (grava na própria safra)
+  function definirEstoquePadrao(local) {
+    if (!safraAtivaId) return;
+    setSafras((a) => a.map((x) => (x.id === safraAtivaId ? { ...x, estoquePadrao: local } : x)));
+    marcaPendencia();
+  }
   // Administrador que também atua como Inseminador: mantém o menu de Administrador e ganha
   // Registrar manejo, Agenda e Estoque, com a Fazenda/Safra ativa na barra lateral.
   const adminInseminador = currentUser?.perfil === "Administrador" && !!(meuUsuario?.tambemInseminador ?? currentUser?.tambemInseminador);
@@ -2178,6 +2214,7 @@ export default function App() {
   const registrarSaidaEstoque = (insumoId, quantidade, manejoId, tipoManejo) => {
     if (safraAtivaBloqueada) return; // bloqueio silencioso — a ação principal já avisou
     if (fazendaAtivaNaoLicenciada) return; // idem
+    if (!(quantidade > 0)) return; // dose 0: nada a descontar do estoque
     const item = insumos.find((i) => i.id === insumoId);
     // "quantidade" aqui vem em mL/unidades realmente usadas no manejo (dose × nº de animais) —
     // mas o "estoque" do insumo é sempre medido em Nº DE EMBALAGENS. Pra descontar certo,
@@ -2209,51 +2246,57 @@ export default function App() {
     setManejos((a) => [manejoCompleto, ...a]);
     marcaPendencia();
 
-    // se já existia um agendamento (pendente ou confirmado) pra este mesmo manejo, lote e dia,
-    // o manejo recém-registrado passa a ser a origem "oficial" da cadeia daqui pra frente — os
-    // agendamentos que já tinham sido derivados daquele agendamento são descartados, pra não
-    // conviver com os que gerarPreAgendamentos está prestes a criar a partir do manejo de verdade.
-    // Se NÃO existia nenhum, cria um agendamento retroativo já como "confirmado" — só pra ficar
-    // registrado no histórico da Agenda que esse manejo aconteceu naquele dia, mesmo sem ter
-    // sido agendado antes.
+    // O manejo registrado SUBSTITUI o agendamento que existia pra ele (mesmo manejo, lote e ordem,
+    // mesmo que a data agendada seja outra) e tudo que derivava dele; em seguida, os
+    // pré-agendamentos seguintes são recriados a partir do manejo de verdade. Se não existia
+    // agendamento nenhum, cria um já "confirmado" só pra ficar no histórico da Agenda.
     const tipoAgenda = TIPO_MANEJO_PARA_AGENDAMENTO[manejo.tipo];
+    const mesmoLote = (ag) => ag.loteNome && manejoCompleto.loteNome && ag.loteNome.trim().toLowerCase() === manejoCompleto.loteNome.trim().toLowerCase();
+    const idsRemover = new Set();
+    let origemDoSubstituido = null;
     if (tipoAgenda && manejoCompleto.loteNome) {
-      const agendamentoCorrespondente = agendamentos.find((ag) =>
-        ag.fazendaId === fazendaAtivaId && ag.tipo === tipoAgenda && ag.data === manejoCompleto.data &&
+      const diasEntreISO = (x, y) => Math.abs(Math.round((parseISODate(x) - parseISODate(y)) / 86400000));
+      const candidatos = agendamentos.filter((ag) =>
+        ag.fazendaId === fazendaAtivaId && ag.tipo === tipoAgenda && mesmoLote(ag) &&
         (ag.status === "pendente" || ag.status === "confirmado") &&
-        ag.loteNome && ag.loteNome.trim().toLowerCase() === manejoCompleto.loteNome.trim().toLowerCase()
-      );
+        (ag.ordem || null) === (manejoCompleto.ordem || null) &&
+        diasEntreISO(ag.data, manejoCompleto.data) <= 60
+      ).sort((x, y) => diasEntreISO(x.data, manejoCompleto.data) - diasEntreISO(y.data, manejoCompleto.data));
+      const agendamentoCorrespondente = candidatos[0];
       if (agendamentoCorrespondente) {
-        const idsRemover = new Set(coletarDescendentesIds(agendamentoCorrespondente.id, agendamentos));
-        if (idsRemover.size > 0) setAgendamentos((a) => a.filter((ag) => !idsRemover.has(ag.id)));
-      } else if (!fazendaAtivaNaoLicenciada) {
-        setAgendamentos((a) => [...a, {
-          id: uid("ag"), fazendaId: fazendaAtivaId, tipo: tipoAgenda, data: manejoCompleto.data,
-          loteNome: manejoCompleto.loteNome, retiroId: manejoCompleto.retiroId || null, ordem: manejoCompleto.ordem || null,
-          categoria: manejoCompleto.categoria || null, numeroAnimais: manejoCompleto.numeroAnimais || null,
-          titulo: `${tipoAgenda} — ${manejoCompleto.loteNome}`,
-          origem: "manual", status: "confirmado", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
-        }]);
-        marcaPendencia();
+        idsRemover.add(agendamentoCorrespondente.id);
+        coletarDescendentesIds(agendamentoCorrespondente.id, agendamentos).forEach((x) => idsRemover.add(x));
+        origemDoSubstituido = agendamentoCorrespondente.origemAgendamentoId || null;
       }
     }
-
-    // o(s) pré-agendamento(s) que gerarPreAgendamentos está prestes a criar (a próxima etapa,
-    // ex.: Diagnóstico depois de uma Inseminação) substitui qualquer agendamento MANUAL já
-    // existente pro mesmo manejo/ordem/lote — evita conviver com um lembrete manual que já
-    // ficou desatualizado assim que o passo seguinte é sugerido automaticamente de verdade.
+    // pré-agendamentos que gerarPreAgendamentos está prestes a criar (próxima etapa) substituem
+    // qualquer agendamento pendente/confirmado já existente pro mesmo manejo, ordem e lote.
     const tiposASeremGerados = tiposDoProximoPreAgendamento(manejoCompleto);
     if (tiposASeremGerados.length > 0 && manejoCompleto.loteNome) {
-      const idsSubstituir = [];
       tiposASeremGerados.forEach((tipoGerado) => {
         agendamentos.filter((ag) =>
-          ag.fazendaId === fazendaAtivaId && ag.origem === "manual" && ag.tipo === tipoGerado &&
+          ag.fazendaId === fazendaAtivaId && ag.tipo === tipoGerado && mesmoLote(ag) &&
           (ag.ordem || null) === (manejoCompleto.ordem || null) &&
-          ag.loteNome && ag.loteNome.trim().toLowerCase() === manejoCompleto.loteNome.trim().toLowerCase() &&
           (ag.status === "pendente" || ag.status === "confirmado")
-        ).forEach((ag) => idsSubstituir.push(ag.id, ...coletarDescendentesIds(ag.id, agendamentos)));
+        ).forEach((ag) => { idsRemover.add(ag.id); coletarDescendentesIds(ag.id, agendamentos).forEach((x) => idsRemover.add(x)); });
       });
-      if (idsSubstituir.length > 0) setAgendamentos((a) => a.filter((ag) => !idsSubstituir.includes(ag.id)));
+    }
+    if (idsRemover.size > 0) {
+      setAgendamentos((a) => a.filter((ag) => !idsRemover.has(ag.id)));
+      marcaPendencia();
+      // apaga também no servidor, senão voltam na próxima sincronização
+      idsRemover.forEach((agId) => { excluirRegistro("agendamentos", agId).catch(() => {}); });
+    }
+    if (tipoAgenda && manejoCompleto.loteNome && !fazendaAtivaNaoLicenciada) {
+      setAgendamentos((a) => [...a, {
+        id: uid("ag"), fazendaId: fazendaAtivaId, tipo: tipoAgenda, data: manejoCompleto.data,
+        loteNome: manejoCompleto.loteNome, retiroId: manejoCompleto.retiroId || null, ordem: manejoCompleto.ordem || null,
+        categoria: manejoCompleto.categoria || null, numeroAnimais: manejoCompleto.numeroAnimais || null,
+        titulo: `${tipoAgenda} — ${manejoCompleto.loteNome}`,
+        origemAgendamentoId: origemDoSubstituido,
+        origem: "manual", status: "confirmado", criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+      }]);
+      marcaPendencia();
     }
 
     gerarPreAgendamentos(manejoCompleto);
@@ -2702,6 +2745,7 @@ export default function App() {
         { key: "fazendas", label: "Fazendas", icon: Home },
         { key: "usuarios", label: "Usuários", icon: Users },
         { key: "relatorios", label: "Relatórios", icon: ClipboardList },
+        ...(adminInseminador ? [{ key: "auditoria", label: "Auditoria", icon: Search }] : []),
         { key: "benchmarking", label: "Benchmarking", icon: TrendingUp },
         { key: "exportacoes", label: "Exportações", icon: FileDown },
       ]
@@ -3074,6 +3118,7 @@ export default function App() {
       </aside>
 
       {/* CONTEÚDO */}
+      <PadraoEstoqueContext.Provider value={padraoEstoqueFazendaSafra}>
       <main style={{ flex: 1, minWidth: 0, marginLeft: isMobile ? 0 : 224 }}>
         {isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "#083C26", color: "#FFFFFF", position: "sticky", top: 0, zIndex: 20 }}>
@@ -3213,6 +3258,7 @@ export default function App() {
           </div>
         </div>
       </main>
+      </PadraoEstoqueContext.Provider>
     </div>
   );
 }
@@ -4188,7 +4234,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
         <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
-            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
+            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} avisarPadrao />
             {produtos.length === 0 && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Nenhuma progesterona cadastrada neste local de estoque.</p>
             )}
@@ -4380,6 +4426,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const [ordem, setOrdem] = useState(ORDENS_IATF[0]);
   const [numeroAnimais, setNumeroAnimais] = useState("");
   const [mesParicao, setMesParicao] = useState("");
+  const [situacao, setSituacao] = useState(""); // Solteiras | Paridas
   const [dataManejo, setDataManejo] = useState(todayISO());
   const [tipoManejo, setTipoManejo] = useState(TIPOS_MANEJO_IMPLANTACAO[0]);
   const [protocolo, setProtocolo] = useState(PROTOCOLOS_IMPLANTACAO[0]);
@@ -4466,9 +4513,9 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
   const canSave = (!!editandoManejo || !nomeDuplicado) && novoNome.trim() !== "" && novoRetiroId !== "" && categoria !== "" &&
     String(numeroAnimais).trim() !== "" && numBR(numeroAnimais) > 0 &&
-    implanteId !== "" && benzoatoId !== "" && String(doseBenzoato).trim() !== "" && numBR(doseBenzoato) > 0 &&
-    prostaglandinaId !== "" && String(doseProstaglandina).trim() !== "" && numBR(doseProstaglandina) > 0 &&
-    medicamentos.every((m) => String(m.dose).trim() !== "" && numBR(m.dose) > 0);
+    implanteId !== "" && benzoatoId !== "" && String(doseBenzoato).trim() !== "" && numBR(doseBenzoato) >= 0 &&
+    prostaglandinaId !== "" && String(doseProstaglandina).trim() !== "" && numBR(doseProstaglandina) >= 0 &&
+    medicamentos.every((m) => String(m.dose).trim() !== "" && numBR(m.dose) >= 0);
 
   const submetendoRef = React.useRef(false);
   const salvar = () => {
@@ -4490,15 +4537,15 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     const medicamentosComDose = medicamentos.map((m) => ({ ...m, dose: numBR(m.dose) }));
 
     if (editandoManejo) {
-      atualizarLote(editandoManejo.loteId, { nome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null });
+      atualizarLote(editandoManejo.loteId, { nome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, situacao: situacao || null });
       const contextoEdicao = {
-        loteNome: novoNome, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo,
+        loteNome: novoNome, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, situacao: situacao || null, tipoManejo, protocolo,
         implante: implanteItem?.produtoComercial || "", benzoato: benzoatoItem?.produtoComercial || "", doseBenzoato: dB,
         prostaglandina: pgfItem?.produtoComercial || "", doseProstaglandina: dP,
         gnrh: gnrhItem?.produtoComercial || "", doseGnrh: dG,
       };
       atualizarManejo(editandoManejo.id, {
-        loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos: medicamentosComDose, localEstoque,
+        loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, situacao: situacao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos: medicamentosComDose, localEstoque,
         implanteId, benzoatoId, doseBenzoato: dB, prostaglandinaId, doseProstaglandina: dP,
         gnrhId: gnrhId || null, doseGnrh: dG, data: dataManejo,
         animaisLidos: comLeitura ? animaisLidos.map((a) => a.brinco) : [],
@@ -4515,20 +4562,20 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     let idDoLote;
     if (loteDaInducaoSemD0) {
       idDoLote = loteDaInducaoSemD0.id;
-      atualizarLote(idDoLote, { retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null });
+      atualizarLote(idDoLote, { retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, situacao: situacao || null });
     } else {
-      idDoLote = addLote({ retiroId: novoRetiroId, nome: novoNome, categoria, ordem, numeroAnimais: nAnimais, raca: null, mesParicao: mesParicao || null });
+      idDoLote = addLote({ retiroId: novoRetiroId, nome: novoNome, categoria, ordem, numeroAnimais: nAnimais, raca: null, mesParicao: mesParicao || null, situacao: situacao || null });
     }
 
     const contexto = {
-      loteNome: novoNome, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo,
+      loteNome: novoNome, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, situacao: situacao || null, tipoManejo, protocolo,
       implante: implanteItem?.produtoComercial || "", benzoato: benzoatoItem?.produtoComercial || "", doseBenzoato: dB,
       prostaglandina: pgfItem?.produtoComercial || "", doseProstaglandina: dP,
       gnrh: gnrhItem?.produtoComercial || "", doseGnrh: dG,
     };
 
     const manejoId = registrarManejo({
-      tipo: "implantacao", loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos: medicamentosComDose, localEstoque,
+      tipo: "implantacao", loteId: idDoLote, loteNome: novoNome, retiroId: novoRetiroId, categoria, ordem, numeroAnimais: nAnimais, mesParicao: mesParicao || null, situacao: situacao || null, tipoManejo, protocolo, protocoloPadrao: protocoloPadraoNome.trim() || null, medicamentos: medicamentosComDose, localEstoque,
       implanteId, benzoatoId, doseBenzoato: dB, prostaglandinaId, doseProstaglandina: dP,
       gnrhId: gnrhId || null, doseGnrh: dG, data: dataManejo,
       animaisLidos: comLeitura ? animaisLidos.map((a) => a.brinco) : [],
@@ -4548,7 +4595,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       });
     }
 
-    setNovoNome(""); setNovoRetiroId(""); setNumeroAnimais(""); setMesParicao(""); setDataManejo(todayISO()); setProtocoloPadraoNome(""); setDoseBenzoato(""); setDoseProstaglandina(""); setGnrhId(""); setDoseGnrh(""); setAnimaisLidos([]); setMedicamentos([]);
+    setNovoNome(""); setNovoRetiroId(""); setNumeroAnimais(""); setMesParicao(""); setSituacao(""); setDataManejo(todayISO()); setProtocoloPadraoNome(""); setDoseBenzoato(""); setDoseProstaglandina(""); setGnrhId(""); setDoseGnrh(""); setAnimaisLidos([]); setMedicamentos([]);
     setMsg("D0 registrado.");
     setTimeout(() => { submetendoRef.current = false; }, 0);
   };
@@ -4562,7 +4609,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     setEditandoManejo(m);
     setNovoNome(nomeLote(m.loteId)); setNovoRetiroId(m.retiroId || "");
     setCategoria(m.categoria || CATEGORIAS_LOTE[0]); setOrdem(m.ordem || ORDENS_IATF[0]);
-    setNumeroAnimais(String(m.numeroAnimais ?? "")); setMesParicao(m.mesParicao || "");
+    setNumeroAnimais(String(m.numeroAnimais ?? "")); setMesParicao(m.mesParicao || ""); setSituacao(m.situacao || "");
     setDataManejo(m.data || todayISO()); setTipoManejo(m.tipoManejo || TIPOS_MANEJO_IMPLANTACAO[0]); setProtocolo(m.protocolo || PROTOCOLOS_IMPLANTACAO[0]);
     setImplanteId(m.implanteId || ""); setBenzoatoId(m.benzoatoId || ""); setDoseBenzoato(String(m.doseBenzoato ?? ""));
     setProstaglandinaId(m.prostaglandinaId || ""); setDoseProstaglandina(String(m.doseProstaglandina ?? ""));
@@ -4574,7 +4621,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const cancelarEdicaoHistorico = () => {
     setEditandoManejo(null);
     setNovoNome(""); setNovoRetiroId(""); setCategoria(CATEGORIAS_LOTE[0]); setOrdem(ORDENS_IATF[0]);
-    setNumeroAnimais(""); setMesParicao(""); setDataManejo(todayISO()); setProtocoloPadraoNome("");
+    setNumeroAnimais(""); setMesParicao(""); setSituacao(""); setDataManejo(todayISO()); setProtocoloPadraoNome("");
     setDoseBenzoato(""); setDoseProstaglandina(""); setGnrhId(""); setDoseGnrh(""); setAnimaisLidos([]); setMedicamentos([]);
     setMsg("");
   };
@@ -4658,8 +4705,8 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const jaRegistradoNestaOrdemR = !!loteDaSugestao && manejos.some((m) => (m.tipo === "implantacao" || m.tipo === "ressinc") && m.loteId === loteDaSugestao.id && m.ordem === ordemR && m.id !== editandoRessinc?.id);
 
   const canSaveRessinc = (!!sugestaoAberta || !!editandoRessinc) && !jaRegistradoNestaOrdemR && ressincSelecionados.length > 0 && categoriaR !== "" && ordemR !== "" &&
-    implanteIdR !== "" && benzoatoIdR !== "" && String(doseBenzoatoR).trim() !== "" && numBR(doseBenzoatoR) > 0 &&
-    prostaglandinaIdR !== "" && String(doseProstaglandinaR).trim() !== "" && numBR(doseProstaglandinaR) > 0;
+    implanteIdR !== "" && benzoatoIdR !== "" && String(doseBenzoatoR).trim() !== "" && numBR(doseBenzoatoR) >= 0 &&
+    prostaglandinaIdR !== "" && String(doseProstaglandinaR).trim() !== "" && numBR(doseProstaglandinaR) >= 0;
 
   const iniciarEdicaoRessinc = (m) => {
     setEditandoRessinc(m);
@@ -4692,7 +4739,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       const pgfItem = prostaglandinasR.find((i) => i.id === prostaglandinaIdR);
       atualizarLote(loteDaSugestao.id, { categoria: categoriaR, ordem: ordemR });
       const contextoEdicao = {
-        loteNome: loteDaSugestao.nome || "", categoria: categoriaR, ordem: ordemR, numeroAnimais: nAnimais, mesParicao: loteDaSugestao.mesParicao || null, tipoManejo: tipoManejoR, protocolo: protocoloR,
+        loteNome: loteDaSugestao.nome || "", categoria: categoriaR, ordem: ordemR, numeroAnimais: nAnimais, mesParicao: loteDaSugestao.mesParicao || null, situacao: loteDaSugestao.situacao || null, tipoManejo: tipoManejoR, protocolo: protocoloR,
         implante: implanteItem?.produtoComercial || "", benzoato: benzoatoItem?.produtoComercial || "", doseBenzoato: dB,
         prostaglandina: pgfItem?.produtoComercial || "", doseProstaglandina: dP,
       };
@@ -4718,14 +4765,14 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     atualizarLote(loteDaSugestao.id, { ordem: ordemR });
 
     const contexto = {
-      loteNome: loteDaSugestao.nome || "", categoria: categoriaR, ordem: ordemR, numeroAnimais: nAnimais, mesParicao: loteDaSugestao.mesParicao || null, tipoManejo: tipoManejoR, protocolo: protocoloR,
+      loteNome: loteDaSugestao.nome || "", categoria: categoriaR, ordem: ordemR, numeroAnimais: nAnimais, mesParicao: loteDaSugestao.mesParicao || null, situacao: loteDaSugestao.situacao || null, tipoManejo: tipoManejoR, protocolo: protocoloR,
       implante: implanteItem?.produtoComercial || "", benzoato: benzoatoItem?.produtoComercial || "", doseBenzoato: dB,
       prostaglandina: pgfItem?.produtoComercial || "", doseProstaglandina: dP,
     };
 
     const manejoId = registrarManejo({
       tipo: "ressinc", loteId: loteDaSugestao.id, loteNome: loteDaSugestao.nome || "", retiroId: loteDaSugestao.retiroId || null,
-      categoria: categoriaR, ordem: ordemR, numeroAnimais: nAnimais, mesParicao: loteDaSugestao.mesParicao || null, tipoManejo: tipoManejoR, protocolo: protocoloR, protocoloPadrao: protocoloPadraoNomeR.trim() || null, medicamentos: medicamentosR, localEstoque: localEstoqueR,
+      categoria: categoriaR, ordem: ordemR, numeroAnimais: nAnimais, mesParicao: loteDaSugestao.mesParicao || null, situacao: loteDaSugestao.situacao || null, tipoManejo: tipoManejoR, protocolo: protocoloR, protocoloPadrao: protocoloPadraoNomeR.trim() || null, medicamentos: medicamentosR, localEstoque: localEstoqueR,
       implanteId: implanteIdR, benzoatoId: benzoatoIdR, doseBenzoato: dB, prostaglandinaId: prostaglandinaIdR, doseProstaglandina: dP, data: dataManejoR,
       animaisLidos: ressincSelecionados,
       detalhes: ressincSelecionados.map((b) => ({ brinco: b, ...contexto })),
@@ -4822,7 +4869,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               <>
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
-            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
+            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} avisarPadrao />
             {(implantes.length === 0 || benzoatos.length === 0 || prostaglandinas.length === 0) && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
             )}
@@ -4864,6 +4911,13 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                 </select>
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
+              <Field label="Situação">
+                <select style={inputStyle} value={situacao} onChange={(e) => { limparMsgSeSucesso(); setSituacao(e.target.value); }}>
+                  <option value="">— não se aplica —</option>
+                  <option value="Solteiras">Solteiras</option>
+                  <option value="Paridas">Paridas</option>
+                </select>
+              </Field>
               <Field label="Mês de parição *">
                 <select style={inputStyle} value={mesParicao} onChange={(e) => { limparMsgSeSucesso(); setMesParicao(e.target.value); }}>
                   <option value="">— não se aplica —</option>
@@ -5134,7 +5188,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   ) : (
                     <>
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
-                      <SeletorLocalEstoque local={localEstoqueR} setLocal={setLocalEstoqueR} />
+                      <SeletorLocalEstoque local={localEstoqueR} setLocal={setLocalEstoqueR} avisarPadrao />
                       {(implantesR.length === 0 || benzoatosR.length === 0 || prostaglandinasR.length === 0) && (
                         <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (implante, benzoato ou prostaglandina).</p>
                       )}
@@ -5423,9 +5477,9 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
   }, [loteId]);
 
   const canSaveBase = !jaRegistradoNestaOrdem && loteId !== "" && String(numeroAnimais).trim() !== "" && numBR(numeroAnimais) > 0 &&
-    prostaglandinaId !== "" && String(doseProstaglandina).trim() !== "" && numBR(doseProstaglandina) > 0 &&
-    cipionatoId !== "" && String(doseCipionato).trim() !== "" && numBR(doseCipionato) > 0 &&
-    ecgHcgId !== "" && String(doseEcgHcg).trim() !== "" && numBR(doseEcgHcg) > 0;
+    prostaglandinaId !== "" && String(doseProstaglandina).trim() !== "" && numBR(doseProstaglandina) >= 0 &&
+    cipionatoId !== "" && String(doseCipionato).trim() !== "" && numBR(doseCipionato) >= 0 &&
+    ecgHcgId !== "" && String(doseEcgHcg).trim() !== "" && numBR(doseEcgHcg) >= 0;
 
   const salvar = (forcarExcedente = false) => {
     if (jaRegistradoNestaOrdem) { setMsg(`Já existe uma Retirada registrada para este lote na ${loteAtual.ordem}.`); return; }
@@ -5548,7 +5602,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
             <EmptyState text="Cadastre ao menos um produto comercial de Prostaglandina, Cipionato e ECG/HCG (Estoque > Entrada > Hormônios) antes de registrar a retirada." />
           ) : (          <div style={{ ...cardStyle, marginBottom: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
-            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
+            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} avisarPadrao />
             {(prostaglandinas.length === 0 || cipionatos.length === 0 || ecgHcg.length === 0) && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Faltam produtos cadastrados neste local de estoque (prostaglandina, cipionato ou ECG/HCG).</p>
             )}
@@ -5838,6 +5892,9 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const brincoInputRef = React.useRef(null);
   const eccInputRef = React.useRef(null);
   const pesoInputRef = React.useRef(null);
+  const cioInputRef = React.useRef(null);
+  const [demonstracaoCio, setDemonstracaoCio] = useState(""); // opcional: Sim / Não (aceita S / N)
+  const normalizarCio = (v) => { const t = String(v || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); if (!t) return ""; if (t === "s" || t === "sim") return "Sim"; if (t === "n" || t === "nao") return "Não"; return null; };
   const observacoesInputRef = React.useRef(null);
   const [registros, setRegistros] = useState([]); // {brinco, semenId, peso, ecc, observacoes, gnrhId, doseGnrh}
   useAvisarSaidaComPendencia(registros.length > 0);
@@ -5955,7 +6012,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     return avisos.length > 0;
   };
 
-  const limparCamposLeitura = () => { setBrinco(""); setEcc(""); setPeso(""); setObservacoes(""); setGnrhId(""); setDoseGnrh(""); setRacaMatriz(""); setMsg(""); setAvisoImediato(null); brincoInputRef.current?.focus(); };
+  const limparCamposLeitura = () => { setBrinco(""); setEcc(""); setDemonstracaoCio(""); setPeso(""); setObservacoes(""); setRacaMatriz(""); setMsg(""); setAvisoImediato(null); brincoInputRef.current?.focus(); };
 
   const adicionar = () => {
     const b = brinco.trim().toUpperCase();
@@ -5965,6 +6022,8 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     const eccNorm = normalizarEcc(ecc);
     if (eccNorm && !OPCOES_ECC.includes(eccNorm)) { setMsg("ECC inválido. Escolha um valor da lista."); return; }
     if (eccNorm !== (ecc.trim() || null)) setEcc(eccNorm || "");
+    const cioNorm = normalizarCio(demonstracaoCio);
+    if (cioNorm === null) { setMsg("Demonstração de cio: digite Sim ou Não (ou S / N)."); cioInputRef.current?.focus(); return; }
     if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi lido."); return; }
     if (lotesSelecionados.length === 0) { setMsg("Selecione ao menos um lote."); return; }
 
@@ -5998,6 +6057,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       brinco: b, semenId, partidaInformada: partida.trim(), ecc: eccNorm, peso: peso.trim() || null, observacoes: observacoes.trim() || null,
       gnrhId: gnrhId || null, doseGnrh: doseGnrh.trim() !== "" ? numBR(doseGnrh) : null,
       racaMatriz: racaMatriz.trim() || null,
+      demonstracaoCio: cioNorm || null,
       inseminador: inseminador.trim() || currentUser?.nome || null,
       horario: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       loteId: loteResolvidoId,
@@ -6043,6 +6103,16 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const cancelarPendente = () => { setPendente(null); setAvisoImediato(null); };
 
   const remover = (brincoRem) => setRegistros((a) => a.filter((r) => r.brinco !== brincoRem));
+  // reabre um animal já lido nesta sessão: tira a linha da tabela e recarrega os dados no formulário
+  const editarRegistro = (r) => {
+    setRegistros((a) => a.filter((x) => x.brinco !== r.brinco));
+    const item = semensTodos.find((x) => x.id === r.semenId);
+    if (item?.touro) setTouro(item.touro);
+    setBrinco(r.brinco); setPartida(r.partidaInformada || ""); setEcc(r.ecc || ""); setPeso(r.peso || ""); setObservacoes(r.observacoes || "");
+    setGnrhId(r.gnrhId || ""); setDoseGnrh(r.doseGnrh != null ? String(r.doseGnrh) : ""); setRacaMatriz(r.racaMatriz || ""); setInseminador(r.inseminador || ""); setDemonstracaoCio(r.demonstracaoCio || "");
+    setPendente(null); setAvisoImediato(null); setMsg("");
+    brincoInputRef.current?.focus();
+  };
 
   // cada manejo (D0, Retirada, Inseminação, Diagnóstico) só pode ocorrer uma vez por lote+ordem
   const lotesJaRegistrados = lotesSelecionadosObjs.filter((l) => manejos.some((m) => m.tipo === "inseminacao" && m.loteId === l.id && m.ordem === l.ordem));
@@ -6238,7 +6308,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Local de estoque</div>
-            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} />
+            <SeletorLocalEstoque local={localEstoque} setLocal={setLocalEstoque} avisarPadrao />
             {semens.length === 0 && (
               <p style={{ fontSize: 12, color: "#166336", marginTop: -8, marginBottom: 14 }}>Nenhum sêmen cadastrado neste local de estoque.</p>
             )}
@@ -6286,10 +6356,16 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               <Field label="ECC">
                 <input ref={eccInputRef} style={inputStyle} value={ecc} onChange={(e) => setEcc(e.target.value)} placeholder="Ex: 3 → 3,00 · 2,7 → 2,75" list="ecc-opcoes"
                   onBlur={() => setEcc((v) => normalizarEcc(v) || "")}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEcc((v) => normalizarEcc(v) || ""); pesoInputRef.current?.focus(); } }} />
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEcc((v) => normalizarEcc(v) || ""); cioInputRef.current?.focus(); } }} />
                 <datalist id="ecc-opcoes">
                   {OPCOES_ECC.map((o) => <option key={o} value={o} />)}
                 </datalist>
+              </Field>
+              <Field label="Demonstração de cio">
+                <input ref={cioInputRef} style={inputStyle} list="cio-opcoes" value={demonstracaoCio} onChange={(e) => { limparMsgSeSucesso(); setDemonstracaoCio(e.target.value); }} placeholder="Sim / Não (S / N)"
+                  onBlur={() => setDemonstracaoCio((v) => normalizarCio(v) ?? v)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const n = normalizarCio(demonstracaoCio); if (n === null) { setMsg("Demonstração de cio: digite Sim ou Não (ou S / N)."); return; } setMsg(""); setDemonstracaoCio(n); pesoInputRef.current?.focus(); } }} />
+                <datalist id="cio-opcoes"><option value="Sim" /><option value="Não" /></datalist>
               </Field>
               <Field label="Peso *"><input ref={pesoInputRef} style={inputStyle} value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg"
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); observacoesInputRef.current?.focus(); } }} /></Field>
@@ -6369,7 +6445,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
               <div style={{ marginTop: 20 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Animais lidos nesta sessão ({registros.length})</div>
                 <div className="rola-horizontal" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ minWidth: 640 }}>
-                  <thead><tr><th>Animal</th><th>Lote</th><th>Horário</th><th>Sêmen / touro</th><th>ECC</th><th>Peso</th><th>Inseminador</th><th>Observações</th><th>GnRH</th><th>Nota</th><th></th></tr></thead>
+                  <thead><tr><th>Animal</th><th>Lote</th><th>Horário</th><th>Sêmen / touro</th><th>ECC</th><th>Cio</th><th>Peso</th><th>Inseminador</th><th>Observações</th><th>GnRH</th><th>Nota</th><th></th></tr></thead>
                   <tbody>
                     {registros.map((r) => (
                       <tr key={r.brinco}>
@@ -6378,12 +6454,13 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         <td>{r.horario || "—"}</td>
                         <td>{nomeSemen(r.semenId, r.partidaInformada)}</td>
                         <td>{r.ecc || "—"}</td>
+                        <td>{r.demonstracaoCio || "—"}</td>
                         <td>{r.peso ? `${r.peso} kg` : "—"}</td>
                         <td>{r.inseminador || "—"}</td>
                         <td>{r.observacoes || "—"}</td>
                         <td>{r.gnrhId ? `${nomeInsumo(r.gnrhId)} (${r.doseGnrh} mL)` : "—"}</td>
                         <td>{r.notaAtribuicao || "—"}</td>
-                        <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                        <td style={{ whiteSpace: "nowrap" }}><button onClick={() => editarRegistro(r)} title="Editar este animal (recarrega no formulário)" style={{ background: "none", border: "none", cursor: "pointer", color: "#4A473E", marginRight: 6 }}><Pencil size={14} /></button><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -6547,7 +6624,9 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     if (!ultimaInsem) return null;
     return diasEntre(ultimaInsem.data, dataManejo);
   }, [brinco, resultado, dataManejo, manejos]);
+  const tempoARestaurarRef = React.useRef(null); // usado ao editar um animal já lido: preserva o tempo que havia sido informado
   React.useEffect(() => {
+    if (tempoARestaurarRef.current != null) { setTempoGestacaoInput(tempoARestaurarRef.current); tempoARestaurarRef.current = null; return; }
     setTempoGestacaoInput(tempoGestacaoCalculado != null ? String(tempoGestacaoCalculado) : "");
   }, [tempoGestacaoCalculado]);
   // se o valor digitado for MENOR que o calculado com base na última Inseminação, a prenhez
@@ -6673,6 +6752,18 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   const cancelarPendente = () => { setPendente(null); setAvisoImediato(null); };
 
   const remover = (b) => setRegistros((a) => a.filter((r) => r.brinco !== b));
+  // reabre um animal já lido nesta sessão: tira a linha da tabela e recarrega os dados no formulário
+  const editarRegistro = (r) => {
+    setRegistros((a) => a.filter((x) => x.brinco !== r.brinco));
+    if (r.resultado === "Prenha" && r.tempoGestacao != null) {
+      tempoARestaurarRef.current = String(r.tempoGestacao);
+      setTempoGestacaoInput(String(r.tempoGestacao));
+      setTimeout(() => { tempoARestaurarRef.current = null; }, 400);
+    }
+    setBrinco(r.brinco); setResultadoInput(r.resultado === "Prenha" ? "P" : "V");
+    setPendente(null); setAvisoImediato(null); setMsg("");
+    brincoInputRef.current?.focus();
+  };
 
   // cada manejo (D0, Retirada, Inseminação, Diagnóstico) só pode ocorrer uma vez por lote+ordem
   const lotesJaRegistrados = lotesSelecionadosObjs.filter((l) => manejos.some((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === l.ordem));
@@ -6911,7 +7002,7 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                         <td style={{ fontWeight: r.origemPrenhez === "Repasse" ? 700 : 400 }}>{r.origemPrenhez || "—"}</td>
                         <td style={{ fontWeight: 700 }}>{lotes.find((l) => l.id === r.loteId)?.nome || "—"}</td>
                         <td>{r.observacao || "—"}</td>
-                        <td><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
+                        <td style={{ whiteSpace: "nowrap" }}><button onClick={() => editarRegistro(r)} title="Editar este animal (recarrega no formulário)" style={{ background: "none", border: "none", cursor: "pointer", color: "#4A473E", marginRight: 6 }}><Pencil size={14} /></button><button onClick={() => window.confirm(`Remover o animal ${r.brinco} desta leitura?`) && remover(r.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -9175,7 +9266,9 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   const [filtroRetiroId, setFiltroRetiroId] = useState("");
   const [filtroLoteId, setFiltroLoteId] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("");
-  const lotesDoRetiroFiltro = lotes.filter((l) => (!filtroRetiroId || l.retiroId === filtroRetiroId) && (!filtroCategoria || l.categoria === filtroCategoria));
+  // só lotes que já têm algum Diagnóstico registrado entram na lista do filtro
+  const idsLotesComDiagnostico = new Set(manejos.filter((m) => String(m.tipo || "").startsWith("diagnostico")).map((m) => m.loteId));
+  const lotesDoRetiroFiltro = lotes.filter((l) => idsLotesComDiagnostico.has(l.id) && (!filtroRetiroId || l.retiroId === filtroRetiroId) && (!filtroCategoria || l.categoria === filtroCategoria));
   // se o lote escolhido não bater mais com o retiro ou a categoria selecionados, limpa o filtro de lote
   React.useEffect(() => {
     if (filtroLoteId && !lotesDoRetiroFiltro.some((l) => l.id === filtroLoteId)) setFiltroLoteId("");
@@ -9461,10 +9554,10 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
-                {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de fertilidade"}
+                {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de prenhez"}
               </div>
               <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content" }}>
-                {[["concepcao", "Concepção"], ["fertilidade", "Fertilidade"]].map(([key, label]) => (
+                {[["concepcao", "Concepção"], ["fertilidade", "Taxa de prenhez"]].map(([key, label]) => (
                   <button key={key} onClick={() => setVisaoGeral(key)}
                     style={{
                       padding: "5px 7px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
@@ -10271,7 +10364,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
             </div>
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de fertilidade</div>
+              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Taxa de prenhez</div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 {escopo === "ladoAlado" ? (
                   <BarrasConcepcao dados={taxasParaLadoALado(taxasGrupoFertilidade)} ordenarPorTaxaDesc />
@@ -10291,7 +10384,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
             </div>
 
             <CardBenchComparacao
-              titulo="Fertilidade por categoria"
+              titulo="Taxa de prenhez por categoria"
               opcoes={CATEGORIAS_LOTE.map((c) => ({ key: c, label: `${c}s` }))}
               calcularTaxasGrupo={(cat) => taxasDeFertilidadePorCategoriaPorFazenda(lotesDaSafra, manejosDaSafra, cat)}
               buscarTaxasSistema={buscarBenchmarkFertilidadePorCategoriaSistema}
@@ -10364,7 +10457,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
           </div>
 
           <p style={{ fontSize: 11, color: "#9B9686" }}>
-            Concepção considera só quem já tem Inseminação e Diagnóstico registrados; Fertilidade compara Prenhas com o total de animais diagnosticados (quem só tem Inseminação, sem diagnóstico ainda, não entra na conta). Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.
+            Concepção considera só quem já tem Inseminação e Diagnóstico registrados; Taxa de prenhez compara Prenhas com o total de animais diagnosticados (quem só tem Inseminação, sem diagnóstico ainda, não entra na conta). Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.
           </p>
         </>
       )}
@@ -10794,7 +10887,7 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, insumos, manejos, manejosE
   // formato de detalhe (ECC, peso, resultado, sêmen, etc.) sem precisar mapear campo a campo.
   const TRADUCAO_CAMPO_ANIMAL = {
     ecc: "ECC", peso: "Peso", observacoes: "Observações", resultado: "Resultado", racaMatriz: "Raça da matriz",
-    semenId: "Sêmen", touro: "Touro", racaTouro: "Raça do touro", inseminador: "Inseminador",
+    semenId: "Sêmen", touro: "Touro", racaTouro: "Raça do touro", inseminador: "Inseminador", demonstracaoCio: "Demonstração de cio",
     statusPrenhez: "Status de prenhez", raca: "Raça", perdaImplante: "Perda de implante",
     tempoGestacao: "Tempo de gestação", origemPrenhez: "Origem da prenhez",
   };
@@ -11024,13 +11117,13 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     return `${faz}_${saf}_${todayISO()}`;
   };
 
-  // Um bloco de 19 colunas para cada Ordem (1º/2º/3º IATF), com todos os dados dos manejos
+  // Um bloco de 20 colunas para cada Ordem (1º/2º/3º IATF), com todos os dados dos manejos
   // (D0, Retirada, Inseminação, Diagnóstico) daquele lote naquela ordem específica.
   const SUBCOLUNAS_ORDEM = [
     "Data do D0", "Data da Inseminação", "Data do Diagnóstico", "Número de manejos", "Protocolo",
     "Implante no D0", "Benzoato no D0", "Prostaglandina no D0", "Medicamentos no D0",
     "Prostaglandina na Retirada", "Cipionato na Retirada", "ECG/HCG na Retirada",
-    "Touro", "Partida", "ECC", "Peso", "Observações", "Medicamentos na Inseminação", "Diagnóstico",
+    "Touro", "Partida", "ECC", "Cio", "Peso", "Observações", "Medicamentos na Inseminação", "Diagnóstico",
   ];
   const COLUNAS_FIXAS = ["Identificação", "Categoria", "Lote", "Mês de parição"];
 
@@ -11081,6 +11174,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       touro || "—",
       partida ? paraData(partida) : "—",
       detalheInsem?.ecc || "—",
+      detalheInsem?.demonstracaoCio || "—",
       detalheInsem?.peso || "—",
       detalheInsem?.observacoes || "—",
       insem ? resumoMedicamentos(insem.medicamentos, insumos) : "—",
@@ -11089,7 +11183,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
   };
 
   const exportarPorAnimal = () => {
-    const largura = SUBCOLUNAS_ORDEM.length; // 19
+    const largura = SUBCOLUNAS_ORDEM.length; // 20
     const totalColunas = COLUNAS_FIXAS.length + largura * ORDENS_IATF.length; // 4 + 57 = 61
 
     const linha1 = new Array(totalColunas).fill("");
@@ -11222,6 +11316,30 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     insemEscopo.forEach((m) => (m.animaisLidos || []).forEach((b) => matrizes.add(b)));
     return matrizes.size > 0 ? totalInsem / matrizes.size : null;
   };
+  // Prenhez por IATF = prenhas das três ordens ÷ animais (distintos) já diagnosticados de alguma inseminação (Repasse não entra)
+  // Prenhez Geral = TODAS as prenhas (Inseminação + Repasse) ÷ animais (distintos) que já têm algum Diagnóstico
+  // ECC médio = média do ECC apontado na Inseminação dos animais do grupo (ignora quem não tem ECC)
+  const eccMedioPDF = (regs) => {
+    const vals = regs.map((r) => (r.ecc == null || r.ecc === "" ? NaN : numBR(String(r.ecc)))).filter((v) => !Number.isNaN(v));
+    return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2).replace(".", ",") : "—";
+  };
+  // CIO = % de animais que demonstraram cio na Inseminação daquele lote/ordem, sobre o total de animais
+  // avaliados (os que têm Sim/Não informado). Sem nenhuma avaliação → "—".
+  const cioPctPDF = (loteId, ordem) => {
+    const aval = new Map();
+    manejos.filter((m) => m.tipo === "inseminacao" && m.loteId === loteId && m.ordem === ordem).forEach((m) =>
+      (m.detalhes || []).forEach((d) => { if (d.demonstracaoCio === "Sim" || d.demonstracaoCio === "Não") aval.set(d.brinco, d.demonstracaoCio); }));
+    if (aval.size === 0) return "—";
+    return fmtPctPDF(([...aval.values()].filter((v) => v === "Sim").length / aval.size) * 100);
+  };
+  const prenhezGeralPDF = (idsLotesEscopo) => {
+    const diags = manejos.filter((m) => (m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse") && !idsDesconhecidosPDF.has(m.loteId) && (!idsLotesEscopo || idsLotesEscopo.has(m.loteId)));
+    const animais = new Set();
+    let prenhas = 0;
+    diags.forEach((m) => (m.detalhes || []).forEach((d) => { if (d.resultado) { animais.add(d.brinco); if (d.resultado === "Prenha") prenhas++; } }));
+    return animais.size > 0 ? (prenhas / animais.size) * 100 : null;
+  };
+  const prenhezPorIatfPDF = (regs) => { const animais = new Set(regs.map((r) => r.brinco)).size; return animais > 0 ? (regs.filter((r) => r.prenha).length / animais) * 100 : null; };
   const fmtPctPDF = (v) => v == null || isNaN(v) ? "—" : `${v.toFixed(1)}%`;
   const fmtMoedaPDF = (v) => v == null ? "—" : `R$ ${v.toFixed(0)}`;
   const linhaCustosPDF = (c) => [fmtMoedaPDF(c.animal), fmtMoedaPDF(c.inseminacao), fmtMoedaPDF(c.prenhez)];
@@ -11395,22 +11513,23 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       // Fertilidade = Prenhas ÷ animais COM DIAGNÓSTICO daquela categoria (registrosCat só existe
       // quando há Diagnóstico casado com a Inseminação — quem só tem Inseminação não entra aqui).
       const totalDiagnosticadosCat = registrosCat.length;
-      const fertilidadeCat = totalDiagnosticadosCat > 0 ? (totalCat.prenhas / totalDiagnosticadosCat) * 100 : null;
+      const prenhezIatfCat = prenhezPorIatfPDF(registrosCat);
+      const fertilidadeCat = prenhezGeralPDF(idsLotesCat);
       const iatfCat = iatfPorMatrizPDF(idsLotesCat);
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosCat.filter((r) => r.ordem === ordem));
         const totalInseminacoesOrdem = eventosCustoPDF.filter((e) => e.categoria === cat && e.ordem === ordem).length;
-        linhasResumo.push([cat, totalAnimaisCat, ordem, totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalCat.concepcao), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
+        linhasResumo.push([cat, totalAnimaisCat, ordem, eccMedioPDF(registrosCat.filter((r) => r.ordem === ordem)), totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalCat.concepcao), fmtPctPDF(prenhezIatfCat), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
       });
       const repasseManejosCat = manejos.filter((m) => m.tipo === "repasse" && idsLotesCat.has(m.loteId));
       const diagRepasseCat = manejos.filter((m) => m.tipo === "diagnostico_repasse" && idsLotesCat.has(m.loteId));
       const insemRepasse = repasseManejosCat.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
       const prenhasRepasse = contarPrenhasDetPDF(diagRepasseCat);
       const totalDiagRepasse = diagRepasseCat.reduce((s, m) => s + (m.detalhes || []).length, 0);
-      linhasResumo.push([cat, totalAnimaisCat, "Repasse", insemRepasse || "—", totalDiagRepasse || "—", prenhasRepasse, totalDiagRepasse - prenhasRepasse,
+      linhasResumo.push([cat, totalAnimaisCat, "Repasse", "—", insemRepasse || "—", totalDiagRepasse || "—", prenhasRepasse, totalDiagRepasse - prenhasRepasse,
         fmtPctPDF(totalDiagRepasse > 0 ? (prenhasRepasse / totalDiagRepasse) * 100 : null),
-        fmtPctPDF(totalCat.concepcao), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
+        fmtPctPDF(totalCat.concepcao), fmtPctPDF(prenhezIatfCat), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
       gruposResumo.push(ORDENS_IATF.length + 1);
     });
     // último bloco: "Geral" — mesma estrutura de cada categoria, só que somando todas elas juntas
@@ -11422,29 +11541,30 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const custosGeralResumo = calcularCustosPDF(idsLotesGeral);
       const totalGeralResumo = statsGrupoPDF(registrosPDF);
       const totalDiagnosticadosGeral = registrosPDF.length;
-      const fertilidadeGeral = totalDiagnosticadosGeral > 0 ? (totalGeralResumo.prenhas / totalDiagnosticadosGeral) * 100 : null;
+      const prenhezIatfGeral = prenhezPorIatfPDF(registrosPDF);
+      const fertilidadeGeral = prenhezGeralPDF(idsLotesGeral);
       const iatfGeralResumo = iatfPorMatrizPDF(idsLotesGeral);
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosPDF.filter((r) => r.ordem === ordem));
         const totalInseminacoesOrdem = eventosCustoPDF.filter((e) => e.ordem === ordem).length;
-        linhasResumo.push(["Geral", totalAnimaisGeral, ordem, totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalGeralResumo.concepcao), fmtPctPDF(fertilidadeGeral), iatfGeralResumo != null ? iatfGeralResumo.toFixed(2) : "—", ...linhaCustosPDF(custosGeralResumo)]);
+        linhasResumo.push(["Geral", totalAnimaisGeral, ordem, eccMedioPDF(registrosPDF.filter((r) => r.ordem === ordem)), totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalGeralResumo.concepcao), fmtPctPDF(prenhezIatfGeral), fmtPctPDF(fertilidadeGeral), iatfGeralResumo != null ? iatfGeralResumo.toFixed(2) : "—", ...linhaCustosPDF(custosGeralResumo)]);
       });
       const repasseManejosGeral = manejos.filter((m) => m.tipo === "repasse" && idsLotesGeral.has(m.loteId));
       const diagRepasseGeral = manejos.filter((m) => m.tipo === "diagnostico_repasse" && idsLotesGeral.has(m.loteId));
       const insemRepasseGeral = repasseManejosGeral.reduce((s, m) => s + (m.animaisLidos || []).length, 0);
       const prenhasRepasseGeral = contarPrenhasDetPDF(diagRepasseGeral);
       const totalDiagRepasseGeral = diagRepasseGeral.reduce((s, m) => s + (m.detalhes || []).length, 0);
-      linhasResumo.push(["Geral", totalAnimaisGeral, "Repasse", insemRepasseGeral || "—", totalDiagRepasseGeral || "—", prenhasRepasseGeral, totalDiagRepasseGeral - prenhasRepasseGeral,
+      linhasResumo.push(["Geral", totalAnimaisGeral, "Repasse", "—", insemRepasseGeral || "—", totalDiagRepasseGeral || "—", prenhasRepasseGeral, totalDiagRepasseGeral - prenhasRepasseGeral,
         fmtPctPDF(totalDiagRepasseGeral > 0 ? (prenhasRepasseGeral / totalDiagRepasseGeral) * 100 : null),
-        fmtPctPDF(totalGeralResumo.concepcao), fmtPctPDF(fertilidadeGeral), iatfGeralResumo != null ? iatfGeralResumo.toFixed(2) : "—", ...linhaCustosPDF(custosGeralResumo)]);
+        fmtPctPDF(totalGeralResumo.concepcao), fmtPctPDF(prenhezIatfGeral), fmtPctPDF(fertilidadeGeral), iatfGeralResumo != null ? iatfGeralResumo.toFixed(2) : "—", ...linhaCustosPDF(custosGeralResumo)]);
       gruposResumo.push(ORDENS_IATF.length + 1);
     }
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposResumo),
-      head: [["Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasResumo, gruposResumo, [0, 1, 8, 9, 10, 11, 12, 13]),
+      head: [["Categoria", "Animais", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasResumo, gruposResumo, [0, 1, 9, 10, 11, 12, 13, 14, 15]),
     });
     y = doc.lastAutoTable.finalY + 20;
 
@@ -11461,7 +11581,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       // Fertilidade = Prenhas ÷ animais com Diagnóstico (totalRet.inseminados, apesar do nome,
       // já é a contagem de registros diagnosticados — ver statsGrupoPDF).
       const totalDiagnosticadosRet = totalRet.inseminados;
-      const fertilidadeRet = totalDiagnosticadosRet > 0 ? (totalRet.prenhas / totalDiagnosticadosRet) * 100 : null;
+      const prenhezIatfRet = prenhezPorIatfPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId)));
+      const fertilidadeRet = prenhezGeralPDF(idsLotesRet);
       const iatfRet = iatfPorMatrizPDF(idsLotesRet);
       let tamGrupoRet = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
@@ -11472,8 +11593,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const st = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat && r.ordem === ordem));
           const totalInseminacoesRetCatOrdem = eventosCustoPDF.filter((e) => idsLotesRet.has(e.loteId) && e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesRetCatOrdem === 0) return;
-          linhasRetiro.push([ret.nome, cat, totalAnimaisRetCat || "—", ordem, totalInseminacoesRetCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-            fmtPctPDF(totalRet.concepcao), fmtPctPDF(fertilidadeRet), iatfRet != null ? iatfRet.toFixed(2) : "—", ...linhaCustosPDF(custosRet)]);
+          linhasRetiro.push([ret.nome, cat, totalAnimaisRetCat || "—", ordem, eccMedioPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat && r.ordem === ordem)), totalInseminacoesRetCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+            fmtPctPDF(totalRet.concepcao), fmtPctPDF(prenhezIatfRet), fmtPctPDF(fertilidadeRet), iatfRet != null ? iatfRet.toFixed(2) : "—", ...linhaCustosPDF(custosRet)]);
           tamGrupoCat++;
         });
         if (tamGrupoCat > 0) { gruposCategoriaRetiro.push(tamGrupoCat); tamGrupoRet += tamGrupoCat; }
@@ -11483,9 +11604,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRetiro),
-      head: [["Retiro", "Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Retiro", "Categoria", "Animais", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDFMultiNivel(linhasRetiro, [
-        { tamanhos: gruposRetiro, indices: [0, 9, 10, 11, 12, 13, 14] },
+        { tamanhos: gruposRetiro, indices: [0, 10, 11, 12, 13, 14, 15, 16] },
         { tamanhos: gruposCategoriaRetiro, indices: [1, 2] },
       ]),
     });
@@ -11505,7 +11626,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       // Fertilidade = Prenhas ÷ animais com Diagnóstico (totalMes.inseminados é a contagem de
       // registros diagnosticados — ver statsGrupoPDF).
       const totalDiagnosticadosMes = totalMes.inseminados;
-      const fertilidadeMes = totalDiagnosticadosMes > 0 ? (totalMes.prenhas / totalDiagnosticadosMes) * 100 : null;
+      const prenhezIatfMes = prenhezPorIatfPDF(registrosMes);
+      const fertilidadeMes = prenhezGeralPDF(idsLotesMes);
       const custosMes = custosPorEventosPDF(eventosMes, registrosMes);
       const idsLotesMes = new Set(lotes.filter((l) => l.mesParicao === mes).map((l) => l.id));
       const iatfMes = iatfPorMatrizPDF(idsLotesMes);
@@ -11518,8 +11640,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat && r.ordem === ordem));
           const totalInseminacoesMesCatOrdem = eventosMes.filter((e) => e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesMesCatOrdem === 0) return;
-          linhasMes.push([mes, cat, totalAnimaisMesCat || "—", ordem, totalInseminacoesMesCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-            fmtPctPDF(totalMes.concepcao), fmtPctPDF(fertilidadeMes), iatfMes != null ? iatfMes.toFixed(2) : "—", ...linhaCustosPDF(custosMes)]);
+          linhasMes.push([mes, cat, totalAnimaisMesCat || "—", ordem, eccMedioPDF(registrosMes.filter((r) => r.categoria === cat && r.ordem === ordem)), totalInseminacoesMesCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+            fmtPctPDF(totalMes.concepcao), fmtPctPDF(prenhezIatfMes), fmtPctPDF(fertilidadeMes), iatfMes != null ? iatfMes.toFixed(2) : "—", ...linhaCustosPDF(custosMes)]);
           tamGrupoCat++;
         });
         if (tamGrupoCat > 0) { gruposCategoriaMes.push(tamGrupoCat); tamGrupoMes += tamGrupoCat; }
@@ -11529,9 +11651,9 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposMesPDF),
-      head: [["Mês", "Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Mês", "Categoria", "Animais", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDFMultiNivel(linhasMes, [
-        { tamanhos: gruposMesPDF, indices: [0, 9, 10, 11, 12, 13, 14] },
+        { tamanhos: gruposMesPDF, indices: [0, 10, 11, 12, 13, 14, 15, 16] },
         { tamanhos: gruposCategoriaMes, indices: [1, 2] },
       ]),
     });
@@ -11552,15 +11674,16 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       // Fertilidade = Prenhas ÷ animais com Diagnóstico (totalLote.inseminados é a contagem de
       // registros diagnosticados — ver statsGrupoPDF).
       const totalDiagnosticadosLote = totalLote.inseminados;
-      const fertilidadeLote = totalDiagnosticadosLote > 0 ? (totalLote.prenhas / totalDiagnosticadosLote) * 100 : null;
+      const prenhezIatfLote = prenhezPorIatfPDF(registrosLote);
+      const fertilidadeLote = prenhezGeralPDF(idsLoteUnico);
       const iatfLote = iatfPorMatrizPDF(idsLoteUnico);
       let tamGrupo = 0;
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosLote.filter((r) => r.ordem === ordem));
         const totalInseminacoesLoteOrdem = eventosCustoPDF.filter((e) => e.loteId === lote.id && e.ordem === ordem).length;
         if (st.inseminados === 0 && totalInseminacoesLoteOrdem === 0) return;
-        linhasLote.push([lote.nome, lote.categoria || "—", totalAnimaisLote || "—", ordem, totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-          fmtPctPDF(totalLote.concepcao), fmtPctPDF(fertilidadeLote), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
+        linhasLote.push([lote.nome, lote.categoria || "—", totalAnimaisLote || "—", ordem, eccMedioPDF(registrosLote.filter((r) => r.ordem === ordem)), cioPctPDF(lote.id, ordem), totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          fmtPctPDF(totalLote.concepcao), fmtPctPDF(prenhezIatfLote), fmtPctPDF(fertilidadeLote), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
         tamGrupo++;
       });
       if (tamGrupo > 0) gruposLote.push(tamGrupo);
@@ -11568,8 +11691,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposLote),
-      head: [["Lote", "Categoria", "Animais", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Fertilidade", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
-      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 2, 9, 10, 11, 12, 13, 14]),
+      head: [["Lote", "Categoria", "Animais", "Ordem", "ECC médio", "CIO", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 2, 11, 12, 13, 14, 15, 16, 17]),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
@@ -11585,6 +11708,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       const registrosIns = registrosPDF.filter((r) => r.inseminador === nome);
       const eventosIns = eventosCustoPDF.filter((e) => e.inseminador === nome);
       const totalIns = statsGrupoPDF(registrosIns);
+      const prenhezIatfIns = prenhezPorIatfPDF(registrosIns);
       const custosIns = custosPorEventosPDF(eventosIns, registrosIns);
       let tamGrupoIns = 0;
       CATEGORIAS_RESUMO.forEach((cat) => {
@@ -11593,8 +11717,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const st = statsGrupoPDF(registrosIns.filter((r) => r.categoria === cat && r.ordem === ordem));
           const totalInseminacoesInsCatOrdem = eventosIns.filter((e) => e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesInsCatOrdem === 0) return;
-          linhasInseminador.push([nome, cat, ordem, totalInseminacoesInsCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
-            fmtPctPDF(totalIns.concepcao), ...linhaCustosPDF(custosIns)]);
+          linhasInseminador.push([nome, cat, ordem, eccMedioPDF(registrosIns.filter((r) => r.categoria === cat && r.ordem === ordem)), totalInseminacoesInsCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+            fmtPctPDF(totalIns.concepcao), fmtPctPDF(prenhezIatfIns), ...linhaCustosPDF(custosIns)]);
           tamGrupoCat++;
         });
         if (tamGrupoCat > 0) { gruposCategoriaIns.push(tamGrupoCat); tamGrupoIns += tamGrupoCat; }
@@ -11604,17 +11728,17 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposInseminador),
-      head: [["Inseminador", "Categoria", "Ordem", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Final", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Inseminador", "Categoria", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDFMultiNivel(linhasInseminador, [
-        { tamanhos: gruposInseminador, indices: [0, 8, 9, 10, 11] },
+        { tamanhos: gruposInseminador, indices: [0, 9, 10, 11, 12, 13] },
         { tamanhos: gruposCategoriaIns, indices: [1] },
       ]),
-      columnStyles: colunasIguais(12),
+      columnStyles: colunasIguais(14),
     });
     y = doc.lastAutoTable.finalY + 20;
 
     // 6) Detalhamento por raça de touro usado na inseminação (custo = sêmen + fração do
-    // hormônio dos animais inseminados com aquele touro — por isso só Raça e Concepção Final
+    // hormônio dos animais inseminados com aquele touro — por isso só Raça e Concepção Média por IATF
     // são mescladas; Nº IATF/matriz e os custos variam de touro pra touro)
     novaSecao("Detalhamento por raça de touro usado na inseminação:");
     const racas = [...new Set(registrosPDF.map((r) => r.racaTouro).filter(Boolean))];
@@ -11629,7 +11753,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const eventosTouro = eventosCustoPDF.filter((e) => e.racaTouro === raca && e.touro === touro);
         const st = statsGrupoPDF(registrosTouro);
         if (st.inseminados === 0 && eventosTouro.length === 0) return;
-        linhasRaca.push([raca, touro, eventosTouro.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        linhasRaca.push([raca, touro, eccMedioPDF(registrosTouro), eventosTouro.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro)).slice(1)]);
         tamGrupo++;
       });
@@ -11638,15 +11762,15 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRaca),
-      head: [["Raça", "Touro", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Raça", "Touro", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/insem.", "Custo/prenhez"]],
       body: mesclarColunasPDF(linhasRaca, gruposRaca, [0]),
-      columnStyles: colunasIguais(9),
+      columnStyles: colunasIguais(10),
     });
     y = doc.lastAutoTable.finalY + 20;
     if (y > doc.internal.pageSize.getHeight() - 100) { doc.addPage(); y = 40; }
 
     // 7) Detalhamento por ECC (custo = sêmen + fração do hormônio dos animais daquele ECC —
-    // por isso só Categoria e Concepção Final são mescladas; Nº IATF/matriz e os custos
+    // por isso só Categoria e Concepção Média por IATF são mescladas; Nº IATF/matriz e os custos
     // variam de ECC pra ECC. Só considera os ECC informados — é um campo opcional)
     novaSecao("Detalhamento por ECC:");
     const linhasEcc = [];
@@ -11694,7 +11818,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           <div style={cardStyle}>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#232520", marginBottom: 6 }}>Relatório Detalhado</div>
             <p style={{ fontSize: 12.5, color: "#6B685E", margin: "0 0 14px" }}>
-              Um PDF com tabelas prontas para apresentar: resumo geral e detalhamento por retiro, lote, inseminador, mês de parição, raça de touro e ECC — com Concepção, Fertilidade, Nº de IATF por matriz e Custos por animal/inseminação/prenhez.
+              Um PDF com tabelas prontas para apresentar: resumo geral e detalhamento por retiro, lote, inseminador, mês de parição, raça de touro e ECC — com Concepção, Concepção Média por IATF, Prenhez por IATF, Prenhez Geral, Nº de IATF por matriz e Custos por animal/inseminação/prenhez.
             </p>
             <BtnPrimary onClick={gerarRelatorioDetalhadoPDF} disabled={lotes.length === 0}><FileDown size={15} /> Exportar Relatório Detalhado (.pdf)</BtnPrimary>
             {erroPDF && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 8 }}>Não foi possível gerar o PDF: {erroPDF}</p>}
