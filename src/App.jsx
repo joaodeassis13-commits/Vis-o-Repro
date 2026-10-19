@@ -11599,7 +11599,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosCat.filter((r) => r.ordem === ordem));
         const totalInseminacoesOrdem = eventosCustoPDF.filter((e) => e.categoria === cat && e.ordem === ordem).length;
-        linhasResumo.push([cat, totalAnimaisCat, ordem, eccMedioPDF(registrosCat.filter((r) => r.ordem === ordem)), totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        linhasResumo.push([cat, totalAnimaisCat, ordem, eccMedioPDF(eventosCustoPDF.filter((e) => e.categoria === cat && e.ordem === ordem)), totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalCat.concepcao), fmtPctPDF(prenhezIatfCat), fmtPctPDF(fertilidadeCat), iatfCat != null ? iatfCat.toFixed(2) : "—", ...linhaCustosPDF(custosCat)]);
       });
       const repasseManejosCat = manejos.filter((m) => m.tipo === "repasse" && idsLotesCat.has(m.loteId));
@@ -11627,7 +11627,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       ORDENS_IATF.forEach((ordem) => {
         const st = statsGrupoPDF(registrosPDF.filter((r) => r.ordem === ordem));
         const totalInseminacoesOrdem = eventosCustoPDF.filter((e) => e.ordem === ordem).length;
-        linhasResumo.push(["Geral", totalAnimaisGeral, ordem, eccMedioPDF(registrosPDF.filter((r) => r.ordem === ordem)), totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        linhasResumo.push(["Geral", totalAnimaisGeral, ordem, eccMedioPDF(eventosCustoPDF.filter((e) => e.ordem === ordem)), totalInseminacoesOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalGeralResumo.concepcao), fmtPctPDF(prenhezIatfGeral), fmtPctPDF(fertilidadeGeral), iatfGeralResumo != null ? iatfGeralResumo.toFixed(2) : "—", ...linhaCustosPDF(custosGeralResumo)]);
       });
       const repasseManejosGeral = manejos.filter((m) => m.tipo === "repasse" && idsLotesGeral.has(m.loteId));
@@ -11673,7 +11673,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const st = statsGrupoPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat && r.ordem === ordem));
           const totalInseminacoesRetCatOrdem = eventosCustoPDF.filter((e) => idsLotesRet.has(e.loteId) && e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesRetCatOrdem === 0) return;
-          linhasRetiro.push([ret.nome, cat, totalAnimaisRetCat || "—", ordem, eccMedioPDF(registrosPDF.filter((r) => idsLotesRet.has(r.loteId) && r.categoria === cat && r.ordem === ordem)), totalInseminacoesRetCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          linhasRetiro.push([ret.nome, cat, totalAnimaisRetCat || "—", ordem, eccMedioPDF(eventosCustoPDF.filter((e) => idsLotesRet.has(e.loteId) && e.categoria === cat && e.ordem === ordem)), totalInseminacoesRetCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
             fmtPctPDF(totalRet.concepcao), fmtPctPDF(prenhezIatfRet), fmtPctPDF(fertilidadeRet), iatfRet != null ? iatfRet.toFixed(2) : "—", ...linhaCustosPDF(custosRet)]);
           tamGrupoCat++;
         });
@@ -11720,7 +11720,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const st = statsGrupoPDF(registrosMes.filter((r) => r.categoria === cat && r.ordem === ordem));
           const totalInseminacoesMesCatOrdem = eventosMes.filter((e) => e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesMesCatOrdem === 0) return;
-          linhasMes.push([mes, cat, totalAnimaisMesCat || "—", ordem, eccMedioPDF(registrosMes.filter((r) => r.categoria === cat && r.ordem === ordem)), totalInseminacoesMesCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          linhasMes.push([mes, cat, totalAnimaisMesCat || "—", ordem, eccMedioPDF(eventosCustoPDF.filter((e) => e.mesParicao === mes && e.categoria === cat && e.ordem === ordem)), totalInseminacoesMesCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
             fmtPctPDF(totalMes.concepcao), fmtPctPDF(prenhezIatfMes), fmtPctPDF(fertilidadeMes), iatfMes != null ? iatfMes.toFixed(2) : "—", ...linhaCustosPDF(custosMes)]);
           tamGrupoCat++;
         });
@@ -11762,7 +11762,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const st = statsGrupoPDF(registrosLote.filter((r) => r.ordem === ordem));
         const totalInseminacoesLoteOrdem = eventosCustoPDF.filter((e) => e.loteId === lote.id && e.ordem === ordem).length;
         if (st.inseminados === 0 && totalInseminacoesLoteOrdem === 0) return;
-        linhasLote.push([lote.nome, lote.categoria || "—", totalAnimaisLote || "—", ordem, eccMedioPDF(registrosLote.filter((r) => r.ordem === ordem)), cioPctPDF(lote.id, ordem), totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        linhasLote.push([lote.nome, lote.categoria || "—", totalAnimaisLote || "—", ordem, eccMedioPDF(eventosCustoPDF.filter((e) => e.loteId === lote.id && e.ordem === ordem)), cioPctPDF(lote.id, ordem), totalInseminacoesLoteOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           fmtPctPDF(totalLote.concepcao), fmtPctPDF(prenhezIatfLote), fmtPctPDF(fertilidadeLote), iatfLote != null ? iatfLote.toFixed(2) : "—", ...linhaCustosPDF(custosLote)]);
         tamGrupo++;
       });
@@ -11797,7 +11797,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
           const st = statsGrupoPDF(registrosIns.filter((r) => r.categoria === cat && r.ordem === ordem));
           const totalInseminacoesInsCatOrdem = eventosIns.filter((e) => e.categoria === cat && e.ordem === ordem).length;
           if (st.inseminados === 0 && totalInseminacoesInsCatOrdem === 0) return;
-          linhasInseminador.push([nome, cat, ordem, eccMedioPDF(registrosIns.filter((r) => r.categoria === cat && r.ordem === ordem)), totalInseminacoesInsCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+          linhasInseminador.push([nome, cat, ordem, eccMedioPDF(eventosCustoPDF.filter((e) => e.inseminador === nome && e.categoria === cat && e.ordem === ordem)), totalInseminacoesInsCatOrdem || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
             fmtPctPDF(totalIns.concepcao), fmtPctPDF(prenhezIatfIns), ...linhaCustosPDF(custosIns)]);
           tamGrupoCat++;
         });
@@ -11833,7 +11833,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         const eventosTouro = eventosCustoPDF.filter((e) => e.racaTouro === raca && e.touro === touro);
         const st = statsGrupoPDF(registrosTouro);
         if (st.inseminados === 0 && eventosTouro.length === 0) return;
-        linhasRaca.push([raca, touro, eccMedioPDF(registrosTouro), eventosTouro.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
+        linhasRaca.push([raca, touro, eccMedioPDF(eventosCustoPDF.filter((e) => e.racaTouro === raca && e.touro === touro)), eventosTouro.length || "—", st.inseminados || "—", st.prenhas, st.vazias, fmtPctPDF(st.concepcao),
           ...linhaCustosPDF(custosPorEventosPDF(eventosTouro, registrosTouro)).slice(1)]);
         tamGrupo++;
       });

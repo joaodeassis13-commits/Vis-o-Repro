@@ -624,7 +624,8 @@ create policy "sugestoes_repasse: acesso autorizado" on sugestoes_repasse
 
 drop policy if exists "protocolos_padrao: acesso autorizado" on protocolos_padrao;
 create policy "protocolos_padrao: acesso autorizado" on protocolos_padrao
-  for all using (fazenda_autorizada(fazenda_id));
+  for all using (fazenda_autorizada(fazenda_id) or eh_suporte_adm())
+  with check (fazenda_autorizada(fazenda_id) or eh_suporte_adm());
 
 drop policy if exists "agendamentos: acesso autorizado" on agendamentos;
 drop policy if exists "agendamentos: leitura" on agendamentos;
