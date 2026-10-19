@@ -1654,7 +1654,7 @@ export default function App() {
         manejosAtuais = manejosAtuais.map((m) => m.id === existente.id
           ? { ...m, detalhes: detalhesFinal, animaisLidos: detalhesFinal.map((d) => d.brinco), inseminador: grupo.inseminador || m.inseminador,
               categoria: categoriaDoLote || m.categoria || null,
-              tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null,
+              tipoManejo: grupo.tipoManejo || m.tipoManejo || null, protocolo: grupo.protocolo || m.protocolo || null, protocoloPadrao: grupo.protocoloPadrao || m.protocoloPadrao || null,
               implanteId: grupo.implanteId || m.implanteId || null, implanteNome: grupo.implanteNome || m.implanteNome || null,
               benzoatoId: grupo.benzoatoId || m.benzoatoId || null, benzoatoNome: grupo.benzoatoNome || m.benzoatoNome || null, doseBenzoato: grupo.doseBenzoato ?? m.doseBenzoato ?? null,
               prostaglandinaId: grupo.prostaglandinaId || m.prostaglandinaId || null, prostaglandinaNome: grupo.prostaglandinaNome || m.prostaglandinaNome || null, doseProstaglandina: grupo.doseProstaglandina ?? m.doseProstaglandina ?? null,
@@ -1667,7 +1667,7 @@ export default function App() {
           id: uid("man"), tipo, fazendaId: fazendaId, safraId: grupo.infoLote.safraId,
           loteId: grupo.infoLote.loteId, loteNome: grupo.infoLote.loteNome, retiroId: grupo.infoLote.retiroId, categoria: categoriaDoLote, ordem: grupo.ordem,
           data: grupo.data, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos, inseminador: grupo.inseminador || null,
-          tipoManejo: grupo.tipoManejo || null, protocolo: grupo.protocolo || null,
+          tipoManejo: grupo.tipoManejo || null, protocolo: grupo.protocolo || null, protocoloPadrao: grupo.protocoloPadrao || null,
           // protocolo hormonal do D0/Retirada, quando informado na planilha — usado só pra
           // calcular custo (ver construirEventosCustoInseminacao/construirRegistrosConcepcao),
           // nunca gera saída de estoque (a importação de histórico nunca desconta estoque).
@@ -1691,11 +1691,12 @@ export default function App() {
       if (!gruposLote.has(chave)) {
         gruposLote.set(chave, {
           safraNome: linha.safra.trim(), retiroNome: linha.retiro.trim(), loteNome: linha.lote.trim(),
-          categoria: normalizarCategoria(linha.categoria), raca: linha.raca?.trim() || null, mesParicao: normalizarMesParicao(linha.mesParicao),
+          categoria: normalizarCategoria(linha.categoria), raca: linha.raca?.trim() || null, mesParicao: normalizarMesParicao(linha.mesParicao), situacao: normalizarSituacaoImport(linha.situacao),
           animais: [], ordemMaisAvancada: null, animaisPorOrdem: {},
         });
       }
       const grupo = gruposLote.get(chave);
+      if (!grupo.situacao && linha.situacao) grupo.situacao = normalizarSituacaoImport(linha.situacao);
       if (linha.brinco && !grupo.animais.includes(linha.brinco.trim().toUpperCase())) grupo.animais.push(linha.brinco.trim().toUpperCase());
       const ordemLinha = normalizarOrdemIATF(linha.ordem);
       // quantos animais o lote tem em CADA ordem (linha sem ordem conta como a 1ª) — o "Nº de
@@ -1732,7 +1733,7 @@ export default function App() {
           ...l, animais: animaisMesclados,
           numeroAnimais: ordemFinal === ordemDestaImportacao ? numeroAnimaisDaOrdem : (l.numeroAnimais ?? animaisMesclados.length),
           ordem: ordemFinal,
-          categoria: grupo.categoria || l.categoria, raca: grupo.raca || l.raca, mesParicao: grupo.mesParicao || l.mesParicao,
+          categoria: grupo.categoria || l.categoria, raca: grupo.raca || l.raca, mesParicao: grupo.mesParicao || l.mesParicao, situacao: grupo.situacao || l.situacao || null,
         } : l);
         lotesAtualizados++;
         loteId = loteExistente.id;
@@ -1740,7 +1741,7 @@ export default function App() {
         loteId = uid("lot");
         const novoLote = {
           id: loteId, fazendaId: fazendaId, safraId, retiroId, nome: grupo.loteNome,
-          categoria: grupo.categoria, raca: grupo.raca, mesParicao: grupo.mesParicao, ordem: grupo.ordemMaisAvancada || ORDENS_IATF[0],
+          categoria: grupo.categoria, raca: grupo.raca, mesParicao: grupo.mesParicao, situacao: grupo.situacao || null, ordem: grupo.ordemMaisAvancada || ORDENS_IATF[0],
           numeroAnimais: grupo.animaisPorOrdem[grupo.ordemMaisAvancada || ORDENS_IATF[0]]?.size || grupo.animais.length, animais: grupo.animais,
         };
         lotesAtuais = [...lotesAtuais, novoLote];
@@ -1759,7 +1760,7 @@ export default function App() {
       const ordem = normalizarOrdemIATF(linha.ordem) || ORDENS_IATF[0];
       const chave = `${infoLote.loteId}|${ordem}|${linha.dataInseminacao}`;
       if (!gruposInsem.has(chave)) gruposInsem.set(chave, {
-        infoLote, ordem, data: linha.dataInseminacao, inseminador: null, tipoManejo: null, protocolo: null,
+        infoLote, ordem, data: linha.dataInseminacao, inseminador: null, tipoManejo: null, protocolo: null, protocoloPadrao: null,
         implanteId: null, implanteNome: null,
         benzoatoId: null, benzoatoNome: null, doseBenzoato: null,
         prostaglandinaId: null, prostaglandinaNome: null, doseProstaglandina: null,
@@ -1770,6 +1771,7 @@ export default function App() {
       if (!grupoInsem.inseminador && linha.inseminador?.trim()) grupoInsem.inseminador = linha.inseminador.trim();
       if (!grupoInsem.tipoManejo && linha.numeroManejos?.trim()) grupoInsem.tipoManejo = linha.numeroManejos.trim();
       if (!grupoInsem.protocolo && linha.duracaoProtocolo?.trim()) grupoInsem.protocolo = linha.duracaoProtocolo.trim();
+      if (!grupoInsem.protocoloPadrao && linha.protocoloPadrao?.trim()) grupoInsem.protocoloPadrao = linha.protocoloPadrao.trim();
       // protocolo hormonal do D0/Retirada: um valor só por lote+ordem+data (o mesmo protocolo
       // vale pro lote inteiro), não por animal — por isso só preenche na primeira linha que trouxer
       // cada campo, igual já acontecia com inseminador/tipoManejo/protocolo.
@@ -1795,6 +1797,7 @@ export default function App() {
         // animal dentro do mesmo lote/ordem/data (o campo do grupo acima é só uma reserva,
         // caso esse campo por animal não esteja presente num lote antigo).
         inseminador: linha.inseminador?.trim() || null,
+        demonstracaoCio: normalizarCioImport(linha.cio), avaliacaoOvariana: normalizarAvaliacaoImport(linha.avaliacaoOvariana),
       });
     });
     gruposInsem.forEach((grupo) => criarOuAtualizarManejo("inseminacao", grupo, grupo.animais));
@@ -3768,6 +3771,10 @@ const MAPA_COLUNAS_IMPORTACAO = {
   ordem: "ordem",
   numerodemanejos: "numeroManejos", numerodemanejo: "numeroManejos", numeromanejos: "numeroManejos",
   duracaodoprotocolo: "duracaoProtocolo", duracaodeprotocolo: "duracaoProtocolo", duracaoprotocolo: "duracaoProtocolo",
+  protocolopadrao: "protocoloPadrao", protocolodopadrao: "protocoloPadrao",
+  situacao: "situacao", situacaodamatriz: "situacao",
+  avaliacaoovariana: "avaliacaoOvariana", avaliacaoovarica: "avaliacaoOvariana",
+  cio: "cio", demonstracaodecio: "cio", demonstracaocio: "cio",
   implante: "implante",
   benzoato: "benzoato", dosebenzoato: "doseBenzoato",
   prostaglandina: "prostaglandina", doseprostaglandina: "doseProstaglandina",
@@ -3805,6 +3812,32 @@ const normalizarCategoria = (valor) => {
   if (limpo.startsWith("primipara")) return "Primípara";
   if (limpo.startsWith("multipara")) return "Multípara";
   return valor.trim(); // não reconhecida: mantém o que a pessoa digitou, sem inventar
+};
+// Situação da matriz: aceita Solteira(s)/Parida(s) (qualquer caixa/acento) ou S/P.
+const normalizarSituacaoImport = (valor) => {
+  if (!valor) return null;
+  const l = normalizarCabecalho(valor);
+  if (l === "s" || l.startsWith("solteir")) return "Solteiras";
+  if (l === "p" || l.startsWith("parid")) return "Paridas";
+  return null;
+};
+// Cio: Sim/Não ou S/N.
+const normalizarCioImport = (valor) => {
+  if (!valor) return null;
+  const l = normalizarCabecalho(valor);
+  if (l === "s" || l === "sim") return "Sim";
+  if (l === "n" || l === "nao") return "Não";
+  return null;
+};
+// Avaliação ovariana: Anestro/Corpo lúteo/Cisto/Folículo ou A/CL/C/F.
+const normalizarAvaliacaoImport = (valor) => {
+  if (!valor) return null;
+  const l = normalizarCabecalho(valor);
+  if (l === "a" || l.startsWith("anestro")) return "Anestro";
+  if (l === "cl" || l.startsWith("corpo")) return "Corpo lúteo";
+  if (l === "c" || l.startsWith("cisto")) return "Cisto";
+  if (l === "f" || l.startsWith("foliculo")) return "Folículo";
+  return null;
 };
 // mesma ideia pro Mês de parição — aceita "março"/"MARÇO"/"Marco" etc. e devolve a grafia
 // exata usada em NOMES_MES.
@@ -3924,8 +3957,8 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
 
   const baixarModelo = () => {
     const dadosModelo = [
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", Implante: "Sincrogest", Benzoato: "Bioestrogen", "Dose Benzoato": "2", Prostaglandina: "Ciosin", "Dose Prostaglandina": "2", Cipionato: "", "Dose Cipionato": "", "ECG/HCG": "Novormon", "Dose ECG/HCG": "1,5", GnRH: "", "Dose GnRH": "", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", Partida: "01/08/2023", "Raça do touro": "Angus", "ECC na Inseminação": "3,00", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
-      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", Implante: "Sincrogest", Benzoato: "Bioestrogen", "Dose Benzoato": "2", Prostaglandina: "Ciosin", "Dose Prostaglandina": "2", Cipionato: "", "Dose Cipionato": "", "ECG/HCG": "Novormon", "Dose ECG/HCG": "1,5", GnRH: "", "Dose GnRH": "", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", Partida: "01/08/2023", "Raça do touro": "Angus", "ECC na Inseminação": "3,25", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Situação: "Paridas", Brinco: "1234", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", "Protocolo padrão": "Padrão 9 dias", Implante: "Sincrogest", Benzoato: "Bioestrogen", "Dose Benzoato": "2", Prostaglandina: "Ciosin", "Dose Prostaglandina": "2", Cipionato: "", "Dose Cipionato": "", "ECG/HCG": "Novormon", "Dose ECG/HCG": "1,5", GnRH: "", "Dose GnRH": "", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", Partida: "01/08/2023", "Raça do touro": "Angus", "ECC na Inseminação": "3,00", "Avaliação ovariana": "CL", Cio: "Sim", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Prenha", "Tempo de gestação informado": "" },
+      { Safra: "2023/2024", Retiro: "Retiro 1", Lote: "Lote Antigo 01", Categoria: "Multípara", Situação: "Paridas", Brinco: "1235", Raça: "Nelore", "Mês de parição": "Março", Ordem: "1", "Número de manejos": "4 manejos", "Duração do protocolo": "9 dias", "Protocolo padrão": "Padrão 9 dias", Implante: "Sincrogest", Benzoato: "Bioestrogen", "Dose Benzoato": "2", Prostaglandina: "Ciosin", "Dose Prostaglandina": "2", Cipionato: "", "Dose Cipionato": "", "ECG/HCG": "Novormon", "Dose ECG/HCG": "1,5", GnRH: "", "Dose GnRH": "", "Data Inseminação": "15/09/2023", Touro: "Touro Zeus FIV", Partida: "01/08/2023", "Raça do touro": "Angus", "ECC na Inseminação": "3,25", "Avaliação ovariana": "F", Cio: "Não", Inseminador: "Carlos Andrade", "Data Diagnóstico": "15/10/2023", Resultado: "Vazia", "Tempo de gestação informado": "" },
     ];
     const ws = XLSX.utils.json_to_sheet(dadosModelo);
     const wb = XLSX.utils.book_new();
@@ -4033,6 +4066,10 @@ function AbaImportarHistorico({ fazendaAtiva, lotes, lotesTodos, manejosTodos, s
               Também é possível informar o <strong>protocolo hormonal</strong> usado (as colunas antes de Data Inseminação): <strong>Implante</strong>, <strong>Benzoato</strong> + <strong>Dose Benzoato</strong>, <strong>Prostaglandina</strong> + <strong>Dose Prostaglandina</strong>, <strong>Cipionato</strong> + <strong>Dose Cipionato</strong>,
               <strong> ECG/HCG</strong> + <strong>Dose ECG/HCG</strong> e <strong>GnRH</strong> + <strong>Dose GnRH</strong> — em cada coluna de produto, informe o mesmo nome do "Produto comercial" já cadastrado no Estoque. A importação de histórico <strong>nunca desconta estoque</strong>
               (nenhuma saída é gerada), mas esses produtos entram no cálculo de Custo dos Relatórios/Exportações, usando o valor unitário que estiver cadastrado hoje no estoque de cada um.
+            </p>
+            <p style={{ fontSize: 12.5, color: "#4A473E", lineHeight: 1.6, margin: "0 0 14px" }}>
+              Colunas opcionais extras: <strong>Situação</strong> (Solteiras ou Paridas, ou S / P — vale para o lote), <strong>Protocolo padrão</strong> (nome do protocolo usado),
+              <strong> Cio</strong> (Sim ou Não, ou S / N) e <strong>Avaliação ovariana</strong> (Anestro, Corpo lúteo, Cisto ou Folículo, ou A / CL / C / F). Cio e Avaliação ovariana são por animal e entram junto da linha de Inseminação (precisam de Data Inseminação).
             </p>
             <BtnGhost onClick={baixarModelo}><Download size={14} /> Baixar modelo de planilha</BtnGhost>
           </div>
@@ -4466,6 +4503,16 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const brincoInputRef = React.useRef(null);
   const [ecc, setEcc] = useState(OPCOES_ECC[1]);
   const [peso, setPeso] = useState("");
+  const [avaliacaoOvariana, setAvaliacaoOvariana] = useState(""); // opcional: Anestro | Corpo lúteo | Cisto | Folículo (aceita A, CL, C, F)
+  const normalizarAvaliacao = (v) => {
+    const t = String(v || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!t) return "";
+    if (t === "a" || t === "anestro") return "Anestro";
+    if (t === "cl" || t === "corpo luteo") return "Corpo lúteo";
+    if (t === "c" || t === "cisto") return "Cisto";
+    if (t === "f" || t === "foliculo") return "Folículo";
+    return null;
+  };
   const [medicamentos, setMedicamentos] = useState([]);
 
   const [msg, setMsg] = useState("");
@@ -4492,9 +4539,11 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
   const adicionarAnimal = () => {
     if (!brinco.trim().toUpperCase()) { setMsg("Leia o brinco do animal."); return; }
     if (animaisLidos.some((a) => a.brinco === brinco.trim().toUpperCase())) { setMsg("Este animal já foi lido."); return; }
+    const avalNorm = normalizarAvaliacao(avaliacaoOvariana);
+    if (avalNorm === null) { setMsg("Avaliação ovariana: digite Anestro, Corpo lúteo, Cisto ou Folículo (ou A, CL, C, F)."); return; }
     conferirAoLer();
-    setAnimaisLidos((a) => [...a, { brinco: brinco.trim().toUpperCase(), ecc, peso: peso.trim() || null }]);
-    setBrinco(""); setPeso(""); setMsg("");
+    setAnimaisLidos((a) => [...a, { brinco: brinco.trim().toUpperCase(), ecc, peso: peso.trim() || null, avaliacaoOvariana: avalNorm || null }]);
+    setBrinco(""); setPeso(""); setAvaliacaoOvariana(""); setMsg("");
   };
   const removerAnimal = (b) => setAnimaisLidos((a) => a.filter((x) => x.brinco !== b));
 
@@ -4988,7 +5037,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
 
             {comLeitura && (
               <div style={{ marginBottom: 14, background: "#FFFFFF", border: "1px solid #E5DFCC", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 0.8fr 1fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
                   <Field label="Identificação"><input ref={brincoInputRef} style={inputStyle} placeholder={novoNome.trim() ? "Ler brinco / QR ou digitar" : "Preencha o nome do lote antes"} value={brinco} disabled={!novoNome.trim()}
                     onChange={(e) => { if (avisoImediato) setAvisoImediato(null); setBrinco(e.target.value); }} onKeyDown={(e) => e.key === "Enter" && adicionarAnimal()} /></Field>
                   <Field label="ECC">
@@ -4997,6 +5046,13 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     </select>
                   </Field>
                   <Field label="Peso *"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
+                  <Field label="Avaliação ovariana">
+                    <input style={inputStyle} list="avaliacao-ovariana-opcoes" value={avaliacaoOvariana} placeholder="A / CL / C / F"
+                      onChange={(e) => setAvaliacaoOvariana(e.target.value)}
+                      onBlur={() => setAvaliacaoOvariana((v) => normalizarAvaliacao(v) ?? v)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adicionarAnimal(); } }} />
+                    <datalist id="avaliacao-ovariana-opcoes"><option value="Anestro" /><option value="Corpo lúteo" /><option value="Cisto" /><option value="Folículo" /></datalist>
+                  </Field>
                   <BtnPrimary onClick={adicionarAnimal} style={{ marginBottom: 14 }} disabled={!novoNome.trim()}>Registrar animal</BtnPrimary>
                   <BotaoCameraLeitura onLido={(texto) => { setBrinco(texto); brincoInputRef.current?.focus(); }} disabled={!novoNome.trim()} />
                 </div>
@@ -5015,13 +5071,14 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   <span style={{ fontSize: 12, color: "#9B9686" }}>Nenhum animal lido ainda.</span>
                 ) : (
                   <div className="rola-horizontal" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}><table style={{ minWidth: 520 }}>
-                    <thead><tr><th>Animal</th><th>ECC</th><th>Peso</th><th>Lote (já atribuído)</th><th></th></tr></thead>
+                    <thead><tr><th>Animal</th><th>ECC</th><th>Peso</th><th>Avaliação ovariana</th><th>Lote (já atribuído)</th><th></th></tr></thead>
                     <tbody>
                       {animaisLidos.map((a) => (
                         <tr key={a.brinco}>
                           <td><EarTag size="sm">{a.brinco}</EarTag></td>
                           <td>{a.ecc}</td>
                           <td>{a.peso ? `${a.peso} kg` : "—"}</td>
+                          <td>{a.avaliacaoOvariana || "—"}</td>
                           <td>{lotes.find((l) => (l.animais || []).includes(a.brinco))?.nome || "—"}</td>
                           <td><button onClick={() => window.confirm(`Remover o animal ${a.brinco} desta leitura?`) && removerAnimal(a.brinco)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D" }}><Trash2 size={13} /></button></td>
                         </tr>
@@ -9068,6 +9125,7 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro), partida: partidaDoSemen(detIns.semenId, detIns.partidaInformada),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
+        situacao: lotes.find((l) => l.id === insem.loteId)?.situacao || null,
         protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
         numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo || null,
         duracaoProtocolo: insem.protocolo || d0MaisRecente?.protocolo || null,
@@ -9324,6 +9382,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   const ORDEM_MESES_SAFRA = ["Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro", "Janeiro", "Fevereiro", "Março", "Abril"];
   const porMesParicao = agruparConcepcao(registros, (r) => r.mesParicao)
     .sort((a, b) => ORDEM_MESES_SAFRA.indexOf(a.label) - ORDEM_MESES_SAFRA.indexOf(b.label));
+  const porSituacao = agruparConcepcao(registros, (r) => r.situacao);
   const porProtocoloPadrao = agruparConcepcao(registros, (r) => r.protocoloPadrao);
   const porNumeroManejos = agruparConcepcao(registros, (r) => r.numeroManejos);
   const porDuracaoProtocolo = agruparConcepcao(registros, (r) => r.duracaoProtocolo);
@@ -9334,6 +9393,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     retiro: { label: "Retiro", dados: porRetiro, descricao: "Taxa de concepção por retiro." },
     ecc: { label: "ECC", dados: porEcc, descricao: "Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." },
     inseminador: { label: "Inseminador", dados: porInseminador, descricao: "Taxa de concepção por quem realizou a Inseminação." },
+    situacao: { label: "Situação", tituloCompleto: "Concepção por situação da matriz", dados: porSituacao, descricao: "Taxa de concepção por situação da matriz (Solteiras ou Paridas), informada no D0 do lote." },
     paricao: { label: "Parição", tituloCompleto: "Concepção por mês de parição", dados: porMesParicao, descricao: "Taxa de concepção por mês de parição do lote." },
   };
 
@@ -11121,7 +11181,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
   // (D0, Retirada, Inseminação, Diagnóstico) daquele lote naquela ordem específica.
   const SUBCOLUNAS_ORDEM = [
     "Data do D0", "Data da Inseminação", "Data do Diagnóstico", "Número de manejos", "Protocolo",
-    "Implante no D0", "Benzoato no D0", "Prostaglandina no D0", "Medicamentos no D0",
+    "Implante no D0", "Benzoato no D0", "Prostaglandina no D0", "Medicamentos no D0", "Avaliação ovariana",
     "Prostaglandina na Retirada", "Cipionato na Retirada", "ECG/HCG na Retirada",
     "Touro", "Partida", "ECC", "Cio", "Peso", "Observações", "Medicamentos na Inseminação", "Diagnóstico",
   ];
@@ -11168,6 +11228,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       benzoato ? `${benzoato} (${d0.doseBenzoato} mL)` : "—",
       prostaglandinaD0 ? `${prostaglandinaD0} (${d0.doseProstaglandina} mL)` : "—",
       d0 ? resumoMedicamentos(d0.medicamentos, insumos) : "—",
+      d0Separado?.detalhes?.find((d) => d.brinco === brinco)?.avaliacaoOvariana || detalheInsem?.avaliacaoOvariana || "—",
       prostaglandinaRet ? `${prostaglandinaRet} (${retirada.doseProstaglandina} mL)` : "—",
       cipionato ? `${cipionato} (${retirada.doseCipionato} mL)` : "—",
       ecgHcg ? `${ecgHcg} (${retirada.doseEcgHcg} mL)` : "—",
@@ -11434,8 +11495,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
 
     const opcoesTabela = {
       margin: { left: margemEsq, right: margemEsq },
-      styles: { fontSize: 8, cellPadding: 3, halign: "center", fillColor: [255, 255, 255] },
-      headStyles: { fillColor: [22, 99, 54], textColor: 255, fontStyle: "bold", halign: "center" },
+      styles: { fontSize: 8, cellPadding: 3, halign: "center", valign: "middle", fillColor: [255, 255, 255] },
+      headStyles: { fillColor: [22, 99, 54], textColor: 255, fontStyle: "bold", halign: "center", valign: "middle" },
       alternateRowStyles: { fillColor: [255, 255, 255] },
     };
     // gera um columnStyles com a MESMA largura pra todas as N colunas da tabela (a largura
@@ -11563,7 +11624,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposResumo),
-      head: [["Categoria", "Animais", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Categoria", "Animais", "Ordem", "ECC médio", "IATFs", "DGs", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº de IATFs por matriz", "Custo por animal", "Custo por IATF", "Custo por prenhez"]],
       body: mesclarColunasPDF(linhasResumo, gruposResumo, [0, 1, 9, 10, 11, 12, 13, 14, 15]),
     });
     y = doc.lastAutoTable.finalY + 20;
@@ -11604,7 +11665,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRetiro),
-      head: [["Retiro", "Categoria", "Animais", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Retiro", "Categoria", "Animais", "Ordem", "ECC médio", "IATFs", "DGs", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº de IATFs por matriz", "Custo por animal", "Custo por IATF", "Custo por prenhez"]],
       body: mesclarColunasPDFMultiNivel(linhasRetiro, [
         { tamanhos: gruposRetiro, indices: [0, 10, 11, 12, 13, 14, 15, 16] },
         { tamanhos: gruposCategoriaRetiro, indices: [1, 2] },
@@ -11651,7 +11712,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposMesPDF),
-      head: [["Mês", "Categoria", "Animais", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Mês", "Categoria", "Animais", "Ordem", "ECC médio", "IATFs", "DGs", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº de IATFs por matriz", "Custo por animal", "Custo por IATF", "Custo por prenhez"]],
       body: mesclarColunasPDFMultiNivel(linhasMes, [
         { tamanhos: gruposMesPDF, indices: [0, 10, 11, 12, 13, 14, 15, 16] },
         { tamanhos: gruposCategoriaMes, indices: [1, 2] },
@@ -11691,7 +11752,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposLote),
-      head: [["Lote", "Categoria", "Animais", "Ordem", "ECC médio", "CIO", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº IATF/matriz", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Lote", "Categoria", "Animais", "Ordem", "ECC médio", "CIO", "IATFs", "DGs", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Prenhez Geral", "Nº de IATFs por matriz", "Custo por animal", "Custo por IATF", "Custo por prenhez"]],
       body: mesclarColunasPDF(linhasLote, gruposLote, [0, 1, 2, 11, 12, 13, 14, 15, 16, 17]),
     });
     y = doc.lastAutoTable.finalY + 20;
@@ -11728,7 +11789,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposInseminador),
-      head: [["Inseminador", "Categoria", "Ordem", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Custo/animal", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Inseminador", "Categoria", "Ordem", "ECC médio", "IATFs", "DGs", "Prenhas", "Vazias", "Concepção", "Concepção Média por IATF", "Prenhez por IATF", "Custo por animal", "Custo por IATF", "Custo por prenhez"]],
       body: mesclarColunasPDFMultiNivel(linhasInseminador, [
         { tamanhos: gruposInseminador, indices: [0, 9, 10, 11, 12, 13] },
         { tamanhos: gruposCategoriaIns, indices: [1] },
@@ -11762,7 +11823,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposRaca),
-      head: [["Raça", "Touro", "ECC médio", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Raça", "Touro", "ECC médio", "IATFs", "DGs", "Prenhas", "Vazias", "Concepção", "Custo por IATF", "Custo por prenhez"]],
       body: mesclarColunasPDF(linhasRaca, gruposRaca, [0]),
       columnStyles: colunasIguais(10),
     });
@@ -11791,7 +11852,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     autoTable(doc, {
       ...opcoesTabela, startY: y,
       ...separadoresDeGrupo(gruposEcc),
-      head: [["Categoria", "ECC", "Inseminações", "Diagnósticos", "Prenhas", "Vazias", "Concepção", "Custo/insem.", "Custo/prenhez"]],
+      head: [["Categoria", "ECC", "IATFs", "DGs", "Prenhas", "Vazias", "Concepção", "Custo por IATF", "Custo por prenhez"]],
       body: mesclarColunasPDF(linhasEcc, gruposEcc, [0]),
       columnStyles: colunasIguais(9),
     });
