@@ -1802,6 +1802,25 @@ export default function App() {
     });
     gruposInsem.forEach((grupo) => criarOuAtualizarManejo("inseminacao", grupo, grupo.animais));
 
+    // protocolo padrão informado na planilha vira um protocolo padrão cadastrado da fazenda (se o nome
+    // ainda não existir), com os hormônios/doses da própria planilha — assim aparece na lista do D0/Ressinc.
+    const novosProtocolos = [];
+    gruposInsem.forEach((g) => {
+      const nome = (g.protocoloPadrao || "").trim();
+      if (!nome) return;
+      const jaExiste = protocolosPadrao.some((x) => x.fazendaId === fazendaId && x.manejo === "d0" && x.nome.trim().toLowerCase() === nome.toLowerCase())
+        || novosProtocolos.some((x) => x.nome.trim().toLowerCase() === nome.toLowerCase());
+      if (jaExiste) return;
+      novosProtocolos.push({
+        id: uid("prot"), fazendaId, manejo: "d0", nome,
+        tipoManejo: g.tipoManejo || null, protocolo: g.protocolo || null,
+        implanteId: g.implanteId || null, benzoatoId: g.benzoatoId || null, doseBenzoato: g.doseBenzoato ?? null,
+        prostaglandinaId: g.prostaglandinaId || null, doseProstaglandina: g.doseProstaglandina ?? null,
+        gnrhId: null, doseGnrh: null, criadoEm: new Date().toISOString(),
+      });
+    });
+    if (novosProtocolos.length > 0) setProtocolosPadrao((a) => [...a, ...novosProtocolos]);
+
     // 3) mesma coisa para Diagnóstico
     const gruposDiag = new Map();
     linhas.forEach((linha) => {
@@ -9313,8 +9332,8 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
   const movimentos = usaFiltroAdmin ? movimentosTodos.filter((m) => m.fazendaId === filtroFazendaId) : movimentosAtivosProp;
 
   const [visaoData, setVisaoData] = useState("dia"); // "dia" | "mes"
-  const [visaoBarra, setVisaoBarra] = useState("ordem"); // "ordem" | "categoria" | "retiro" | "ecc" | "inseminador" | "paricao"
-  const [visaoProtocolo, setVisaoProtocolo] = useState("protocolo"); // "protocolo" | "manejos" | "duracao"
+  const [visaoBarra, setVisaoBarra] = useState("ordem"); // "ordem" | "categoria" | "retiro" | "ecc" | "situacao" | "paricao"
+  const [visaoProtocolo, setVisaoProtocolo] = useState("protocolo"); // "inseminador" | "protocolo" | "manejos" | "duracao"
   const [visaoResumo, setVisaoResumo] = useState("animais"); // "animais" | "inseminacoes" | "prenhas"
   const [visaoGeral, setVisaoGeral] = useState("concepcao"); // "concepcao" | "fertilidade"
   const [visaoCusto, setVisaoCusto] = useState("animal"); // "animal" | "inseminacao" | "prenhez"
@@ -9392,12 +9411,12 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     categoria: { label: "Categoria", dados: porCategoria, descricao: "Taxa de concepção por categoria do lote no momento da Inseminação." },
     retiro: { label: "Retiro", dados: porRetiro, descricao: "Taxa de concepção por retiro." },
     ecc: { label: "ECC", dados: porEcc, descricao: "Taxa de concepção conforme o Escore de Condição Corporal registrado na Inseminação." },
-    inseminador: { label: "Inseminador", dados: porInseminador, descricao: "Taxa de concepção por quem realizou a Inseminação." },
     situacao: { label: "Situação", tituloCompleto: "Concepção por situação da matriz", dados: porSituacao, descricao: "Taxa de concepção por situação da matriz (Solteiras ou Paridas), informada no D0 do lote." },
     paricao: { label: "Parição", tituloCompleto: "Concepção por mês de parição", dados: porMesParicao, descricao: "Taxa de concepção por mês de parição do lote." },
   };
 
   const OPCOES_PROTOCOLO_CONCEPCAO = {
+    inseminador: { label: "Inseminador", dados: porInseminador, descricao: "Taxa de concepção por quem realizou a Inseminação." },
     protocolo: { label: "Protocolo", dados: porProtocoloPadrao, descricao: "Taxa de concepção por protocolo padrão usado no D0/Ressinc." },
     manejos: { label: "Manejos", dados: porNumeroManejos, descricao: "Taxa de concepção pelo número de manejos do protocolo (3 ou 4 manejos)." },
     duracao: { label: "Duração", dados: porDuracaoProtocolo, descricao: "Taxa de concepção pela duração do protocolo usado no D0/Ressinc." },
