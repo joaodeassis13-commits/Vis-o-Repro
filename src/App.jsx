@@ -1469,6 +1469,15 @@ export default function App() {
   // nas visões multi-fazenda do Administrador/Suporte Adm e no Benchmarking), só que sem os
   // excluídos — a exclusão branda não deve aparecer em relatório, exportação nem benchmarking.
   const manejosSemExcluidos = useMemo(() => manejos.filter((m) => !m.excluido), [manejos]);
+  // O Diagnóstico Final entra nos relatórios e exportações, mas NÃO no Benchmarking: tira dos manejos
+  // o registro "diagnostico_final" e os animais que vieram dele dentro dos diagnósticos.
+  const manejosParaBenchmarking = useMemo(() => manejosSemExcluidos
+    .filter((m) => m.tipo !== "diagnostico_final")
+    .map((m) => (m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse") && (m.detalhes || []).some((d) => d.dgFinal)
+      ? { ...m, detalhes: m.detalhes.filter((d) => !d.dgFinal), animaisLidos: (m.animaisLidos || []).filter((b) => !m.detalhes.some((d) => d.dgFinal && d.brinco === b)) }
+      : m)
+    .filter((m) => !((m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse") && (m.detalhes || []).length === 0 && manejosSemExcluidos.find((o) => o.id === m.id)?.detalhes?.some((d) => d.dgFinal))),
+  [manejosSemExcluidos]);
   const movimentosAtivos = useMemo(
     () => movimentos.filter((m) => m.local === "externo" ? insumos.find((i) => i.id === m.insumoId)?.usuarioId === currentUser?.id : m.fazendaId === fazendaAtivaId),
     [movimentos, fazendaAtivaId, insumos, currentUser]
@@ -2323,6 +2332,67 @@ export default function App() {
 
     gerarPreAgendamentos(manejoCompleto);
     return id;
+  };
+
+  // Diagnóstico Final: grava (1) um manejo "diagnostico_final" por lote com todos os animais (base do futuro
+  // relatório de perdas e reconcepção) e (2) para animais SEM DG anterior, o resultado também vira o DG da
+  // inseminação (entra nos relatórios/exportações; prenhez por Repasse conta como vazia na inseminação e
+  // como prenha de repasse). Não gera agendamentos nem mexe no estoque.
+  const registrarDiagnosticosFinais = (registrosDG) => {
+    if (safraAtivaBloqueada) { avisarSafraBloqueada(); return false; }
+    if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return false; }
+    const agora = new Date().toISOString();
+    const hoje = todayISO();
+    let lista = manejos;
+    const novos = [];
+    const porLote = {};
+    registrosDG.filter((r) => r.loteId && (r.dgFinal === "Prenha" || r.dgFinal === "Vazia")).forEach((r) => { (porLote[r.loteId] = porLote[r.loteId] || []).push(r); });
+    Object.entries(porLote).forEach(([loteId, regs]) => {
+      const lote = lotes.find((l) => l.id === loteId);
+      const base = {
+        fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, loteId, loteNome: lote?.nome || "", retiroId: lote?.retiroId || null,
+        categoria: lote?.categoria || null, operador: currentUser.nome, criadoEm: agora, atualizadoEm: agora,
+      };
+      novos.push({
+        ...base, id: uid("man"), tipo: "diagnostico_final", data: hoje, ordem: null, numeroAnimais: regs.length,
+        animaisLidos: regs.map((r) => r.brinco),
+        detalhes: regs.map((r) => ({
+          brinco: r.brinco, resultado: r.dgFinal, diagAnterior: r.diagAnterior || null, perda: r.perda && r.perda !== "—" ? r.perda : null,
+          origemPrenhez: r.origem && r.origem !== "—" ? r.origem : null, tempoCalculado: r.tempoCalculado ?? null, tempoInformado: r.tempoInformado ?? null,
+          tempoGestacao: r.dgFinal === "Prenha" ? (r.tempoEfetivo ?? null) : null, touro: r.touroDaPrenhez || null, racaPrenhez: r.racaDaPrenhez || null,
+          ordemInsem: r.ordemInsem || null,
+        })),
+      });
+      // sem DG anterior: o DG Final serve de DG da inseminação
+      const porOrdem = {};
+      regs.filter((r) => !r.diagAnterior && r.ordemInsem).forEach((r) => { (porOrdem[r.ordemInsem] = porOrdem[r.ordemInsem] || []).push(r); });
+      Object.entries(porOrdem).forEach(([ordem, rs]) => {
+        const detalhesNovos = rs.map((r) => {
+          const prenhaInsem = r.dgFinal === "Prenha" && r.origem === "Inseminação";
+          return { brinco: r.brinco, resultado: prenhaInsem ? "Prenha" : "Vazia", dgFinal: true, ...(prenhaInsem ? { tempoGestacao: r.tempoEfetivo ?? null, origemPrenhez: "Inseminação" } : {}) };
+        });
+        const existentes = lista.filter((m) => !m.excluido && m.tipo === "diagnostico" && m.loteId === loteId && m.ordem === ordem && m.fazendaId === fazendaAtivaId)
+          .sort((x, y) => (x.data < y.data ? 1 : -1));
+        if (existentes.length > 0) {
+          const alvo = existentes[0];
+          const ja = new Set((alvo.detalhes || []).map((d) => d.brinco));
+          const adicionar = detalhesNovos.filter((d) => !ja.has(d.brinco));
+          lista = lista.map((m) => m.id === alvo.id ? { ...m, detalhes: [...(m.detalhes || []), ...adicionar], animaisLidos: [...(m.animaisLidos || []), ...adicionar.map((d) => d.brinco)], atualizadoEm: agora } : m);
+        } else {
+          novos.push({ ...base, id: uid("man"), tipo: "diagnostico", data: hoje, ordem, numeroAnimais: detalhesNovos.length, animaisLidos: detalhesNovos.map((d) => d.brinco), detalhes: detalhesNovos });
+        }
+      });
+      // prenhez por Repasse (sem DG anterior): conta como prenha de repasse
+      const repassePrenhas = regs.filter((r) => !r.diagAnterior && r.dgFinal === "Prenha" && r.origem === "Repasse");
+      if (repassePrenhas.length > 0) {
+        const det = repassePrenhas.map((r) => ({ brinco: r.brinco, resultado: "Prenha", origemPrenhez: "Repasse", tempoGestacao: r.tempoEfetivo ?? null, dgFinal: true }));
+        novos.push({ ...base, id: uid("man"), tipo: "diagnostico_repasse", data: hoje, ordem: null, numeroAnimais: det.length, animaisLidos: det.map((d) => d.brinco), detalhes: det });
+      }
+    });
+    if (novos.length === 0) return false;
+    setManejos([...novos, ...lista]);
+    marcaPendencia();
+    return true;
   };
 
   const atualizarManejo = (id, campos) => {
@@ -3239,7 +3309,7 @@ export default function App() {
               sugestoesRepasse={sugestoesRepasseAtivas} descartarSugestaoRepasse={descartarSugestaoRepasse} removerSugestaoRepasse={removerSugestaoRepasse} />
           </div>
           <div style={{ display: section === "manejo" && sub === "diagnostico_final" ? "block" : "none" }}>
-            <AbaDiagnosticoFinal fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos}
+            <AbaDiagnosticoFinal fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} registrarDiagnosticosFinais={registrarDiagnosticosFinais}
               rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} />
           </div>
 
@@ -3271,7 +3341,7 @@ export default function App() {
             <AbaAuditoria fazendaAtiva={fazendaAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} manejos={manejosAtivos} manejosExcluidos={manejosExcluidos} atribuirHistoricoAnimal={atribuirHistoricoAnimal} />
           </div>
           <div style={{ display: section === "benchmarking" ? "block" : "none" }}>
-            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejosSemExcluidos} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
+            <AbaBenchmarking fazendaAtiva={fazendaAtiva} fazendaAtivaId={fazendaAtivaId} manejosDoGrupo={manejosParaBenchmarking} lotesDoGrupo={lotes} safraAtiva={safraAtiva} safras={safras}
               perfil={currentUser.perfil} fazendasVisiveis={fazendasVisiveisLicenciadas} />
           </div>
           <div style={{ display: section === "exportacoes" && currentUser?.perfil !== "Supervisor" ? "block" : "none" }}>
@@ -7372,7 +7442,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
    nenhum manejo novo, só consolida o que já está no sistema).
 ========================================================= */
 
-function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, manejos, rascunhos, salvarRascunho, limparRascunho }) {
+function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, manejos, registrarDiagnosticosFinais, rascunhos, salvarRascunho, limparRascunho }) {
   const [brinco, setBrinco] = useState("");
   const [dgFinalInput, setDgFinalInput] = useState("");
   const [tempoInformadoInput, setTempoInformadoInput] = useState("");
@@ -7397,6 +7467,14 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
     setMsg("Progresso salvo. Você pode continuar depois.");
   };
   const rotuloAutoSalvo = useAutoSalvarRascunho({ ativo: registros.length > 0, chave: chaveRascunho, dados: { registros }, salvarRascunho });
+  const gravarTudo = () => {
+    if (registros.length === 0) { setMsg("Registre ao menos um animal antes de gravar."); return; }
+    if (!window.confirm(`Gravar o Diagnóstico Final de ${registros.length} animal(is)? Os resultados passam a valer nos relatórios e exportações.`)) return;
+    const ok = registrarDiagnosticosFinais(registros);
+    if (!ok) { setMsg("Não foi possível gravar (verifique a safra/fazenda ativa)."); return; }
+    setRegistros([]); limparRascunho(chaveRascunho);
+    setMsg("Diagnóstico Final gravado — salvo nos relatórios e exportações.");
+  };
   const limparTudo = () => { setRegistros([]); limparRascunho(chaveRascunho); setMsg(""); };
 
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || "—";
@@ -7410,22 +7488,91 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
   const diasEntre = (dataA, dataB) => Math.round((parseISODate(dataB) - parseISODate(dataA)) / 86400000);
 
   const dgFinalResolvido = resolverDG(dgFinalInput);
-  // quando o Resultado for Prenha, pré-preenche o Tempo de gestação informado com o valor já
-  // calculado a partir do histórico (mesmo padrão da aba Diagnóstico) — a pessoa ainda pode
-  // digitar um valor diferente depois, se o tempo real não bater com o esperado.
+
+  // Monta o histórico do animal NA SAFRA: DGs anteriores (inclui os de Repasse), última inseminação
+  // (data, touro e raça) e raça do último Repasse do lote.
+  const montarConsulta = (b) => {
+    const lote = lotes.find((l) => (l.animais || []).includes(b));
+    if (!lote) return null;
+    const porData = (x, y) => (x.m.data < y.m.data ? -1 : x.m.data > y.m.data ? 1 : 0);
+    const porOrdem = ORDENS_IATF.map((ordem) => {
+      const insem = buscarManejoLoteOrdem(["inseminacao"], lote.id, ordem);
+      const diag = buscarManejoLoteOrdem(["diagnostico"], lote.id, ordem);
+      const detalheInsem = insem?.detalhes?.find((d) => d.brinco === b) || null;
+      const detalheDiag = diag?.detalhes?.find((d) => d.brinco === b) || null;
+      return {
+        data: detalheInsem && insem ? fmtDate(insem.data) : "—",
+        dataISO: detalheInsem && insem ? insem.data : null,
+        dg: detalheDiag?.resultado || "—",
+      };
+    });
+    const diagsAnt = manejos
+      .filter((m) => (m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse" || m.tipo === "diagnostico_final") && m.loteId === lote.id)
+      .map((m) => ({ m, d: (m.detalhes || []).find((x) => x.brinco === b) }))
+      .filter((x) => x.d?.resultado).sort(porData);
+    const diagAnterior = diagsAnt.length > 0 ? diagsAnt[diagsAnt.length - 1].d.resultado : null;
+    const insems = manejos
+      .filter((m) => m.tipo === "inseminacao" && m.loteId === lote.id)
+      .map((m) => ({ m, d: (m.detalhes || []).find((x) => x.brinco === b) }))
+      .filter((x) => x.d).sort(porData);
+    const ult = insems.length > 0 ? insems[insems.length - 1] : null;
+    const semen = ult ? insumos.find((i) => i.id === ult.d.semenId) : null;
+    const repasses = manejos.filter((m) => m.tipo === "repasse" && m.loteId === lote.id)
+      .map((m) => ({ m })).sort(porData);
+    const racaRepasse = repasses.length > 0 ? (repasses[repasses.length - 1].m.racaTouro || null) : null;
+    // o tempo calculado (base: data da ÚLTIMA inseminação) só existe quando não há DG anterior ou o anterior foi Prenha;
+    // com DG anterior Vazia o tempo é informado manualmente, sem base de cálculo.
+    const tempoCalculado = ult && diagAnterior !== "Vazia" ? diasEntre(ult.m.data, todayISO()) : null;
+    return {
+      brinco: b, loteId: lote.id, ordemInsem: ult?.m.ordem || null, categoria: lote.categoria || "—", loteNome: lote.nome, retiroNome: nomeRetiro(lote.retiroId), porOrdem,
+      diagAnterior, tempoCalculado,
+      touroInsem: ult ? (semen?.touro || ult.d.touroInformado || null) : null,
+      racaInsem: ult ? (ult.d.racaTouro || semen?.raca || null) : null,
+      racaRepasse,
+    };
+  };
+
+  // Regras do Diagnóstico Final (ver tabelas): origem da prenhez, touro/raça, perda e reconcepção.
+  const classificar = (c, dgFinal, tempoInformado) => {
+    const r = { origem: "—", touro: null, raca: null, perda: "—", obs: "—", tempoEfetivo: null };
+    if (!c || !dgFinal) return r;
+    const temAnt = c.diagAnterior != null;
+    const antPrenha = c.diagAnterior === "Prenha";
+    const informado = tempoInformado != null && !Number.isNaN(tempoInformado) ? tempoInformado : null;
+    r.tempoEfetivo = informado != null ? informado : c.tempoCalculado;
+    if (dgFinal === "Prenha") {
+      const manual = c.tempoCalculado == null;
+      r.origem = (manual || (r.tempoEfetivo != null && r.tempoEfetivo < c.tempoCalculado)) ? "Repasse" : "Inseminação";
+      if (r.origem === "Inseminação") { r.touro = c.touroInsem; r.raca = c.racaInsem; } else { r.raca = c.racaRepasse; }
+    }
+    if (antPrenha) {
+      if (dgFinal === "Vazia") r.perda = "Perda";
+      else if (r.origem === "Repasse") r.perda = "Perda e reconcepção";
+    }
+    if (!temAnt) {
+      if (dgFinal === "Prenha" && r.origem === "Inseminação") r.obs = "Registrar o DG da inseminação como Prenha (touro e raça pela inseminação) e incluir na concepção da inseminação como prenha.";
+      else if (dgFinal === "Prenha") r.obs = "Registrar o DG da inseminação como Vazia e a prenhez como Repasse (raça pelos touros de repasse).";
+      else r.obs = "Registrar o DG da inseminação como Vazia (entra na concepção como vazia)."
+    } else if (antPrenha) {
+      if (dgFinal === "Prenha" && r.origem === "Inseminação") r.obs = "Manter a prenhez da inseminação (touro e raça pela inseminação). Sem perda de prenhez.";
+      else if (dgFinal === "Prenha") r.obs = "Registrar perda de prenhez e reconcepção (raça pelos touros de repasse).";
+      else r.obs = "Registrar perda de prenhez.";
+    } else if (dgFinal === "Prenha") {
+      r.obs = "Registrar prenhez por Repasse (raça pelos touros de repasse).";
+    }
+    return r;
+  };
+
+  // pré-preenche o Tempo informado com o calculado (quando existe) assim que o Resultado for Prenha
   React.useEffect(() => {
     if (dgFinalResolvido === "Prenha" && consultaAtual?.tempoCalculado != null) {
       setTempoInformadoInput(String(consultaAtual.tempoCalculado));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dgFinalResolvido, consultaAtual]);
-  // Origem da prenhez ao vivo: segue a mesma regra usada ao registrar (compara o tempo
-  // informado com o tempo calculado a partir do histórico), em vez do valor histórico fixo.
   const tempoInformadoNumAtual = tempoInformadoInput.trim() !== "" ? numBR(tempoInformadoInput) : null;
-  const tempoEfetivoAtual = tempoInformadoNumAtual != null && !Number.isNaN(tempoInformadoNumAtual) ? tempoInformadoNumAtual : consultaAtual?.tempoCalculado;
-  const origemPrenhezAtual = (dgFinalResolvido === "Prenha" && consultaAtual?.tempoCalculado != null && tempoEfetivoAtual != null)
-    ? (tempoEfetivoAtual < consultaAtual.tempoCalculado ? "Repasse" : "Inseminação")
-    : null;
+  const classAtual = classificar(consultaAtual, dgFinalResolvido, tempoInformadoNumAtual);
+  const origemPrenhezAtual = classAtual.origem !== "—" ? classAtual.origem : null;
 
   const limparCampos = () => {
     setBrinco(""); setDgFinalInput(""); setTempoInformadoInput(""); setConsultaAtual(null); setMsg("");
@@ -7437,36 +7584,9 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
     const b = brinco.trim().toUpperCase();
     if (!b) { setMsg("Leia o brinco do animal."); return; }
     if (registros.some((r) => r.brinco === b)) { setMsg("Este animal já foi registrado nesta sessão."); return; }
-
-    const lote = lotes.find((l) => (l.animais || []).includes(b));
-    if (!lote) { setMsg("Animal não encontrado em nenhum lote."); return; }
-
-    const porOrdem = ORDENS_IATF.map((ordem) => {
-      const insem = buscarManejoLoteOrdem(["inseminacao"], lote.id, ordem);
-      const diag = buscarManejoLoteOrdem(["diagnostico"], lote.id, ordem);
-      const detalheInsem = insem?.detalhes?.find((d) => d.brinco === b) || null;
-      const detalheDiag = diag?.detalhes?.find((d) => d.brinco === b) || null;
-      const semenInsumo = detalheInsem ? insumos.find((i) => i.id === detalheInsem.semenId) : null;
-      return {
-        data: detalheInsem && insem ? fmtDate(insem.data) : "—",
-        dataISO: detalheInsem && insem ? insem.data : null,
-        dg: detalheDiag?.resultado || "—",
-        touro: semenInsumo?.touro || detalheInsem?.touroInformado || null,
-        origemPrenhez: detalheDiag?.origemPrenhez || null,
-      };
-    });
-
-    // a prenhez "de origem" é a primeira ordem em que o animal já foi diagnosticado como Prenha
-    const ordemPrenha = porOrdem.find((o) => o.dg === "Prenha") || null;
-    const hoje = todayISO();
-    const tempoCalculado = ordemPrenha?.dataISO ? diasEntre(ordemPrenha.dataISO, hoje) : null;
-    const touroDaPrenhez = ordemPrenha?.touro || null;
-    const origemDaPrenhez = ordemPrenha?.origemPrenhez || null;
-
-    setConsultaAtual({
-      brinco: b, categoria: lote.categoria || "—", loteNome: lote.nome, retiroNome: nomeRetiro(lote.retiroId), porOrdem,
-      tempoCalculado, touroDaPrenhez, origemDaPrenhez,
-    });
+    const consulta = montarConsulta(b);
+    if (!consulta) { setMsg("Animal não encontrado em nenhum lote."); return; }
+    setConsultaAtual(consulta);
     setMsg("");
     dgFinalInputRef.current?.focus();
   };
@@ -7476,13 +7596,11 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
     if (!consultaAtual) { setMsg("Leia um animal antes de registrar."); return; }
     const dgFinal = resolverDG(dgFinalInput);
     const tempoInformadoNum = tempoInformadoInput.trim() !== "" ? numBR(tempoInformadoInput) : null;
-    const tempoEfetivo = tempoInformadoNum != null && !Number.isNaN(tempoInformadoNum) ? tempoInformadoNum : consultaAtual.tempoCalculado;
-    let origem = "—";
-    if (consultaAtual.tempoCalculado != null && tempoEfetivo != null) {
-      origem = tempoEfetivo < consultaAtual.tempoCalculado ? "Repasse" : "Inseminação";
-    }
+    const cl = classificar(consultaAtual, dgFinal, tempoInformadoNum);
+    if (dgFinal === "Prenha" && cl.tempoEfetivo == null) { setMsg("Informe o tempo de gestação (não há inseminação como base de cálculo)."); tempoInformadoInputRef.current?.focus(); return; }
     setRegistros((a) => [...a, {
-      ...consultaAtual, dgFinal: dgFinal || "—", tempoInformado: tempoInformadoNum, tempoEfetivo, origem,
+      ...consultaAtual, dgFinal: dgFinal || "—", tempoInformado: tempoInformadoNum, tempoEfetivo: cl.tempoEfetivo,
+      origem: cl.origem, touroDaPrenhez: cl.touro, racaDaPrenhez: cl.raca, perda: cl.perda, obs: cl.obs,
     }]);
     limparCampos();
   };
@@ -7492,34 +7610,20 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
   const editarRegistro = (r) => {
     setRegistros((a) => a.filter((x) => x.brinco !== r.brinco));
     const b = r.brinco;
-    const lote = lotes.find((l) => (l.animais || []).includes(b));
-    if (!lote) { setBrinco(b); setMsg("Animal não encontrado em nenhum lote."); return; }
-    const porOrdem = ORDENS_IATF.map((ordem) => {
-      const insem = buscarManejoLoteOrdem(["inseminacao"], lote.id, ordem);
-      const diag = buscarManejoLoteOrdem(["diagnostico"], lote.id, ordem);
-      const detalheInsem = insem?.detalhes?.find((d) => d.brinco === b) || null;
-      const detalheDiag = diag?.detalhes?.find((d) => d.brinco === b) || null;
-      const semenInsumo = detalheInsem ? insumos.find((i) => i.id === detalheInsem.semenId) : null;
-      return {
-        data: detalheInsem && insem ? fmtDate(insem.data) : "—",
-        dataISO: detalheInsem && insem ? insem.data : null,
-        dg: detalheDiag?.resultado || "—",
-        touro: semenInsumo?.touro || detalheInsem?.touroInformado || null,
-        origemPrenhez: detalheDiag?.origemPrenhez || null,
-      };
-    });
-    const ordemPrenha = porOrdem.find((o) => o.dg === "Prenha") || null;
-    const hoje = todayISO();
-    setConsultaAtual({
-      brinco: b, categoria: lote.categoria || "—", loteNome: lote.nome, retiroNome: nomeRetiro(lote.retiroId), porOrdem,
-      tempoCalculado: ordemPrenha?.dataISO ? diasEntre(ordemPrenha.dataISO, hoje) : null,
-      touroDaPrenhez: ordemPrenha?.touro || null, origemDaPrenhez: ordemPrenha?.origemPrenhez || null,
-    });
+    const consulta = montarConsulta(b);
+    if (!consulta) { setBrinco(b); setMsg("Animal não encontrado em nenhum lote."); return; }
+    setConsultaAtual(consulta);
     setBrinco(b);
     setDgFinalInput(r.dgFinal === "Prenha" ? "P" : r.dgFinal === "Vazia" ? "V" : "");
     setTempoInformadoInput(r.tempoInformado != null ? String(r.tempoInformado) : "");
     setMsg("");
   };
+
+  // estatísticas da sessão: perda de prenhez e reconcepção (só animais cujo DG anterior foi Prenha)
+  const comAntPrenha = registros.filter((r) => r.diagAnterior === "Prenha" && r.dgFinal !== "—");
+  const nPerdas = comAntPrenha.filter((r) => r.perda === "Perda" || r.perda === "Perda e reconcepção").length;
+  const nReconcepcoes = comAntPrenha.filter((r) => r.perda === "Perda e reconcepção").length;
+  const pct = (a, b2) => (b2 > 0 ? `${((a / b2) * 100).toFixed(1).replace(".", ",")}%` : "—");
 
   const remover = (b) => setRegistros((a) => a.filter((r) => r.brinco !== b));
 
@@ -7577,17 +7681,22 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                       <div><strong>DG {ORDENS_IATF[i]}:</strong> <span style={{ color: o.dg === "Prenha" ? "#166336" : o.dg === "Vazia" ? "#166336" : "#6B685E", fontWeight: o.dg !== "—" ? 600 : 400 }}>{o.dg}</span></div>
                     </React.Fragment>
                   ))}
-                  <div><strong>Tempo de gestação calculado:</strong> {consultaAtual.tempoCalculado != null ? `${consultaAtual.tempoCalculado} dia(s)` : "—"}</div>
-                  <div><strong>Touro da prenhez:</strong> {consultaAtual.touroDaPrenhez || "—"}</div>
+                  <div><strong>DG anterior (safra):</strong> {consultaAtual.diagAnterior || "Nenhum"}</div>
+                  <div><strong>Tempo de gestação calculado:</strong> {consultaAtual.tempoCalculado != null ? `${consultaAtual.tempoCalculado} dia(s)` : "— (informar manualmente)"}</div>
+                  <div><strong>Touro da prenhez:</strong> {classAtual.touro || "—"}</div>
+                  <div><strong>Raça da prenhez:</strong> {classAtual.raca || "—"}</div>
                   <div><strong>Origem da prenhez:</strong> <span style={{ fontWeight: origemPrenhezAtual === "Repasse" ? 700 : 400, color: origemPrenhezAtual === "Repasse" ? "#166336" : "#4A473E" }}>{origemPrenhezAtual || "—"}</span></div>
+                  <div><strong>Perda / reconcepção:</strong> {classAtual.perda}</div>
                 </div>
+                {classAtual.obs !== "—" && <div style={{ marginTop: 10, fontSize: 12, color: "#6B685E" }}><strong>Ações:</strong> {classAtual.obs}</div>}
               </div>
             )}
 
-            <MensagemForm msg={msg} ok={msg.includes("salvo")} style={{ marginTop: 10 }} />
+            <MensagemForm msg={msg} ok={msg.includes("salvo") || msg.includes("gravado")} style={{ marginTop: 10 }} />
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <BtnGhost onClick={salvarProgresso}><Save size={14} /> Salvar</BtnGhost>
               {rotuloAutoSalvo && <span style={{ fontSize: 11, color: "#9B9686", alignSelf: "center" }}>{rotuloAutoSalvo}</span>}
+              {registros.length > 0 && <BtnPrimary onClick={gravarTudo}><Check size={14} /> Gravar Diagnóstico Final</BtnPrimary>}
               {registros.length > 0 && <BtnGhost danger onClick={limparTudo}>Limpar consulta</BtnGhost>}
             </div>
           </div>
@@ -7595,6 +7704,14 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
           {registros.length === 0 ? (
             <EmptyState text="Nenhum animal registrado nesta sessão ainda." />
           ) : (
+            <>
+            {comAntPrenha.length > 0 && (
+              <div style={{ ...cardStyle, marginBottom: 14, display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13, color: "#4A473E" }}>
+                <div><strong>Com DG anterior Prenha:</strong> {comAntPrenha.length}</div>
+                <div><strong>Perda de prenhez:</strong> {nPerdas} ({pct(nPerdas, comAntPrenha.length)})</div>
+                <div><strong>Reconcepção:</strong> {nReconcepcoes} ({pct(nReconcepcoes, nPerdas)} das perdas)</div>
+              </div>
+            )}
             <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}>
               <table>
                 <thead>
@@ -7610,10 +7727,14 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                     <th>Data 3º IATF</th>
                     <th>DG 3º IATF</th>
                     <th>Resultado</th>
+                    <th>DG anterior</th>
                     <th>Tempo de gestação calculado</th>
                     <th>Touro da prenhez</th>
+                    <th>Raça da prenhez</th>
                     <th>Tempo de gestação informado</th>
                     <th>Origem da prenhez</th>
+                    <th>Perda de prenhez e reconcepção</th>
+                    <th>Ações a serem tomadas</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -7631,10 +7752,14 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                         </React.Fragment>
                       ))}
                       <td style={{ color: r.dgFinal === "Prenha" ? "#166336" : r.dgFinal === "Vazia" ? "#166336" : "#6B685E", fontWeight: r.dgFinal !== "—" ? 600 : 400 }}>{r.dgFinal}</td>
+                      <td>{r.diagAnterior || "—"}</td>
                       <td>{r.tempoCalculado != null ? `${r.tempoCalculado} dia(s)` : "—"}</td>
                       <td>{r.touroDaPrenhez || "—"}</td>
+                      <td>{r.racaDaPrenhez || "—"}</td>
                       <td>{r.tempoInformado != null ? `${r.tempoInformado} dia(s)` : "—"}</td>
                       <td style={{ fontWeight: r.origem !== "—" ? 600 : 400, color: r.origem === "Repasse" ? "#166336" : r.origem === "Inseminação" ? "#166336" : "#6B685E" }}>{r.origem}</td>
+                      <td style={{ fontWeight: r.perda !== "—" ? 600 : 400 }}>{r.perda || "—"}</td>
+                      <td style={{ minWidth: 260, fontSize: 12, whiteSpace: "normal" }}>{r.obs || "—"}</td>
                       <td>
                         <div style={{ display: "flex", gap: 6 }}>
                           <button onClick={() => editarRegistro(r)} title="Editar (corrigir Resultado / Tempo informado)" style={{ background: "none", border: "none", cursor: "pointer", color: "#4A473E" }}><Pencil size={14} /></button>
@@ -7646,6 +7771,7 @@ function AbaDiagnosticoFinal({ fazendaAtiva, safraAtiva, lotes, retiros, insumos
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </>
       )}
@@ -10926,7 +11052,7 @@ function AbaAuditoria({ fazendaAtiva, lotes, retiros, insumos, manejos, manejosE
   const LABEL_TIPO_MANEJO = {
     novos_animais: "Novos animais", inducao: "Indução", implantacao: "D0", ressinc: "Ressinc",
     retirada: "Retirada", inseminacao: "Inseminação", diagnostico: "Diagnóstico",
-    repasse: "Repasse", diagnostico_repasse: "Diagnóstico - repasse",
+    repasse: "Repasse", diagnostico_repasse: "Diagnóstico - repasse", diagnostico_final: "Diagnóstico final",
   };
   const [filtroTipoExcluido, setFiltroTipoExcluido] = useState("");
   const tiposExcluidosDisponiveis = [...new Set((manejosExcluidos || []).map((m) => m.tipo))];

@@ -78,6 +78,7 @@ const COLECOES_COM_CRIADO_EM = new Set([
 const CAMPOS_COM_PADRAO_OBRIGATORIO = {
   manejos: { detalhes: [], animaisLidos: [], medicamentos: [], atualizadoEm: () => new Date().toISOString(), excluido: false },
   safras: { lancamentosDesabilitados: false },
+  usuarios: { tambemInseminador: false },
   lotes: { atualizadoEm: () => new Date().toISOString() },
   sugestoesRessinc: { atualizadoEm: () => new Date().toISOString() },
   sugestoesRepasse: { atualizadoEm: () => new Date().toISOString() },
@@ -90,7 +91,7 @@ function aplicarPadroesObrigatorios(colecao, itens) {
   return itens.map((item) => {
     let alterado = null;
     for (const [campo, valorPadrao] of Object.entries(padroes)) {
-      if (item[campo] === undefined) {
+      if (item[campo] === undefined || (item[campo] === null && campo === "tambemInseminador")) {
         alterado = alterado || { ...item };
         alterado[campo] = typeof valorPadrao === "function" ? valorPadrao() : valorPadrao;
       }
