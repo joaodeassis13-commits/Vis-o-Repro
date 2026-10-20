@@ -2676,6 +2676,7 @@ export default function App() {
      de origem, os agendamentos que dependem dele são recriados com base nos novos dados. */
 
   const addAgendamento = (ag) => {
+    if (currentUser?.perfil === "Supervisor") return; // Supervisor só consulta a agenda
     if (safraAtivaBloqueada) { avisarSafraBloqueada(); return; }
     if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return; }
     const id = uid("ag");
@@ -3019,7 +3020,7 @@ export default function App() {
         @media (max-width: 860px) {
           th { font-size: 10.5px; padding: 7px 8px; }
           td { padding: 8px 8px; font-size: 13px; }
-          .grid-relatorios-3 { grid-template-columns: 1fr; }
+          .grid-relatorios-3 { grid-template-columns: minmax(0, 1fr); }
           .grid-bench-2 { grid-template-columns: 1fr; }
           .grid-form-3 { grid-template-columns: repeat(2, 1fr); }
           .grid-manejo { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
@@ -8468,8 +8469,8 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
   const nomeFazenda = (id) => fazendas.find((f) => f.id === id)?.nome || "—";
 
   const agendamentosFiltrados = useMemo(
-    () => agendamentos.filter((a) => fazendasSelecionadas.includes(a.fazendaId)),
-    [agendamentos, fazendasSelecionadas]
+    () => agendamentos.filter((a) => fazendasSelecionadas.includes(a.fazendaId) && !(ocultarPendentes && a.status === "pendente")),
+    [agendamentos, fazendasSelecionadas, ocultarPendentes]
   );
 
   const pendentes = agendamentosFiltrados.filter((a) => a.status === "pendente").sort((a, b) => a.data.localeCompare(b.data));
@@ -8679,7 +8680,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
 
   return (
     <div>
-      <SectionTitle icon={Calendar} title="Agenda" subtitle="Adicione agendamentos manualmente ou confirme os pré-agendamentos sugeridos automaticamente a partir dos manejos." />
+      <SectionTitle icon={Calendar} title="Agenda" subtitle={somenteLeitura ? "Consulte a programação dos manejos confirmados." : "Adicione agendamentos manualmente ou confirme os pré-agendamentos sugeridos automaticamente a partir dos manejos."} />
       <FazendaAtivaBanner fazendaAtiva={fazendaAtiva} />
       {!fazendaAtiva ? <EmptyState text="Selecione uma fazenda ativa para ver a agenda." /> : (
         <>
@@ -8707,7 +8708,7 @@ function AbaAgenda({ fazendaAtiva, fazendas, lotes, retiros, agendamentos, addAg
             </div>
           )}
 
-          {gruposDuplicados.length > 0 && (
+          {gruposDuplicados.length > 0 && !somenteLeitura && (
             <div style={{ marginBottom: 26 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 700, color: "#A32D2D", textTransform: "uppercase", marginBottom: 8 }}>
                 <XCircle size={13} /> Agendamentos duplicados
@@ -9741,7 +9742,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20, alignItems: "stretch" }}>
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Resumo</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%", flexWrap: "wrap" }}>
                 {Object.entries(OPCOES_ROSCA_RESUMO).map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoResumo(key)}
                     style={{
@@ -9761,7 +9762,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>
                 {visaoGeral === "concepcao" ? "Taxa de concepção" : "Taxa de prenhez"}
               </div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%", flexWrap: "wrap" }}>
                 {[["concepcao", "Concepção"], ["fertilidade", "Taxa de prenhez"]].map(([key, label]) => (
                   <button key={key} onClick={() => setVisaoGeral(key)}
                     style={{
@@ -9777,7 +9778,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
 
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>Custo</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%", flexWrap: "wrap" }}>
                 {Object.entries(OPCOES_CUSTO).map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoCusto(key)}
                     style={{
@@ -9795,7 +9796,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
           <div className="grid-relatorios-3" style={{ display: "grid", gap: 16, marginBottom: 20 }}>
             <div style={{ ...cardStyle, height: 300, display: "flex", flexDirection: "column" }}>
               <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#232520", marginBottom: 10 }}>{OPCOES_BARRA_CONCEPCAO[visaoBarra].tituloCompleto || `Concepção por ${OPCOES_BARRA_CONCEPCAO[visaoBarra].label.toLowerCase()}`}</div>
-              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%" }}>
+              <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 1, marginBottom: 10, width: "fit-content", maxWidth: "100%", flexWrap: "wrap" }}>
                 {Object.entries(OPCOES_BARRA_CONCEPCAO).map(([key, op]) => (
                   <button key={key} onClick={() => setVisaoBarra(key)}
                     style={{
@@ -10009,9 +10010,9 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   const larguraColuna = compacto ? 28 : (lista.length <= 5 ? 50 : 42);
   const alturaMaximaPx = compacto ? 90 : 120;
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: lista.length > (compacto ? 6 : 8) ? "flex-start" : "center", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "flex-start", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
       {lista.map((d, i) => (
-        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0 }}>
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0, marginLeft: i === 0 ? "auto" : 0, marginRight: i === lista.length - 1 ? "auto" : 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4 }}>{d.taxa != null ? `${d.taxa}%` : "—"}</div>
             <div style={{ width: larguraColuna, height: `${d.taxa != null ? Math.max((d.taxa / maiorTaxa) * alturaMaximaPx, 4) : 2}px`, background: d.taxa != null ? (d.cor || "#166336") : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
@@ -10032,9 +10033,9 @@ function BarrasCusto({ dados, compacto }) {
   const larguraColuna = compacto ? 28 : (dados.length <= 5 ? 50 : 42);
   const alturaMaximaPx = compacto ? 90 : 120;
   return (
-    <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: compacto ? 10 : 16, height: "100%", width: "100%" }}>
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "flex-start", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
       {dados.map((d, i) => (
-        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0 }}>
+        <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0, marginLeft: i === 0 ? "auto" : 0, marginRight: i === dados.length - 1 ? "auto" : 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
             <div style={{ fontSize: compacto ? 11 : 13, fontWeight: 700, color: "#232520", marginBottom: 4, whiteSpace: "nowrap" }}>{fmtMoedaCurta(d.valor)}</div>
             <div style={{ width: larguraColuna, height: `${d.valor != null ? Math.max((d.valor / maiorValor) * alturaMaximaPx, 4) : 2}px`, background: d.valor != null ? "#166336" : "#E5DFCC", borderRadius: "4px 4px 0 0" }} />
