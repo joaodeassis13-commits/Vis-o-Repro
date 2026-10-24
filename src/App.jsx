@@ -2047,6 +2047,11 @@ export default function App() {
     setSugestoesRessinc((a) => a.map((s) => s.id === id ? { ...s, status: "descartada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
   };
+  // marcas de "ignorar" do Ressinc manual: sugestão já descartada com origem "ignorado|lote|ordem"
+  const ressincManualIgnorados = useMemo(
+    () => new Set(sugestoesRessinc.filter((s) => s.status === "descartada" && typeof s.origemManejoId === "string" && s.origemManejoId.startsWith("ignorado|")).map((s) => s.origemManejoId)),
+    [sugestoesRessinc]
+  );
   const removerSugestaoRessinc = (id) => {
     setSugestoesRessinc((a) => a.map((s) => s.id === id ? { ...s, status: "confirmada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
@@ -3293,7 +3298,7 @@ export default function App() {
             <AbaImplantacao fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos}
               registrarManejo={registrarManejo} registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos}
               addLote={addLote} atualizarLote={atualizarLote} atualizarManejo={atualizarManejo} removerManejo={removerManejo}
-              sugestoesRessinc={sugestoesRessincAtivas} criarSugestaoRessinc={criarSugestaoRessinc} descartarSugestaoRessinc={descartarSugestaoRessinc} removerSugestaoRessinc={removerSugestaoRessinc}
+              sugestoesRessinc={sugestoesRessincAtivas} criarSugestaoRessinc={criarSugestaoRessinc} descartarSugestaoRessinc={descartarSugestaoRessinc} removerSugestaoRessinc={removerSugestaoRessinc} ressincManualIgnorados={ressincManualIgnorados}
               protocolosPadraoDaFazenda={protocolosPadraoDaFazenda} addProtocoloPadraoSeNovo={addProtocoloPadraoSeNovo} />
           </div>
           <div style={{ display: section === "manejo" && sub === "retirada" ? "block" : "none" }}>
@@ -4340,7 +4345,7 @@ function AbaManejoSimples({ tipo, fazendaAtiva, safraAtiva, lotes, retiros, insu
     setTimeout(() => { submetendoRef.current = false; }, 0);
   };
 
-  const historico = manejos.filter((m) => m.tipo === tipo).slice(0, 8);
+  const historico = manejos.filter((m) => m.tipo === tipo);
   const nomeLote = (id) => lotes.find((l) => l.id === id)?.nome || "—";
   const nomeProduto = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "—";
 
@@ -4545,7 +4550,7 @@ const proximaOrdem = (ordemAtual) => {
   return i >= 0 && i < ORDENS_IATF.length - 1 ? ORDENS_IATF[i + 1] : ORDENS_IATF[0];
 };
 
-function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addLote, atualizarLote, atualizarManejo, removerManejo, sugestoesRessinc, criarSugestaoRessinc, descartarSugestaoRessinc, removerSugestaoRessinc, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo }) {
+function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addLote, atualizarLote, atualizarManejo, removerManejo, sugestoesRessinc, criarSugestaoRessinc, descartarSugestaoRessinc, removerSugestaoRessinc, ressincManualIgnorados, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo }) {
   const [abaInterna, setAbaInterna] = useState("d0"); // "d0" | "ressinc"
   const [editandoManejo, setEditandoManejo] = useState(null);
 
@@ -4751,7 +4756,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     setTimeout(() => { submetendoRef.current = false; }, 0);
   };
 
-  const historico = manejos.filter((m) => m.tipo === "implantacao").slice(0, 6);
+  const historico = manejos.filter((m) => m.tipo === "implantacao");
   const nomeLote = (id) => lotes.find((l) => l.id === id)?.nome || "—";
   const nomeInsumo = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "—";
 
@@ -4945,7 +4950,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
     setSugestaoAbertaId(null);
   };
 
-  const historicoRessinc = manejos.filter((m) => m.tipo === "ressinc").slice(0, 6);
+  const historicoRessinc = manejos.filter((m) => m.tipo === "ressinc");
 
   // lotes que já tiveram Diagnóstico com algum animal Vazio na ordem atual, mas ainda não têm
   // nem sugestão automática pendente nem D0/Ressinc registrado pra próxima ordem — cobre os
@@ -4962,6 +4967,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       const proxima = proximaOrdem(o);
       if (!proxima) return [];
       if (manejos.some((m) => m.loteId === l.id && m.ordem === proxima && TIPOS_DE_CICLO.includes(m.tipo))) return [];
+      if (ressincManualIgnorados?.has(`ignorado|${l.id}|${o}`)) return [];
       const diagDoLote = manejos.filter((m) => m.tipo === "diagnostico" && m.loteId === l.id && m.ordem === o);
       const vazios = [...new Set(diagDoLote.flatMap((m) => (m.detalhes || []).filter((d) => d.resultado === "Vazia").map((d) => d.brinco)))];
       if (vazios.length === 0) return [];
@@ -4969,6 +4975,11 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
       return [{ lote: l, ordem: o, vazios, dataMaisRecente }];
     });
   });
+
+  const ignorarRessincManual = (item) => {
+    const id = criarSugestaoRessinc(item.lote.id, item.vazios, `ignorado|${item.lote.id}|${item.ordem}`, item.dataMaisRecente || todayISO());
+    if (id) descartarSugestaoRessinc(id);
+  };
 
   const iniciarRessincManual = (item) => {
     ordemAlvoRessincRef.current = proximaOrdem(item.ordem);
@@ -5306,7 +5317,10 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                               {item.dataMaisRecente ? ` · Diagnóstico de ${fmtDate(item.dataMaisRecente)}` : ""}
                             </div>
                           </div>
-                          <BtnPrimary onClick={() => iniciarRessincManual(item)}>Iniciar</BtnPrimary>
+                          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                            <BtnPrimary onClick={() => iniciarRessincManual(item)}>Iniciar</BtnPrimary>
+                            <BtnGhost danger onClick={() => { if (window.confirm(`Ignorar a sugestão de Ressinc de ${item.lote.nome} (${item.ordem})?`)) ignorarRessincManual(item); }}>Excluir</BtnGhost>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -5708,7 +5722,7 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
     setNumeroAnimais(""); setPerdasImplante(""); setAnimaisPerdaImplante([]); setDataManejo(todayISO()); setHorarioInicial(""); setHorarioFinal(""); setProtocoloPadraoNome(""); setDoseProstaglandina(""); setDoseCipionato(""); setDoseEcgHcg(""); setAnimaisLidos([]); setMedicamentos([]); setMsg("Retirada registrada.");
   };
 
-  const historico = manejos.filter((m) => m.tipo === "retirada").slice(0, 6);
+  const historico = manejos.filter((m) => m.tipo === "retirada");
   const nomeLote = (id) => lotes.find((l) => l.id === id)?.nome || "—";
   const nomeInsumo = (id) => insumos.find((i) => i.id === id)?.produtoComercial || "—";
 
@@ -7372,7 +7386,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
     setMsg("Repasse registrado. Um pré-agendamento de Diagnóstico - repasse foi criado 30 dias após o Fim do período.");
   };
 
-  const historico = manejos.filter((m) => m.tipo === "repasse").slice(0, 8);
+  const historico = manejos.filter((m) => m.tipo === "repasse");
 
   const [editandoId, setEditandoId] = useState(null);
   const [editNumeroAnimais, setEditNumeroAnimais] = useState("");
