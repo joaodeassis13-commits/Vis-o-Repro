@@ -9796,22 +9796,21 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     agruparConcepcao(registros.filter((r) => r.categoria === cat), () => `${cat}s`)[0]
   );
 
-  // Taxa de fertilidade = total de Prenhas / total de animais COM DIAGNÓSTICO registrado — quem
-  // só tem Inseminação, sem diagnóstico ainda, não entra no denominador.
-  const contarDiagnosticados = (lista) => lista.reduce((s, m) => s + (m.detalhes || []).length, 0);
-  const totalDiagnosticados = contarDiagnosticados(diagnosticosValidos) + contarDiagnosticados(diagnosticosRepasseValidos);
-  const diagnosticadosPorCategoria = CATEGORIAS_RESUMO.map((cat) => ({
-    label: `${cat}s`,
-    valor: contarDiagnosticados(diagnosticosValidos.filter((m) => categoriaDoLote(m.loteId) === cat))
-      + contarDiagnosticados(diagnosticosRepasseValidos.filter((m) => categoriaDoLote(m.loteId) === cat)),
-  }));
-  const taxaFertilidade = totalDiagnosticados > 0 ? Math.round((totalPrenhas / totalDiagnosticados) * 1000) / 10 : null;
+  // Taxa de prenhez — mesma fórmula do Relatório Detalhado (prenhezGeralPDF): nº de resultados
+  // "Prenha" ÷ nº de animais distintos com Diagnóstico (inclui Diagnóstico - repasse).
+  const taxaPrenhezDe = (manejosDiag) => {
+    const animais = new Set();
+    let prenhas = 0;
+    manejosDiag.forEach((m) => (m.detalhes || []).forEach((d) => { if (d.resultado) { animais.add(d.brinco); if (d.resultado === "Prenha") prenhas++; } }));
+    return { n: animais.size, taxa: animais.size > 0 ? Math.round((prenhas / animais.size) * 1000) / 10 : null };
+  };
+  const todosDiagValidos = [...diagnosticosValidos, ...diagnosticosRepasseValidos];
+  const prenhezGeralCard = taxaPrenhezDe(todosDiagValidos);
   const fertilidadeComCategoria = comColunasPorCategoria(
-    [{ label: "Geral", n: totalDiagnosticados, taxa: taxaFertilidade }],
+    [{ label: "Geral", n: prenhezGeralCard.n, taxa: prenhezGeralCard.taxa }],
     (cat) => {
-      const totalCat = diagnosticadosPorCategoria.find((a) => a.label === `${cat}s`)?.valor || 0;
-      const prenhasCat = prenhasPorCategoria.find((p) => p.label === `${cat}s`)?.valor || 0;
-      return { label: `${cat}s`, n: totalCat, taxa: totalCat > 0 ? Math.round((prenhasCat / totalCat) * 1000) / 10 : 0 };
+      const r = taxaPrenhezDe(todosDiagValidos.filter((m) => categoriaDoLote(m.loteId) === cat));
+      return { label: `${cat}s`, n: r.n, taxa: r.taxa ?? 0 };
     }
   );
 
@@ -10264,16 +10263,28 @@ function taxasDePrenhezPorFazenda(listaManejos) {
 // taxa de FERTILIDADE por fazenda = Prenhas / total de animais COM DIAGNÓSTICO (quem só tem
 // Inseminação sem diagnóstico não entra no denominador). Lote "Desconhecidos" nunca entra.
 function taxasDeFertilidadePorFazenda(listaLotes, listaManejos) {
+  return taxasDePrenhezRelatorioPorFazenda(listaLotes, listaManejos, null);
+}
+
+// Taxa de prenhez (mesma fórmula do Relatório Detalhado): nº de resultados "Prenha" ÷ animais
+// distintos com Diagnóstico (inclui Diagnóstico - repasse). Desconhecidos nunca entra.
+function taxasDePrenhezRelatorioPorFazenda(listaLotes, listaManejos, categoria) {
   const idsDesconhecidos = new Set(listaLotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
-  const diagnosticadosPorFazenda = {};
-  const prenhasPorFazenda = {};
-  listaManejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId)).forEach((m) => {
-    diagnosticadosPorFazenda[m.fazendaId] = (diagnosticadosPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).length;
-    prenhasPorFazenda[m.fazendaId] = (prenhasPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length;
-  });
-  return Object.entries(diagnosticadosPorFazenda)
-    .filter(([, total]) => total > 0)
-    .map(([fazendaId, total]) => ({ fazendaId, n: total, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
+  const categoriaDoLote = (loteId) => listaLotes.find((l) => l.id === loteId)?.categoria;
+  const porFazenda = {};
+  listaManejos
+    .filter((m) => (m.tipo === "diagnostico" || m.tipo === "diagnostico_repasse") && !idsDesconhecidos.has(m.loteId) && (!categoria || categoriaDoLote(m.loteId) === categoria))
+    .forEach((m) => {
+      if (!porFazenda[m.fazendaId]) porFazenda[m.fazendaId] = { animais: new Set(), prenhas: 0 };
+      (m.detalhes || []).forEach((d) => {
+        if (!d.resultado) return;
+        porFazenda[m.fazendaId].animais.add(d.brinco);
+        if (d.resultado === "Prenha") porFazenda[m.fazendaId].prenhas += 1;
+      });
+    });
+  return Object.entries(porFazenda)
+    .filter(([, v]) => v.animais.size > 0)
+    .map(([fazendaId, v]) => ({ fazendaId, n: v.animais.size, taxa: Math.round((v.prenhas / v.animais.size) * 1000) / 10 }));
 }
 
 // concepção por ORDEM (1º/2º/3º IATF ou "Repasse"), calculada no cliente para o escopo "Meu Grupo".
@@ -10312,17 +10323,7 @@ function taxasDePrenhezPorCategoriaPorFazenda(listaManejos, listaLotes, categori
 
 // fertilidade por CATEGORIA — Prenhas daquela categoria / animais COM DIAGNÓSTICO daquela categoria.
 function taxasDeFertilidadePorCategoriaPorFazenda(listaLotes, listaManejos, categoria) {
-  const idsDesconhecidos = new Set(listaLotes.filter((l) => l.nome === "Desconhecidos").map((l) => l.id));
-  const categoriaDoLote = (loteId) => listaLotes.find((l) => l.id === loteId)?.categoria;
-  const diagnosticadosPorFazenda = {};
-  const prenhasPorFazenda = {};
-  listaManejos.filter((m) => m.tipo === "diagnostico" && !idsDesconhecidos.has(m.loteId) && categoriaDoLote(m.loteId) === categoria).forEach((m) => {
-    diagnosticadosPorFazenda[m.fazendaId] = (diagnosticadosPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).length;
-    prenhasPorFazenda[m.fazendaId] = (prenhasPorFazenda[m.fazendaId] || 0) + (m.detalhes || []).filter((d) => d.resultado === "Prenha").length;
-  });
-  return Object.entries(diagnosticadosPorFazenda)
-    .filter(([, total]) => total > 0)
-    .map(([fazendaId, total]) => ({ fazendaId, n: total, taxa: Math.round(((prenhasPorFazenda[fazendaId] || 0) / total) * 1000) / 10 }));
+  return taxasDePrenhezRelatorioPorFazenda(listaLotes, listaManejos, categoria);
 }
 
 // concepção por atributo do protocolo (número de manejos "3/4 manejos", ou duração) — usa os
@@ -10770,7 +10771,7 @@ function AbaBenchmarking({ fazendaAtiva, fazendaAtivaId, manejosDoGrupo, lotesDo
           </div>
 
           <p style={{ fontSize: 11, color: "#9B9686" }}>
-            Concepção considera só quem já tem Inseminação e Diagnóstico registrados; Taxa de prenhez compara Prenhas com o total de animais diagnosticados (quem só tem Inseminação, sem diagnóstico ainda, não entra na conta). Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.
+            Concepção considera só quem já tem Inseminação e Diagnóstico registrados; Taxa de prenhez = resultados Prenha ÷ animais distintos diagnosticados, igual ao Relatório Detalhado (quem só tem Inseminação, sem diagnóstico ainda, não entra na conta). Mais indicadores de benchmarking serão adicionados aqui nas próximas etapas.
           </p>
         </>
       )}

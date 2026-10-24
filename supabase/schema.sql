@@ -821,12 +821,12 @@ returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, 
     -- Fertilidade = Prenhas ÷ animais COM DIAGNÓSTICO (quem só tem Inseminação, sem
     -- diagnóstico ainda, não entra no denominador).
     select m.fazenda_id,
-      count(*) as diagnosticados,
+      count(distinct d ->> 'brinco') filter (where d ->> 'resultado' is not null) as diagnosticados,
       count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
     join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico' and l.nome <> 'Desconhecidos'
+    where m.tipo in ('diagnostico','diagnostico_repasse') and not coalesce((d ->> 'dgFinal')::boolean, false) and l.nome <> 'Desconhecidos'
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
   ),
@@ -861,12 +861,12 @@ returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, 
     -- Fertilidade = Prenhas ÷ animais COM DIAGNÓSTICO (quem só tem Inseminação, sem
     -- diagnóstico ainda, não entra no denominador).
     select m.fazenda_id,
-      count(*) as diagnosticados,
+      count(distinct d ->> 'brinco') filter (where d ->> 'resultado' is not null) as diagnosticados,
       count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
     join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico' and l.nome <> 'Desconhecidos'
+    where m.tipo in ('diagnostico','diagnostico_repasse') and not coalesce((d ->> 'dgFinal')::boolean, false) and l.nome <> 'Desconhecidos'
       and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
@@ -1030,12 +1030,12 @@ create or replace function benchmarking_fertilidade_por_categoria_sistema(p_cate
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
   with diagnosticados_por_fazenda as (
     select m.fazenda_id,
-      count(*) as diagnosticados,
+      count(distinct d ->> 'brinco') filter (where d ->> 'resultado' is not null) as diagnosticados,
       count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
     join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico' and l.categoria = p_categoria and l.nome <> 'Desconhecidos'
+    where m.tipo in ('diagnostico','diagnostico_repasse') and not coalesce((d ->> 'dgFinal')::boolean, false) and l.categoria = p_categoria and l.nome <> 'Desconhecidos'
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
   ),
@@ -1063,12 +1063,12 @@ create or replace function benchmarking_fertilidade_por_categoria_grupo(p_catego
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
   with diagnosticados_por_fazenda as (
     select m.fazenda_id,
-      count(*) as diagnosticados,
+      count(distinct d ->> 'brinco') filter (where d ->> 'resultado' is not null) as diagnosticados,
       count(*) filter (where d ->> 'resultado' = 'Prenha') as prenhas
     from manejos m
     join lotes l on l.id = m.lote_id
     cross join lateral jsonb_array_elements(m.detalhes) as d
-    where m.tipo = 'diagnostico' and l.categoria = p_categoria and l.nome <> 'Desconhecidos'
+    where m.tipo in ('diagnostico','diagnostico_repasse') and not coalesce((d ->> 'dgFinal')::boolean, false) and l.categoria = p_categoria and l.nome <> 'Desconhecidos'
       and exists (select 1 from usuario_fazendas uf where uf.usuario_id = auth.uid() and uf.fazenda_id = m.fazenda_id)
       and (p_safra_nome is null or exists (select 1 from safras sf where sf.id = m.safra_id and sf.nome = p_safra_nome))
     group by m.fazenda_id
