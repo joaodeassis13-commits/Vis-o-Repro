@@ -1482,7 +1482,7 @@ export default function App() {
     () => movimentos.filter((m) => m.local === "externo" ? insumos.find((i) => i.id === m.insumoId)?.usuarioId === currentUser?.id : m.fazendaId === fazendaAtivaId),
     [movimentos, fazendaAtivaId, insumos, currentUser]
   );
-  const ehSugestaoDeDesconhecidos = (a) => a.origem === "automatico" && a.status === "pendente" && ehNomeDesconhecidos(a.loteNome);
+  const ehSugestaoDeDesconhecidos = (a) => ehNomeDesconhecidos(a.loteNome); // qualquer agendamento do lote Desconhecidos fica fora da Agenda
   const agendamentosAtivos = useMemo(() => agendamentos.filter((a) => a.fazendaId === fazendaAtivaId && !ehSugestaoDeDesconhecidos(a)), [agendamentos, fazendaAtivaId]);
   // todos os agendamentos das fazendas que o usuário logado pode acessar (para a visualização multi-fazenda na Agenda)
   const agendamentosVisiveis = useMemo(
@@ -2073,6 +2073,15 @@ export default function App() {
     setSugestoesRepasse((a) => a.map((s) => s.id === id ? { ...s, status: "descartada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
   };
+  // ao mudar o "Destino para vazias" de um Diagnóstico editado, as sugestões AINDA pendentes nascidas dele
+  // (de Ressinc ou de Repasse) são descartadas — a nova sugestão é criada pelo destino novo.
+  const descartarSugestoesPendentesDoManejo = (manejoId) => {
+    const agora = new Date().toISOString();
+    const marca = (s) => (s.origemManejoId === manejoId && s.status === "pendente" ? { ...s, status: "descartada", atualizadoEm: agora } : s);
+    setSugestoesRessinc((a) => a.map(marca));
+    setSugestoesRepasse((a) => a.map(marca));
+    marcaPendencia();
+  };
   const removerSugestaoRepasse = (id) => {
     setSugestoesRepasse((a) => a.map((s) => s.id === id ? { ...s, status: "confirmada", atualizadoEm: new Date().toISOString() } : s));
     marcaPendencia();
@@ -2276,6 +2285,8 @@ export default function App() {
     const manejoCompleto = { ...manejo, id, data: manejo.data || todayISO(), operador: currentUser.nome, fazendaId: fazendaAtivaId, safraId: safraAtivaId || null, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() };
     setManejos((a) => [manejoCompleto, ...a]);
     marcaPendencia();
+    // "Desconhecidos" anda em paralelo aos demais lotes: não mexe na Agenda (nem agendamento, nem pré-agendamento).
+    if (ehNomeDesconhecidos(manejoCompleto.loteNome)) return id;
 
     // O manejo registrado SUBSTITUI o agendamento que existia pra ele (mesmo manejo, lote e ordem,
     // mesmo que a data agendada seja outra) e tudo que derivava dele; em seguida, os
@@ -2676,6 +2687,7 @@ export default function App() {
      de origem, os agendamentos que dependem dele são recriados com base nos novos dados. */
 
   const addAgendamento = (ag) => {
+    if (ehNomeDesconhecidos(ag?.loteNome)) return; // Desconhecidos não tem agendamento
     if (currentUser?.perfil === "Supervisor") return; // Supervisor só consulta a agenda
     if (safraAtivaBloqueada) { avisarSafraBloqueada(); return; }
     if (fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return; }
@@ -3298,14 +3310,14 @@ export default function App() {
               rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} currentUser={currentUser}  movimentos={movimentos} />
           </div>
           <div style={{ display: section === "manejo" && sub === "diagnostico" ? "block" : "none" }}>
-            <AbaDiagnostico fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} insumos={insumosAtivos} registrarManejo={registrarManejo}
+            <AbaDiagnostico descartarSugestoesPendentesDoManejo={descartarSugestoesPendentesDoManejo} sugestoesRepasseTodas={sugestoesRepasse} fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} insumos={insumosAtivos} registrarManejo={registrarManejo}
               registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos} atualizarLote={atualizarLote}
               addAnimalAoLote={addAnimalAoLote} atribuirManejosRetroativos={atribuirManejosRetroativos} garantirLoteDesconhecidos={garantirLoteDesconhecidos}
               criarSugestaoRessinc={criarSugestaoRessinc} criarSugestaoRepasse={criarSugestaoRepasse} atualizarManejo={atualizarManejo} removerManejo={removerManejo}
               rascunhos={rascunhos} salvarRascunho={salvarRascunho} limparRascunho={limparRascunho} />
           </div>
           <div style={{ display: section === "manejo" && sub === "repasse" ? "block" : "none" }}>
-            <AbaRepasse fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} registrarManejo={registrarManejo}
+            <AbaRepasse fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos.filter((l) => !ehNomeDesconhecidos(l.nome))} retiros={retirosAtivos} registrarManejo={registrarManejo} addLote={addLote}
               manejos={manejosAtivos} atualizarManejo={atualizarManejo} removerManejo={removerManejo}
               sugestoesRepasse={sugestoesRepasseAtivas} descartarSugestaoRepasse={descartarSugestaoRepasse} removerSugestaoRepasse={removerSugestaoRepasse} />
           </div>
@@ -5136,7 +5148,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     </select>
                   </Field>
                   <Field label="Peso *"><input style={inputStyle} type="number" step="any" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="kg" /></Field>
-                  <Field label="Avaliação ovariana">
+                  <Field label="Avaliação ovariana *">
                     <input style={inputStyle} list="avaliacao-ovariana-opcoes" value={avaliacaoOvariana} placeholder="A / CL / C / F"
                       onChange={(e) => setAvaliacaoOvariana(e.target.value)}
                       onBlur={() => setAvaliacaoOvariana((v) => normalizarAvaliacao(v) ?? v)}
@@ -6488,7 +6500,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   {touros.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>
-              <Field label="Partida *">
+              <Field label="Partida">
                 <input style={inputStyle} list="partidas-do-touro" value={partida} onChange={(e) => setPartida(e.target.value)} placeholder="Digite ou selecione a partida" />
                 <datalist id="partidas-do-touro">
                   {partidasDoTouro.map((p) => <option key={p} value={p} />)}
@@ -6508,7 +6520,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                   {OPCOES_ECC.map((o) => <option key={o} value={o} />)}
                 </datalist>
               </Field>
-              <Field label="Demonstração de cio">
+              <Field label="Demonstração de cio *">
                 <input ref={cioInputRef} style={inputStyle} list="cio-opcoes" value={demonstracaoCio} onChange={(e) => { limparMsgSeSucesso(); setDemonstracaoCio(e.target.value); }} placeholder="Sim / Não (S / N)"
                   onBlur={() => setDemonstracaoCio((v) => normalizarCio(v) ?? v)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const n = normalizarCio(demonstracaoCio); if (n === null) { setMsg("Demonstração de cio: digite Sim ou Não (ou S / N)."); return; } setMsg(""); setDemonstracaoCio(n); pesoInputRef.current?.focus(); } }} />
@@ -6674,7 +6686,7 @@ function AbaInseminacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
    DIAGNÓSTICO — leitura obrigatória, prenha/vazia
 ========================================================= */
 
-function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo, registrarSaidaEstoque, manejos, atualizarLote, addAnimalAoLote, atribuirManejosRetroativos, garantirLoteDesconhecidos, criarSugestaoRessinc, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho }) {
+function AbaDiagnosticoInseminacao({ descartarSugestoesPendentesDoManejo, sugestoesRepasseTodas, fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo, registrarSaidaEstoque, manejos, atualizarLote, addAnimalAoLote, atribuirManejosRetroativos, garantirLoteDesconhecidos, criarSugestaoRessinc, criarSugestaoRepasse, atualizarManejo, removerManejo, rascunhos, salvarRascunho, limparRascunho }) {
   const [editandoManejo, setEditandoManejo] = useState(null); // manejo de Diagnóstico sendo reaberto para edição (inclui poder ler/remover animais)
   // só entram lotes que já tiveram Inseminação registrada para a ordem ATUAL do lote e que ainda
   // não tiveram Diagnóstico registrado nessa mesma ordem.
@@ -6696,6 +6708,16 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
   const [msgLote, setMsgLote] = useState("");
   const [dataManejo, setDataManejo] = useState(todayISO());
   const [destinoVazias, setDestinoVazias] = useState("Ressinc"); // "Ressinc" | "Repasse" | "Descarte"
+  // Repasse integrado: a Inseminação do lote foi registrada com "Repasse integrado" = Sim (existe uma sugestão de
+  // Repasse nascida dela). Nesses lotes as vazias vão direto pra Repasse, sem nova sugestão. E, em qualquer lote,
+  // não se cria sugestão de Repasse se o repasse do lote já foi registrado.
+  const repasseIntegradoDoLote = (loteId, ordem) => {
+    const im = manejos.find((m) => m.tipo === "inseminacao" && m.loteId === loteId && m.ordem === ordem);
+    return !!im && (sugestoesRepasseTodas || []).some((x) => x.origemManejoId === im.id);
+  };
+  const loteJaTemRepasse = (loteId) => manejos.some((m) => m.tipo === "repasse" && m.loteId === loteId);
+  const destinoEfetivoDoLote = (loteId, ordem) => (repasseIntegradoDoLote(loteId, ordem) ? "Repasse" : destinoVazias);
+  const deveCriarSugestaoRepasse = (loteId, ordem) => !repasseIntegradoDoLote(loteId, ordem) && !loteJaTemRepasse(loteId);
   const [brinco, setBrinco] = useState("");
   const [resultadoInput, setResultadoInput] = useState("");
   const [resultado, setResultado] = useState("");
@@ -6728,6 +6750,8 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
 
   const lotesSelecionadosObjs = lotesComInseminacao.filter((l) => lotesSelecionados.includes(l.id));
   const ordemComum = lotesSelecionadosObjs[0]?.ordem || null;
+  const lotesIntegrados = lotesSelecionadosObjs.filter((l) => repasseIntegradoDoLote(l.id, l.ordem));
+  const todosIntegrados = lotesSelecionadosObjs.length > 0 && lotesIntegrados.length === lotesSelecionadosObjs.length;
 
   const toggleLote = (id) => {
     // limpa qualquer aviso anterior a cada nova tentativa — só reaparece se esta também for
@@ -6806,7 +6830,10 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     let loteConflito = false;
     const loteDoBicho = lotes.find((l) => (l.animais || []).includes(b));
     const pertenceASelecionados = loteDoBicho && lotesSelecionados.includes(loteDoBicho.id);
-    if (loteDoBicho && !pertenceASelecionados) {
+    if (!loteDoBicho) {
+      avisos.push("Este animal não pertence a nenhum lote. Você pode registrá-lo e atribuí-lo a um dos lotes atuais.");
+      loteConflito = true;
+    } else if (!pertenceASelecionados) {
       const nomesSelecionados = lotesSelecionadosObjs.map((l) => l.nome).join(", ") || "—";
       avisos.push(`Este animal está alocado no lote "${loteDoBicho.nome}", diferente do(s) lote(s) selecionado(s) aqui (${nomesSelecionados}).`);
       loteConflito = true;
@@ -6877,9 +6904,10 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
     setPendente(null); setBrinco(""); setResultadoInput(""); setResultado(""); setAvisoImediato(null); setMsg("");
     brincoInputRef.current?.focus();
   };
-  const confirmarComoLoteAtual = () => {
-    if (!pendente || lotesSelecionados.length !== 1) return;
-    const alvoId = lotesSelecionados[0];
+  const confirmarComoLoteAtual = (idEscolhido) => {
+    if (!pendente) return;
+    const alvoId = typeof idEscolhido === "string" ? idEscolhido : (lotesSelecionados.length === 1 ? lotesSelecionados[0] : null);
+    if (!alvoId) return;
     addAnimalAoLote(alvoId, pendente.brinco);
     atribuirManejosRetroativos(alvoId, [pendente.brinco]);
     const camposPrenhez = resultado === "Prenha" ? { tempoGestacao: Number(tempoGestacaoInput), origemPrenhez } : {};
@@ -6932,10 +6960,16 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
       }
       const brincosAntes = new Set((editandoManejo.detalhes || []).map((d) => d.brinco));
       const vaziaNovosBrincos = registros.filter((r) => r.resultado === "Vazia" && !brincosAntes.has(r.brinco)).map((r) => r.brinco);
-      atualizarManejo(editandoManejo.id, { detalhes: registros, animaisLidos: registros.map((r) => r.brinco), data: dataManejo, destinoVazias });
-      if (vaziaNovosBrincos.length > 0) {
-        if (destinoVazias === "Ressinc") criarSugestaoRessinc(editandoManejo.loteId, vaziaNovosBrincos, editandoManejo.id, dataManejo);
-        else if (destinoVazias === "Repasse") criarSugestaoRepasse(editandoManejo.loteId, vaziaNovosBrincos, editandoManejo.id, dataManejo);
+      const destinoEdicao = destinoEfetivoDoLote(editandoManejo.loteId, editandoManejo.ordem);
+      atualizarManejo(editandoManejo.id, { detalhes: registros, animaisLidos: registros.map((r) => r.brinco), data: dataManejo, destinoVazias: destinoEdicao });
+      // destino para vazias alterado na edição: descarta as sugestões pendentes do destino antigo e gera a do novo
+      // destino para TODAS as vazias do lote; sem mudança, só os animais vazios acrescentados agora geram sugestão.
+      const mudouDestino = (editandoManejo.destinoVazias || null) !== destinoEdicao;
+      if (mudouDestino && descartarSugestoesPendentesDoManejo) descartarSugestoesPendentesDoManejo(editandoManejo.id);
+      const brincosParaSugerir = mudouDestino ? registros.filter((r) => r.resultado === "Vazia").map((r) => r.brinco) : vaziaNovosBrincos;
+      if (brincosParaSugerir.length > 0) {
+        if (destinoEdicao === "Ressinc") criarSugestaoRessinc(editandoManejo.loteId, brincosParaSugerir, editandoManejo.id, dataManejo);
+        else if (destinoEdicao === "Repasse" && deveCriarSugestaoRepasse(editandoManejo.loteId, editandoManejo.ordem)) criarSugestaoRepasse(editandoManejo.loteId, brincosParaSugerir, editandoManejo.id, dataManejo);
       }
       setEditandoManejo(null); setRegistros([]); setDataManejo(todayISO());
       setLotesSelecionados(lotesComInseminacao[0] ? [lotesComInseminacao[0].id] : []);
@@ -6952,14 +6986,16 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
       const lote = lotes.find((l) => l.id === idLote);
       const registrosDoLote = registros.filter((r) => r.loteId === idLote);
       if (!lote || registrosDoLote.length === 0) return;
-      const manejoId = registrarManejo({ tipo: "diagnostico", loteId: lote.id, ordem: lotesSelecionadosObjs.find((l) => l.id === idLote)?.ordem || lote.ordem || ordemComum, medicamentos: [], localEstoque: null, animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo, destinoVazias });
+      const ordemDoLote = lotesSelecionadosObjs.find((l) => l.id === idLote)?.ordem || lote.ordem || ordemComum;
+      const destinoDoLote = destinoEfetivoDoLote(lote.id, ordemDoLote);
+      const manejoId = registrarManejo({ tipo: "diagnostico", loteId: lote.id, ordem: ordemDoLote, medicamentos: [], localEstoque: null, animaisLidos: registrosDoLote.map((r) => r.brinco), detalhes: registrosDoLote, data: dataManejo, destinoVazias: destinoDoLote });
       manejoIds.push(manejoId);
       // animais Vazia geram uma sugestão de Ressinc OU de Repasse (nunca as duas), conforme o
       // "Destino para vazias" escolhido — "Descarte" não gera nenhuma sugestão.
       const vaziaBrincos = registrosDoLote.filter((r) => r.resultado === "Vazia").map((r) => r.brinco);
       if (vaziaBrincos.length > 0) {
-        if (destinoVazias === "Ressinc") criarSugestaoRessinc(lote.id, vaziaBrincos, manejoId, dataManejo);
-        else if (destinoVazias === "Repasse") criarSugestaoRepasse(lote.id, vaziaBrincos, manejoId, dataManejo);
+        if (destinoDoLote === "Ressinc") criarSugestaoRessinc(lote.id, vaziaBrincos, manejoId, dataManejo);
+        else if (destinoDoLote === "Repasse" && deveCriarSugestaoRepasse(lote.id, ordemDoLote)) criarSugestaoRepasse(lote.id, vaziaBrincos, manejoId, dataManejo);
       }
     });
 
@@ -7031,13 +7067,18 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
               </Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <Field label="Destino para vazias">
-                <select style={inputStyle} value={destinoVazias} onChange={(e) => { limparMsgSeSucesso(); setDestinoVazias(e.target.value); }}>
+                <select style={inputStyle} value={todosIntegrados ? "Repasse" : destinoVazias} disabled={todosIntegrados} onChange={(e) => { limparMsgSeSucesso(); setDestinoVazias(e.target.value); }}>
                   <option value="Ressinc">Ressinc</option>
                   <option value="Repasse">Repasse</option>
                   <option value="Descarte">Descarte</option>
                 </select>
               </Field>
             </div>
+            {lotesIntegrados.length > 0 && (
+              <p style={{ fontSize: 12, color: "#166336", margin: "8px 0 0" }}>
+                {todosIntegrados ? "Repasse integrado: " : `Repasse integrado em ${lotesIntegrados.map((l) => l.nome).join(", ")}: `}as vazias vão direto para Repasse, sem gerar nova sugestão (a sugestão já foi criada na Inseminação).
+              </p>
+            )}
             <div className="grid-manejo" style={{ alignItems: "end", marginTop: 14 }}>
               <div className="campo-leitura-linha-cheia-mobile">
                 <Field label="Leitura do animal (obrigatória)">
@@ -7114,16 +7155,20 @@ function AbaDiagnosticoInseminacao({ fazendaAtiva, safraAtiva, lotes, insumos, r
                       {pendente.loteOrigemId && (
                         <BtnPrimary onClick={confirmarComoLoteOrigem}>Registrar e atribuir a seu lote de origem</BtnPrimary>
                       )}
-                      {lotesSelecionados.length === 1 && (
-                        <BtnPrimary onClick={confirmarComoLoteAtual}>Registrar e atribuir ao lote atual</BtnPrimary>
-                      )}
+                      {lotesSelecionadosObjs.map((l) => (
+                        <BtnPrimary key={l.id} onClick={() => confirmarComoLoteAtual(l.id)}>
+                          {lotesSelecionadosObjs.length === 1 ? "Registrar e atribuir ao lote atual" : `Registrar e atribuir ao lote ${l.nome}`}
+                        </BtnPrimary>
+                      ))}
                     </>
                   ) : pendente.semInseminacao ? (
                     <>
                       <BtnPrimary onClick={confirmarComoDesconhecido}>Registrar e atribuir ao lote de desconhecidos</BtnPrimary>
-                      {lotesSelecionados.length === 1 && (
-                        <BtnPrimary onClick={confirmarComoLoteAtual}>Registrar e atribuir ao lote atual</BtnPrimary>
-                      )}
+                      {lotesSelecionadosObjs.map((l) => (
+                        <BtnPrimary key={l.id} onClick={() => confirmarComoLoteAtual(l.id)}>
+                          {lotesSelecionadosObjs.length === 1 ? "Registrar e atribuir ao lote atual" : `Registrar e atribuir ao lote ${l.nome}`}
+                        </BtnPrimary>
+                      ))}
                     </>
                   ) : (
                     <BtnPrimary onClick={confirmarPendente}>Registrar mesmo assim</BtnPrimary>
@@ -7264,7 +7309,7 @@ function AbaDiagnostico(props) {
    definida depois.
 ========================================================= */
 
-function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo, manejos, atualizarManejo, removerManejo, sugestoesRepasse, descartarSugestaoRepasse, removerSugestaoRepasse }) {
+function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo, addLote, manejos, atualizarManejo, removerManejo, sugestoesRepasse, descartarSugestaoRepasse, removerSugestaoRepasse }) {
   const [loteId, setLoteId] = useState(lotes[0]?.id || "");
   const [numeroAnimais, setNumeroAnimais] = useState("");
   const [dataInicio, setDataInicio] = useState(todayISO());
@@ -7273,6 +7318,11 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
   // sugestões vêm da lista padrão de raças (RACAS_PADRAO), igual já funciona com "Raça da matriz".
   const racasTouroConhecidas = RACAS_PADRAO;
   const [sugestaoConfirmandoId, setSugestaoConfirmandoId] = useState(null);
+  const LOTE_NOVO = "__novo__";
+  const [novoLoteNome, setNovoLoteNome] = useState("");
+  const [novoLoteRetiroId, setNovoLoteRetiroId] = useState("");
+  const [novoLoteCategoria, setNovoLoteCategoria] = useState("");
+  const [modoManual, setModoManual] = useState(false); // repasse lançado sem sugestão (qualquer lote, mesmo sem inseminação/diagnóstico)
   const [msg, setMsg] = useState("");
   const limparMsgSeSucesso = () => { if (msg.includes("registrad")) setMsg(""); };
 
@@ -7280,7 +7330,7 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
   const nomeRetiro = (id) => retiros.find((r) => r.id === id)?.nome || "—";
 
   React.useEffect(() => {
-    if (!lotes.some((l) => l.id === loteId)) setLoteId(lotes[0]?.id || "");
+    if (loteId !== LOTE_NOVO && !lotes.some((l) => l.id === loteId)) setLoteId(lotes[0]?.id || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lotes.map((l) => l.id).join(",")]);
 
@@ -7288,22 +7338,36 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
     setLoteId(s.loteId);
     setNumeroAnimais(String(s.brincos.length));
     setSugestaoConfirmandoId(s.id);
+    setModoManual(false);
     setMsg("");
   };
-  const cancelarConfirmacao = () => { setSugestaoConfirmandoId(null); setNumeroAnimais(""); };
+  const cancelarConfirmacao = () => { setSugestaoConfirmandoId(null); setModoManual(false); setNumeroAnimais(""); };
 
-  const canSave = loteId !== "" && String(numeroAnimais).trim() !== "" && numBR(numeroAnimais) > 0
+  const criandoLote = modoManual && loteId === LOTE_NOVO;
+  const canSave = loteId !== "" && (!criandoLote || (novoLoteNome.trim() !== "" && novoLoteRetiroId !== "" && novoLoteCategoria !== "")) && String(numeroAnimais).trim() !== "" && numBR(numeroAnimais) > 0
     && dataInicio !== "" && dataFim !== "" && dataFim >= dataInicio;
 
   const salvar = () => {
     if (!canSave) { setMsg("Confira as datas — o Fim não pode ser antes do Início."); return; }
+    let idLote = loteId, nomeLote = loteAtual?.nome || "", categoriaLote = loteAtual?.categoria || null, retiroLote = loteAtual?.retiroId || null;
+    if (criandoLote) {
+      const nome = novoLoteNome.trim();
+      const existente = lotes.find((l) => l.nome.trim().toLowerCase() === nome.toLowerCase() && l.retiroId === novoLoteRetiroId);
+      if (existente) { idLote = existente.id; nomeLote = existente.nome; categoriaLote = existente.categoria || novoLoteCategoria; retiroLote = existente.retiroId; }
+      else {
+        idLote = addLote({ retiroId: novoLoteRetiroId, nome, categoria: novoLoteCategoria, numeroAnimais: numBR(numeroAnimais), raca: null, mesParicao: null, ordem: null });
+        nomeLote = nome; categoriaLote = novoLoteCategoria; retiroLote = novoLoteRetiroId;
+      }
+      setNovoLoteNome(""); setNovoLoteRetiroId(""); setNovoLoteCategoria("");
+      setLoteId(idLote);
+    }
     registrarManejo({
-      tipo: "repasse", loteId, loteNome: loteAtual?.nome || "", categoria: loteAtual?.categoria || null,
-      retiroId: loteAtual?.retiroId || null, numeroAnimais: numBR(numeroAnimais), data: dataInicio,
+      tipo: "repasse", loteId: idLote, loteNome: nomeLote, categoria: categoriaLote,
+      retiroId: retiroLote, numeroAnimais: numBR(numeroAnimais), data: dataInicio,
       dataInicio, dataFim, racaTouro: racaTouro.trim() || null, detalhes: [], animaisLidos: [], medicamentos: [],
     });
     if (sugestaoConfirmandoId) removerSugestaoRepasse(sugestaoConfirmandoId);
-    setSugestaoConfirmandoId(null);
+    setSugestaoConfirmandoId(null); setModoManual(false);
     setNumeroAnimais(""); setDataInicio(todayISO()); setDataFim(todayISO()); setRacaTouro("");
     setMsg("Repasse registrado. Um pré-agendamento de Diagnóstico - repasse foi criado 30 dias após o Fim do período.");
   };
@@ -7351,23 +7415,52 @@ function AbaRepasse({ fazendaAtiva, safraAtiva, lotes, retiros, registrarManejo,
             </div>
           )}
 
-          {!sugestaoConfirmandoId ? (
-            <EmptyState text='Confirme uma sugestão de Repasse acima para poder registrar. Elas aparecem quando a Inseminação é marcada com "Repasse integrado" = Sim, ou quando um Diagnóstico é finalizado com "Destino para vazias" = Repasse.' />
+          {!sugestaoConfirmandoId && !modoManual ? (
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 12.5, color: "#6B685E", margin: "0 0 10px" }}>Confirme uma sugestão de Repasse acima ou registre um repasse manualmente, em qualquer lote — inclusive um lote novo que não existe nesta safra, criado só para o repasse.</p>
+              <BtnPrimary onClick={() => { setModoManual(true); if (lotes.length === 0) setLoteId(LOTE_NOVO); setMsg(""); }}><Plus size={15} /> Registrar repasse manualmente</BtnPrimary>
+            </div>
           ) : (
           <div style={{ ...cardStyle, marginBottom: 24, border: "1.5px solid #E3B8A0" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={{ fontSize: 12.5, color: "#8A3E15", fontWeight: 600 }}>Confirmando sugestão de Repasse — ajuste as datas e o nº de animais se necessário</span>
+              <span style={{ fontSize: 12.5, color: "#8A3E15", fontWeight: 600 }}>{modoManual ? "Repasse manual — escolha o lote, as datas e o nº de animais" : "Confirmando sugestão de Repasse — ajuste as datas e o nº de animais se necessário"}</span>
               <BtnGhost onClick={cancelarConfirmacao}>Cancelar</BtnGhost>
             </div>
             <div className="grid-manejo">
               <Field label="Lote">
-                <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.nome || "—"} readOnly />
+                {modoManual ? (
+                  <select style={inputStyle} value={loteId} onChange={(e) => { limparMsgSeSucesso(); setLoteId(e.target.value); }}>
+                    {lotes.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                    <option value={LOTE_NOVO}>+ Novo lote (só para o repasse)</option>
+                  </select>
+                ) : (
+                  <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.nome || "—"} readOnly />
+                )}
               </Field>
+              {criandoLote && (
+                <Field label="Nome do novo lote *">
+                  <input style={inputStyle} value={novoLoteNome} onChange={(e) => { limparMsgSeSucesso(); setNovoLoteNome(e.target.value); }} placeholder="Ex.: Lote Repasse 01" />
+                </Field>
+              )}
               <Field label="Categoria">
-                <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.categoria || "—"} readOnly />
+                {criandoLote ? (
+                  <select style={inputStyle} value={novoLoteCategoria} onChange={(e) => setNovoLoteCategoria(e.target.value)}>
+                    <option value="">Selecione a categoria</option>
+                    {CATEGORIAS_LOTE.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                ) : (
+                  <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.categoria || "—"} readOnly />
+                )}
               </Field>
               <Field label="Retiro">
-                <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.retiroId ? nomeRetiro(loteAtual.retiroId) : "—"} readOnly />
+                {criandoLote ? (
+                  <select style={inputStyle} value={novoLoteRetiroId} onChange={(e) => setNovoLoteRetiroId(e.target.value)}>
+                    <option value="">Selecione o retiro</option>
+                    {retiros.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
+                  </select>
+                ) : (
+                  <input style={{ ...inputStyle, background: "#F0F0F0", color: "#6B685E" }} value={loteAtual?.retiroId ? nomeRetiro(loteAtual.retiroId) : "—"} readOnly />
+                )}
               </Field>
               <Field label="Nº de animais em repasse"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Raça do(s) touro(s) *">
@@ -9751,7 +9844,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                     }}>{op.label}</button>
                 ))}
               </div>
-              <div style={{ flex: 1, display: "flex", gap: 36, justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap", overflow: "hidden" }}>
+              <div style={{ flex: 1, display: "flex", gap: "clamp(8px, 3vw, 36px)", justifyContent: "center", alignItems: "flex-start", flexWrap: "nowrap", overflow: "hidden" }}>
                 {OPCOES_ROSCA_RESUMO[visaoResumo].grupos.map((g) => (
                   <GraficoRosca key={g.titulo} titulo={g.titulo} total={g.total} itens={g.itens} />
                 ))}
@@ -9964,7 +10057,7 @@ function GraficoRosca({ titulo, total, itens }) {
   let acumulado = 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 150, flexShrink: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0, flex: "1 1 0", maxWidth: 190 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#166336", textTransform: "uppercase" }}>{titulo}</div>
       <svg width={88} height={88} viewBox="0 0 88 88">
         <circle cx={centro} cy={centro} r={raio} fill="none" stroke="#DDDDDD" strokeWidth={espessura} />
@@ -10010,7 +10103,7 @@ function BarrasConcepcao({ dados, ordenarPorTaxaDesc, compacto }) {
   const larguraColuna = compacto ? 28 : (lista.length <= 5 ? 50 : 42);
   const alturaMaximaPx = compacto ? 90 : 120;
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "flex-start", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "flex-start", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto", boxSizing: "border-box", paddingBottom: 14 }}>
       {lista.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0, marginLeft: i === 0 ? "auto" : 0, marginRight: i === lista.length - 1 ? "auto" : 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
@@ -10033,7 +10126,7 @@ function BarrasCusto({ dados, compacto }) {
   const larguraColuna = compacto ? 28 : (dados.length <= 5 ? 50 : 42);
   const alturaMaximaPx = compacto ? 90 : 120;
   return (
-    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "flex-start", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto" }}>
+    <div className="rola-horizontal" style={{ display: "flex", alignItems: "stretch", justifyContent: "flex-start", gap: compacto ? 10 : 16, height: "100%", width: "100%", overflowX: "auto", boxSizing: "border-box", paddingBottom: 14 }}>
       {dados.map((d, i) => (
         <div key={`${d.label}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", minWidth: larguraColuna, flexShrink: 0, marginLeft: i === 0 ? "auto" : 0, marginRight: i === dados.length - 1 ? "auto" : 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", width: "100%" }}>
