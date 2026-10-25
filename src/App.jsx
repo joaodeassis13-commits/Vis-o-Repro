@@ -12208,6 +12208,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
     setErroPDF("");
     const lote = lotes.find((l) => l.id === rlLoteId);
     if (!lote || !rlOrdem) return;
+    const dataBR = (v) => v ? fmtDate(v) : "—"; // dd/mm/aaaa (texto livre fica como foi digitado)
     try {
       const [logoVarepro, logoVisao] = await Promise.all([
         carregarImagemBase64(logoVareproPdfImg),
@@ -12273,14 +12274,14 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         return [
           b,
           racaDaMatriz(b, detIns) || "—",
-          mIns ? paraData(mIns.data) : "—",
+          mIns ? dataBR(mIns.data) : "—",
           detIns?.ecc || "—",
           mIns?.protocoloPadrao || protocoloPadraoDoLote || "—",
           semen?.touro || detIns?.touroInformado || "—",
-          partida ? paraData(partida) : "—",
+          partida ? dataBR(partida) : "—",
           detIns?.demonstracaoCio || "—",
           detIns?.inseminador || mIns?.inseminador || "—",
-          mDiag ? paraData(mDiag.data) : "—",
+          mDiag ? dataBR(mDiag.data) : "—",
           detDiag?.resultado || "—",
         ];
       });
