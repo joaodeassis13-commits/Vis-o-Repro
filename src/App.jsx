@@ -12238,7 +12238,8 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
       [
         { x: margemEsq, texto: `Retiro: ${nomeRetiro(rlRetiroId)}` },
         { x: margemEsq + larguraUtil * 0.28, texto: `Lote: ${lote.nome}` },
-        { x: margemEsq + larguraUtil * 0.54, texto: `Ordem: ${rlOrdem}` },
+        { x: margemEsq + larguraUtil * 0.54, texto: `Categoria: ${lote.categoria || "—"}` },
+        { x: margemEsq + larguraUtil * 0.79, texto: `Ordem: ${rlOrdem}` },
       ].forEach((c) => doc.text(c.texto, c.x, y));
       y += 18;
 
@@ -12295,6 +12296,20 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
         head: [["Brinco", "Raça da Matriz", "Data da Inseminação", "ECC", "Protocolo padrão", "Touro", "Partida", "Demonstração de cio", "Inseminador", "Data do diagnóstico", "Resultado do diagnóstico"]],
         body: linhas,
       });
+
+      // totais do lote nessa ordem, abaixo da tabela (espaço de ~3 linhas)
+      const eccs = linhas.map((l) => numBR(String(l[3]).replace("—", ""))).filter((v) => Number.isFinite(v) && v > 0);
+      const eccMedio = eccs.length > 0 ? (eccs.reduce((x, v) => x + v, 0) / eccs.length).toFixed(2).replace(".", ",") : "—";
+      const nPrenhas = linhas.filter((l) => l[10] === "Prenha").length;
+      const nVazias = linhas.filter((l) => l[10] === "Vazia").length;
+      const concepcao = nPrenhas + nVazias > 0 ? `${((nPrenhas / (nPrenhas + nVazias)) * 100).toFixed(1)}%` : "—";
+      const alturaLinha = 12;
+      let yTot = doc.lastAutoTable.finalY + alturaLinha * 3;
+      if (yTot + 20 > doc.internal.pageSize.getHeight() - 20) { doc.addPage(); yTot = 40; }
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+      [
+        `Número de animais: ${lista.length}`, `ECC médio: ${eccMedio}`, `Prenhas: ${nPrenhas}`, `Vazias: ${nVazias}`, `Concepção: ${concepcao}`,
+      ].forEach((t, i) => doc.text(t, margemEsq + larguraUtil * (i / 5), yTot));
 
       const nomeArq = `${lote.nome}_${rlOrdem}`.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
       doc.save(`visaorepro_relatorio-por-lote_${nomeArq}_${sufixoArquivo()}.pdf`);
