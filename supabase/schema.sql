@@ -1101,10 +1101,11 @@ drop function if exists benchmarking_concepcao_por_manejo_sistema(text);
 create or replace function benchmarking_concepcao_por_manejo_sistema(p_tipo_manejo text, p_safra_nome text default null)
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
   with protocolo_por_lote_ordem as (
+    -- D0/Ressinc têm prioridade; sem eles (lote importado de histórico), vale o que está gravado na Inseminação
     select distinct on (fazenda_id, lote_id, ordem) fazenda_id, lote_id, ordem, tipo_manejo
     from manejos
-    where tipo in ('implantacao', 'ressinc') and lote_id is not null and ordem is not null
-    order by fazenda_id, lote_id, ordem, data desc
+    where tipo in ('implantacao', 'ressinc', 'inseminacao') and tipo_manejo is not null and lote_id is not null and ordem is not null
+    order by fazenda_id, lote_id, ordem, (tipo = 'inseminacao'), data desc
   ),
   por_fazenda as (
     select
@@ -1138,10 +1139,11 @@ drop function if exists benchmarking_concepcao_por_protocolo_sistema(text);
 create or replace function benchmarking_concepcao_por_protocolo_sistema(p_protocolo text, p_safra_nome text default null)
 returns table(media_geral numeric, media_top25 numeric, media_bottom25 numeric, num_fazendas bigint) as $$
   with protocolo_por_lote_ordem as (
+    -- D0/Ressinc têm prioridade; sem eles (lote importado de histórico), vale o que está gravado na Inseminação
     select distinct on (fazenda_id, lote_id, ordem) fazenda_id, lote_id, ordem, protocolo
     from manejos
-    where tipo in ('implantacao', 'ressinc') and lote_id is not null and ordem is not null
-    order by fazenda_id, lote_id, ordem, data desc
+    where tipo in ('implantacao', 'ressinc', 'inseminacao') and protocolo is not null and lote_id is not null and ordem is not null
+    order by fazenda_id, lote_id, ordem, (tipo = 'inseminacao'), data desc
   ),
   por_fazenda as (
     select

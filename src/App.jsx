@@ -421,6 +421,40 @@ function BtnGhost({ children, onClick, style, danger }) {
   );
 }
 
+// Campo de protocolo padrão com sugestões próprias (no lugar do datalist do navegador), cada uma com
+// um "x" para excluir aquele padrão pré-salvo.
+function CampoProtocoloPadrao({ value, onChange, opcoes, onExcluir, placeholder }) {
+  const [aberto, setAberto] = useState(false);
+  const termo = (value || "").trim().toLowerCase();
+  const filtradas = opcoes.filter((p) => !termo || p.nome.toLowerCase().includes(termo));
+  return (
+    <div style={{ position: "relative" }}>
+      <input style={inputStyle} value={value} onChange={(e) => { onChange(e.target.value); setAberto(true); }}
+        onFocus={() => setAberto(true)} onBlur={() => setTimeout(() => setAberto(false), 150)}
+        placeholder={placeholder} autoComplete="off" />
+      {aberto && (filtradas.length > 0 || termo) && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 30, marginTop: 2, background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 8, boxShadow: "0 4px 14px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto" }}>
+          {termo && !opcoes.some((p) => p.nome.trim().toLowerCase() === termo) && (
+            <div style={{ padding: "7px 10px", fontSize: 12.5, color: "#166336", fontWeight: 600, borderBottom: filtradas.length > 0 ? "1px solid #F0F0F0" : "none" }}
+              onMouseDown={(e) => { e.preventDefault(); setAberto(false); }}>
+              ＋ Novo protocolo: “{(value || "").trim()}”
+            </div>
+          )}
+          {filtradas.map((p) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 10px", fontSize: 13, cursor: "pointer" }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(p.nome); setAberto(false); }}>
+              <span>{p.nome}</span>
+              <button type="button" title="Excluir este protocolo padrão"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); if (window.confirm(`Excluir o protocolo padrão "${p.nome}"?`)) onExcluir(p.id); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#A32D2D", fontSize: 16, lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FazendaAtivaBanner({ fazendaAtiva }) {
   return (
     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
@@ -2098,6 +2132,12 @@ export default function App() {
   const [protocolosPadrao, setProtocolosPadrao] = useState([]);
   React.useEffect(() => { if (podeGravar) gravarColecao("protocolosPadrao", protocolosPadrao); }, [podeGravar, protocolosPadrao]);
   const protocolosPadraoDaFazenda = (manejo) => protocolosPadrao.filter((p) => p.fazendaId === fazendaAtivaId && p.manejo === manejo);
+  const removerProtocoloPadrao = async (id) => {
+    setProtocolosPadrao((a) => a.filter((p) => p.id !== id));
+    marcaPendencia();
+    const r = await excluirRegistro("protocolosPadrao", id);
+    if (r && !r.ok) console.error("Falha ao excluir protocolo padrão no Supabase:", r.erro);
+  };
   // só cria um cadastro novo se ainda não existir um com esse nome (para aquele manejo/fazenda) —
   // combinações já existentes não são sobrescritas automaticamente.
   const addProtocoloPadraoSeNovo = (manejo, nome, campos) => {
@@ -3321,13 +3361,13 @@ export default function App() {
               registrarManejo={registrarManejo} registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos}
               addLote={addLote} atualizarLote={atualizarLote} atualizarManejo={atualizarManejo} removerManejo={removerManejo}
               sugestoesRessinc={sugestoesRessincAtivas} criarSugestaoRessinc={criarSugestaoRessinc} descartarSugestaoRessinc={descartarSugestaoRessinc} removerSugestaoRessinc={removerSugestaoRessinc} ressincManualIgnorados={ressincManualIgnorados}
-              protocolosPadraoDaFazenda={protocolosPadraoDaFazenda} addProtocoloPadraoSeNovo={addProtocoloPadraoSeNovo} />
+              protocolosPadraoDaFazenda={protocolosPadraoDaFazenda} addProtocoloPadraoSeNovo={addProtocoloPadraoSeNovo} removerProtocoloPadrao={removerProtocoloPadrao} />
           </div>
           <div style={{ display: section === "manejo" && sub === "retirada" ? "block" : "none" }}>
             <AbaRetirada fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} insumos={insumosAtivos}
               registrarManejo={registrarManejo} registrarSaidaEstoque={registrarSaidaEstoque} manejos={manejosAtivos}
               atualizarManejo={atualizarManejo} removerManejo={removerManejo}
-              protocolosPadraoDaFazenda={protocolosPadraoDaFazenda} addProtocoloPadraoSeNovo={addProtocoloPadraoSeNovo} />
+              protocolosPadraoDaFazenda={protocolosPadraoDaFazenda} addProtocoloPadraoSeNovo={addProtocoloPadraoSeNovo} removerProtocoloPadrao={removerProtocoloPadrao} />
           </div>
           <div style={{ display: section === "manejo" && sub === "inseminacao" ? "block" : "none" }}>
             <AbaInseminacao fazendaAtiva={fazendaAtiva} safraAtiva={safraAtiva} lotes={lotesAtivos} retiros={retirosAtivos} insumos={insumosAtivos} registrarManejo={registrarManejo}
@@ -4572,7 +4612,7 @@ const proximaOrdem = (ordemAtual) => {
   return i >= 0 && i < ORDENS_IATF.length - 1 ? ORDENS_IATF[i + 1] : ORDENS_IATF[0];
 };
 
-function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addLote, atualizarLote, atualizarManejo, removerManejo, sugestoesRessinc, criarSugestaoRessinc, descartarSugestaoRessinc, removerSugestaoRessinc, ressincManualIgnorados, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo }) {
+function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, registrarManejo, registrarSaidaEstoque, manejos, addLote, atualizarLote, atualizarManejo, removerManejo, sugestoesRessinc, criarSugestaoRessinc, descartarSugestaoRessinc, removerSugestaoRessinc, ressincManualIgnorados, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo, removerProtocoloPadrao }) {
   const [abaInterna, setAbaInterna] = useState("d0"); // "d0" | "ressinc"
   const [editandoManejo, setEditandoManejo] = useState(null);
 
@@ -5070,12 +5110,9 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
             <div className="grid-manejo">
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
               <Field label="Protocolo padrão *">
-                <input style={inputStyle} list="protocolos-padrao-d0" value={protocoloPadraoNome}
-                  onChange={(e) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(e.target.value); }}
+                <CampoProtocoloPadrao value={protocoloPadraoNome} opcoes={protocolosPadraoD0} onExcluir={(id) => removerProtocoloPadrao && removerProtocoloPadrao(id)}
+                  onChange={(v) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(v); }}
                   placeholder="Nome do protocolo — novo ou já cadastrado" />
-                <datalist id="protocolos-padrao-d0">
-                  {protocolosPadraoD0.map((p) => <option key={p.id} value={p.nome} />)}
-                </datalist>
               </Field>
               <Field label="Lote (nome)"><input style={inputStyle} value={novoNome} onChange={(e) => { limparMsgSeSucesso(); setNovoNome(e.target.value); }} placeholder="Ex: Lote 01" /></Field>
               <Field label="Retiro">
@@ -5411,12 +5448,9 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                         </Field>
                         <Field label="Data"><input style={inputStyle} type="date" value={dataManejoR} onChange={(e) => { limparMsgRSeSucesso(); setDataManejoR(e.target.value); }} /></Field>
                         <Field label="Protocolo padrão *">
-                          <input style={inputStyle} list="protocolos-padrao-ressinc" value={protocoloPadraoNomeR}
-                            onChange={(e) => { limparMsgRSeSucesso(); aplicarProtocoloPadraoR(e.target.value); }}
+                          <CampoProtocoloPadrao value={protocoloPadraoNomeR} opcoes={protocolosPadraoR} onExcluir={(id) => removerProtocoloPadrao && removerProtocoloPadrao(id)}
+                            onChange={(v) => { limparMsgRSeSucesso(); aplicarProtocoloPadraoR(v); }}
                             placeholder="Nome do protocolo — novo ou já cadastrado" />
-                          <datalist id="protocolos-padrao-ressinc">
-                            {protocolosPadraoR.map((p) => <option key={p.id} value={p.nome} />)}
-                          </datalist>
                         </Field>
                         <Field label="Implante">
                           <select style={inputStyle} value={implanteIdR} onChange={(e) => { limparMsgRSeSucesso(); setImplanteIdR(e.target.value); }}>
@@ -5532,7 +5566,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
    lote já existente.
 ========================================================= */
 
-function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo, registrarSaidaEstoque, manejos, atualizarManejo, removerManejo, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo }) {
+function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo, registrarSaidaEstoque, manejos, atualizarManejo, removerManejo, protocolosPadraoDaFazenda, addProtocoloPadraoSeNovo, removerProtocoloPadrao }) {
   const [editandoManejo, setEditandoManejo] = useState(null);
   const [localEstoque, setLocalEstoque] = useState("fazenda");
   const prostaglandinasTodas = insumos.filter((i) => i.categoria === "Hormônio" && i.hormonio === "Prostaglandina");
@@ -5812,12 +5846,9 @@ function AbaRetirada({ fazendaAtiva, safraAtiva, lotes, insumos, registrarManejo
               </Field>
               <Field label="Nº de animais"><input style={inputStyle} type="number" min="1" value={numeroAnimais} onChange={(e) => { limparMsgSeSucesso(); setNumeroAnimais(e.target.value); }} placeholder="0" /></Field>
               <Field label="Protocolo padrão *">
-                <input style={inputStyle} list="protocolos-padrao-retirada" value={protocoloPadraoNome}
-                  onChange={(e) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(e.target.value); }}
+                <CampoProtocoloPadrao value={protocoloPadraoNome} opcoes={protocolosPadraoRetirada} onExcluir={(id) => removerProtocoloPadrao && removerProtocoloPadrao(id)}
+                  onChange={(v) => { limparMsgSeSucesso(); aplicarProtocoloPadrao(v); }}
                   placeholder="Nome do protocolo — novo ou já cadastrado" />
-                <datalist id="protocolos-padrao-retirada">
-                  {protocolosPadraoRetirada.map((p) => <option key={p.id} value={p.nome} />)}
-                </datalist>
               </Field>
               <Field label="Perdas de implante *"><input style={inputStyle} type="number" min="0" value={perdasImplante} onChange={(e) => { limparMsgSeSucesso(); setPerdasImplante(e.target.value); }} placeholder="0" /></Field>
               <Field label="Data"><input style={inputStyle} type="date" value={dataManejo} onChange={(e) => { limparMsgSeSucesso(); setDataManejo(e.target.value); }} /></Field>
@@ -9477,10 +9508,17 @@ function construirRegistrosConcepcao(manejos, lotes, insumos, movimentos = []) {
         dataInseminacao: insem.data, touro: nomeTouro(detIns.semenId, detIns.touroInformado),
         racaTouro: racaDoTouro(detIns.semenId, detIns.racaTouro), partida: partidaDoSemen(detIns.semenId, detIns.partidaInformada),
         mesParicao: lotes.find((l) => l.id === insem.loteId)?.mesParicao || null,
-        situacao: lotes.find((l) => l.id === insem.loteId)?.situacao || null,
-        protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || null,
-        numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo || null,
-        duracaoProtocolo: insem.protocolo || d0MaisRecente?.protocolo || null,
+        // situação/protocolo: valem tanto pro que foi registrado nas telas quanto pro que veio da
+        // importação de histórico (que grava no lote e no manejo de Inseminação) — cada campo
+        // procura em todas as fontes possíveis, na ordem: lote → Inseminação → D0/Ressinc → Retirada.
+        situacao: lotes.find((l) => l.id === insem.loteId)?.situacao || insem.situacao || d0MaisRecente?.situacao
+          || d0Ressinc.filter((m) => m.loteId === insem.loteId && m.situacao).sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]?.situacao || null,
+        protocoloPadrao: insem.protocoloPadrao || d0MaisRecente?.protocoloPadrao || retiradaMaisRecente?.protocoloPadrao
+          || [...d0Ressinc, ...retiradas].filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.protocoloPadrao).sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]?.protocoloPadrao || null,
+        numeroManejos: insem.tipoManejo || d0MaisRecente?.tipoManejo
+          || d0Ressinc.filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.tipoManejo).sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]?.tipoManejo || null,
+        duracaoProtocolo: insem.protocolo || d0MaisRecente?.protocolo
+          || d0Ressinc.filter((m) => m.loteId === insem.loteId && m.ordem === insem.ordem && m.protocolo).sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]?.protocolo || null,
         // custo real gasto NESSE animal (sêmen usado nele + bainha da inseminação + a fração
         // do hormônio do protocolo daquela ordem) — usado pra calcular custo por
         // Inseminador/Mês/Raça/ECC.
@@ -9935,8 +9973,8 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
       <SectionTitle icon={ClipboardList} title="Relatórios" subtitle={perfil === "Supervisor" ? "Acesso de leitura." : "Visão geral da operação em gráficos."} />
       <FiltroFazendaSafraAdmin perfil={perfil} fazendasVisiveis={fazendasVisiveis} safras={safras}
         fazendaId={filtroFazendaId} setFazendaId={setFiltroFazendaId} safraId={filtroSafraId} setSafraId={setFiltroSafraId} />
+      {perfil !== "Administrador" && <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />}
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
-        {perfil !== "Administrador" && <FazendaAtivaBanner fazendaAtiva={fazendaExibida} />}
         {fazendaExibida && (
           <>
             <select value={filtroRetiroId} onChange={(e) => setFiltroRetiroId(e.target.value)}
