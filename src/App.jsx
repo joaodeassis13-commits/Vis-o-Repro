@@ -318,7 +318,7 @@ function EarTag({ children, size = "md" }) {
   );
 }
 
-function SectionTitle({ icon: Icon, title, subtitle }) {
+function SectionTitle({ icon: Icon, title }) {
   return (
     <div style={{ marginBottom: 22 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -327,7 +327,6 @@ function SectionTitle({ icon: Icon, title, subtitle }) {
         </div>
         <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: "#232520", margin: 0 }}>{title}</h2>
       </div>
-      {subtitle && <p style={{ fontSize: 13.5, color: "#6B685E", margin: "6px 0 0 44px", maxWidth: 560 }}>{subtitle}</p>}
     </div>
   );
 }
@@ -9693,6 +9692,21 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
     ).map((l) => l.id)
   );
   const lotesFiltrados = filtroAtivo ? lotes.filter((l) => idsLotesFiltrados.has(l.id)) : lotes;
+  // ordens disponíveis no filtro: só as que existem nos lotes que passam pelos outros filtros
+  // (retiro, categoria, lote) — "Repasse" aparece se algum desses lotes tem repasse.
+  const ordensDisponiveisFiltro = (() => {
+    const set = new Set();
+    manejos.forEach((m) => {
+      if (!idsLotesFiltrados.has(m.loteId)) return;
+      if (m.tipo === "repasse" || m.tipo === "diagnostico_repasse") set.add("Repasse");
+      else if (ORDENS_IATF.includes(m.ordem)) set.add(m.ordem);
+    });
+    return [...ORDENS_IATF, "Repasse"].filter((o) => set.has(o));
+  })();
+  React.useEffect(() => {
+    if (filtroOrdem && !ordensDisponiveisFiltro.includes(filtroOrdem)) setFiltroOrdem("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordensDisponiveisFiltro.join(",")]);
   const manejoDaOrdemFiltro = (m) => !filtroOrdem || (filtroOrdem === "Repasse" ? (m.tipo === "repasse" || m.tipo === "diagnostico_repasse") : m.ordem === filtroOrdem);
   const manejosFiltrados = filtroAtivo ? manejos.filter((m) => idsLotesFiltrados.has(m.loteId) && manejoDaOrdemFiltro(m)) : manejos;
   // movimentos de estoque não têm lote — só o manejo que gerou a saída (manejoId) — então o
@@ -9943,7 +9957,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
             <select value={filtroOrdem} onChange={(e) => setFiltroOrdem(e.target.value)}
               style={{ ...inputStyle, width: "auto", minWidth: 150, padding: "7px 10px", fontSize: 12.5 }}>
               <option value="">Todas as ordens</option>
-              {[...ORDENS_IATF, "Repasse"].map((o) => <option key={o} value={o}>{o}</option>)}
+              {ordensDisponiveisFiltro.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </>
         )}
@@ -10073,7 +10087,7 @@ function AbaRelatorios({ fazendaAtiva, lotes: lotesAtivosProp, retiros: retirosA
                 {tourosDisponiveisPartida.length === 0 ? (
                   <EmptyState text="Nenhum touro com dados de concepção ainda." />
                 ) : (
-                  <BarrasConcepcao dados={porPartida} />
+                  <BarrasConcepcao dados={porPartida} ordenarPorTaxaDesc />
                 )}
               </div>
             </div>
@@ -12368,7 +12382,7 @@ function AbaExportacoes({ fazendaAtiva, safraAtiva, lotes: lotesProp, retiros: r
             <p style={{ fontSize: 12.5, color: "#6B685E", margin: "0 0 14px" }}>
               Um PDF com tabelas prontas para apresentar: resumo geral e detalhamento por retiro, lote, inseminador, mês de parição, raça de touro e ECC — com Concepção, Concepção Média por IATF, Prenhez por IATF, Prenhez Geral, Nº de IATF por matriz e Custos por animal/inseminação/prenhez.
             </p>
-            <BtnPrimary onClick={gerarRelatorioDetalhadoPDF} disabled={lotes.length === 0}><FileDown size={15} /> Exportar Relatório Detalhado (.pdf)</BtnPrimary>
+            <BtnPrimary onClick={gerarRelatorioDetalhadoPDF} disabled={lotes.length === 0}><FileDown size={15} /> Relatório Detalhado (.pdf)</BtnPrimary>
             {erroPDF && <p style={{ fontSize: 12.5, color: "#A32D2D", marginTop: 8 }}>Não foi possível gerar o PDF: {erroPDF}</p>}
           </div>
           <div style={cardStyle}>
