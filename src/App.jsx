@@ -2243,6 +2243,25 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insumosParaApagarNoServidor, online, podeGravar, ultimaSincronizacao]);
 
+  // Autocorreção: se um item do estoque ficou sem valor unitário mas as ENTRADAS dele têm valor
+  // (acontece quando o valor não chegou no cadastro do item), recompõe o valor do item pela média
+  // ponderada pela quantidade das entradas — assim Saldo, Saída e os custos voltam a ter valor.
+  React.useEffect(() => {
+    if (!podeGravar) return;
+    const semValor = insumos.filter((i) => i.categoria !== "Serviço" && (i.valorUnitario == null || Number.isNaN(i.valorUnitario)));
+    if (semValor.length === 0) return;
+    const novos = {};
+    semValor.forEach((i) => {
+      const entradas = movimentos.filter((m) => m.tipo === "entrada" && m.insumoId === i.id && m.valorUnitario != null && m.quantidade > 0);
+      const qtd = entradas.reduce((t, m) => t + m.quantidade, 0);
+      if (qtd > 0) novos[i.id] = entradas.reduce((t, m) => t + m.quantidade * m.valorUnitario, 0) / qtd;
+    });
+    if (Object.keys(novos).length === 0) return;
+    setInsumos((a) => a.map((i) => novos[i.id] != null && i.valorUnitario == null ? { ...i, valorUnitario: novos[i.id] } : i));
+    marcaPendencia();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insumos, movimentos, podeGravar]);
+
   const registrarEntradaEstoque = (categoria, camposItem, quantidade, data, obs, valorUnitario, local) => {
     if (local !== "externo" && safraAtivaBloqueada) { avisarSafraBloqueada(); return null; }
     if (local !== "externo" && fazendaAtivaNaoLicenciada) { avisarFazendaNaoLicenciada(); return null; }
@@ -2261,7 +2280,7 @@ export default function App() {
       // entrando agora (com o valor informado nesta entrada) — não sobrescreve mais o preço
       // antigo direto. Sêmen não entra aqui: cada partida já é um insumo próprio (o preço dela
       // é o dela mesma, não faz sentido misturar com o de outra partida).
-      let valorUnitarioFinal = valorUnitario;
+      let valorUnitarioFinal = valorUnitario != null ? valorUnitario : (existente.valorUnitario ?? null); // entrada sem valor mantém o preço que o item já tinha
       if (["Hormônio", "Medicamento", "Utensílio", "Sêmen"].includes(categoria) && existente.estoque > 0 && existente.valorUnitario != null && valorUnitario != null) {
         valorUnitarioFinal = (existente.estoque * existente.valorUnitario + quantidade * valorUnitario) / (existente.estoque + quantidade);
       }
@@ -2319,13 +2338,13 @@ export default function App() {
     setInsumos((a) => a.map((i) => {
       if (i.id !== mov.insumoId) return i;
       const novoEstoque = Math.max(0, i.estoque + delta);
-      let vu = i.valorUnitario;
-      if (valorUnitario != null) {
-        if (i.valorUnitario != null && mov.valorUnitario != null && novoEstoque > 0) {
-          const antigo = i.estoque * i.valorUnitario - mov.quantidade * mov.valorUnitario;
-          vu = Math.max(0, (antigo + quantidade * valorUnitario) / novoEstoque);
-        } else vu = valorUnitario;
-      }
+      // preço do item = média das entradas COM valor, ponderada pela quantidade (já com esta edição)
+      const entradasDoItem = movimentos
+        .filter((m) => m.tipo === "entrada" && m.insumoId === i.id)
+        .map((m) => m.id === movimentoId ? { quantidade, valorUnitario } : m)
+        .filter((m) => m.valorUnitario != null && m.quantidade > 0);
+      const qtdComValor = entradasDoItem.reduce((t, m) => t + m.quantidade, 0);
+      const vu = qtdComValor > 0 ? entradasDoItem.reduce((t, m) => t + m.quantidade * m.valorUnitario, 0) / qtdComValor : i.valorUnitario;
       return { ...i, estoque: novoEstoque, valorUnitario: vu };
     }));
     setMovimentos((a) => a.map((m) => m.id === movimentoId ? { ...m, quantidade, valorUnitario, data, obs, atualizadoEm: new Date().toISOString() } : m));
@@ -5277,6 +5296,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                     <th>Categoria</th>
                     <th>Ordem</th>
                     <th>Nº animais</th>
+                    <th>Situação</th>
                     <th>Parição</th>
                     <th>Número de manejos</th>
                     <th>Protocolo</th>
@@ -5298,6 +5318,7 @@ function AbaImplantacao({ fazendaAtiva, safraAtiva, lotes, retiros, insumos, reg
                       <td>{m.categoria}</td>
                       <td>{m.ordem || "—"}</td>
                       <td>{m.numeroAnimais}</td>
+                      <td>{m.situacao || lotes.find((l) => l.id === m.loteId)?.situacao || "—"}</td>
                       <td>{m.mesParicao || "—"}</td>
                       <td>{m.tipoManejo || "—"}</td>
                       <td>{m.protocolo || "—"}</td>
@@ -8062,7 +8083,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
   };
   const touroInsumo = (id) => insumos.find((x) => x.id === id)?.touro || "—";
   const racaInsumo = (id) => insumos.find((x) => x.id === id)?.raca || "—";
-  const colunaTabela = { width: 130, textAlign: "center" };
+  const colunaTabela = { minWidth: 96, textAlign: "center" };
 
   // edição de uma entrada registrada
   const [editEntrada, setEditEntrada] = useState(null); // { id, quantidade, valor, data, obs, partidas }
@@ -8118,7 +8139,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
               : `Vinculado a você (${currentUser?.nome || "usuário"}) — pode ser usado em qualquer fazenda que você acessar.`}
           </p>
 
-          <div style={{ display: "flex", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 18, width: "fit-content" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", background: "#EEEEEE", borderRadius: 8, padding: 3, gap: 2, marginBottom: 18, width: "fit-content", maxWidth: "100%" }}>
             {CATEGORIAS_ESTOQUE.map((c) => (
               <button key={c} onClick={() => setCategoriaTab(c)}
                 style={{
@@ -8241,7 +8262,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
           {categoriaInterna === "Serviço" ? (
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Valores cadastrados</div>
-              <table>
+              <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}><table>
                 <thead><tr><th style={colunaTabela}>Descrição</th><th style={colunaTabela}>Valor unitário (R$/animal)</th></tr></thead>
                 <tbody>
                   {DESCRICOES_SERVICO.map((d) => {
@@ -8254,14 +8275,14 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ) : (
           <>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6B685E", textTransform: "uppercase", marginBottom: 8 }}>Entradas registradas — {categoriaTab}</div>
           {painelEdicaoEntrada}
           {entradas.length === 0 ? <EmptyState text="Nenhuma entrada registrada ainda nesta categoria." /> : categoriaTab === "Sêmen" ? (
-            <table>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}><table>
               <thead>
                 <tr>
                   <th style={colunaTabela}>Touro</th>
@@ -8291,9 +8312,9 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           ) : (
-            <table>
+            <div className="rola-horizontal" style={{ background: "#FFF", border: "1px solid #E5DFCC", borderRadius: 12, overflowX: "auto" }}><table>
               <thead>
                 <tr>
                   <th style={colunaTabela}>Item</th>
@@ -8323,7 +8344,7 @@ function AbaEstoqueEntrada({ fazendaAtiva, currentUser, insumos, movimentos, reg
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
           </>
           )}
